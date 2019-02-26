@@ -1,0 +1,20 @@
+name:                cp
+version:             0.1.0.0
+#synopsis:
+#description:
+homepage:            https://github.com/banacorn/cp#readme
+license:             BSD3
+author:              Ting-Gian LUA
+maintainer:          banacorn@gmail.comma
+copyright:           something
+category:            language
+extra-source-files:
+- README.md
+
+dependencies:
+  - base >= 4.7 && < 5
+
+executables:
+  cp:
+    source-dirs:      src
+    main:             Main.hs
