@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 085915f3a6c8027029a3762dcdd3ec5677108f53efdfbda210829d356553bf9e
+-- hash: a8696396b21a460c16050ce0533ff5f981fbcca8fa557deb97cdb0e6f70ec748
 
 name:           cp
 version:        0.1.0.0
@@ -22,9 +22,26 @@ extra-source-files:
 executable cp
   main-is: Main.hs
   other-modules:
+      Syntax.Abstract
+      Syntax.Concrete
+      Syntax.Parser
+      Syntax.Parser.Lexer
+      Syntax.Parser.Parser
+      Syntax.Parser.Type
       Paths_cp
   hs-source-dirs:
       src
+  ghc-options: -Wall -threaded -rtsopts -with-rtsopts=-N -fno-warn-orphans
+  build-tools:
+      happy
   build-depends:
-      base >=4.7 && <5
+      array
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , lexer-applicative
+    , mtl
+    , regex-applicative
+    , srcloc
+    , text
   default-language: Haskell2010
