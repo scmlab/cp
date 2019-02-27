@@ -4,7 +4,10 @@
 module Syntax.Abstract where
 
 import qualified Syntax.Concrete as C
-import Data.Text (Text, pack)
+import Data.Text (Text)
+
+--------------------------------------------------------------------------------
+-- | Term level
 
 type Name = Text
 type Variable = Text
@@ -17,7 +20,7 @@ data Process
     -- link: x ↔ y
     = Link Variable Variable
     -- parallelcomposition: νx.(P|Q)
-    | Par Variable Process Process
+    | Compose Variable Process Process
     -- output: x[y].(P|Q)
     | Output Variable Variable Process Process
     -- input: x(y).P
@@ -41,6 +44,52 @@ data Process
     deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
+-- | Type level
+
+data Type
+    = Dual Type
+    -- A ⊗ B: output A then behave as B
+    | Times Type Type
+    -- A 􏰂􏰂􏰂⅋ B: input A then behave as B
+    | Par Type Type
+    -- A ⊕ B: select A or B
+    | Plus Type Type
+    -- A & B: offer choice of A or B
+    | With Type Type
+    -- of cource!
+    | Acc Type
+    -- why not?
+    | Req Type
+    -- existential
+    | Exists Variable Type
+    -- universal
+    | Forall Variable Type
+    -- 1: unit for Times ⊗
+    | One
+    -- ⊥: unit for Par ⅋
+    | Bot
+    -- 0: unit for Plus ⊕
+    | Zero
+    -- ⊤: unit for With &
+    | Top
+    deriving (Show)
+
+dual :: Type -> Type
+dual (Dual a)       = a
+dual (Times a b)    = Par (dual a) (dual b)
+dual (Par a b)      = Times (dual a) (dual b)
+dual (Plus a b)     = With (dual a) (dual b)
+dual (With a b)     = Plus (dual a) (dual b)
+dual (Acc a)        = Req (dual a)
+dual (Req a)        = Acc (dual a)
+dual (Exists x a)   = Forall x (dual a)
+dual (Forall x a)   = Exists x (dual a)
+dual One            = Bot
+dual Bot            = One
+dual Zero           = Top
+dual Top            = Zero
+
+--------------------------------------------------------------------------------
 -- | Converting from Concrete Syntax Tree
 
 class FromConcrete a b | a -> b where
@@ -62,8 +111,8 @@ instance FromConcrete (C.Process ann) Process where
         Link
             (fromConcrete nameA)
             (fromConcrete nameB)
-    fromConcrete (C.Par name procA procB _) =
-        Par
+    fromConcrete (C.Compose name procA procB _) =
+        Compose
             (fromConcrete name)
             (fromConcrete procA)
             (fromConcrete procB)

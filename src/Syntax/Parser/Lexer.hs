@@ -24,7 +24,7 @@ tokenRE =
   <|> TokenLink         <$ "<->"
   <|> TokenScope        <$ "\\"
   <|> TokenSeq          <$ "."
-  <|> TokenParComp      <$ "|"
+  <|> TokenComp         <$ "|"
   <|> TokenParenStart   <$ "("
   <|> TokenParenEnd     <$ ")"
   <|> TokenBracketStart <$ "["

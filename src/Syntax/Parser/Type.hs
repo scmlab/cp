@@ -20,7 +20,7 @@ data Token
   -- \x.(P | Q)
   | TokenScope    -- \
   | TokenSeq      -- .
-  | TokenParComp  -- |
+  | TokenComp  -- |
   -- () []
   | TokenParenStart | TokenParenEnd
   | TokenBracketStart | TokenBracketEnd

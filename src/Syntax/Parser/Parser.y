@@ -26,7 +26,7 @@ import Data.Text (Text)
         '<->'           { TokenLink             }
         'nu'            { TokenScope            }
         '.'             { TokenSeq              }
-        '|'             { TokenParComp          }
+        '|'             { TokenComp             }
         '('             { TokenParenStart       }
         ')'             { TokenParenEnd         }
         '['             { TokenBracketStart     }
@@ -59,7 +59,7 @@ Declaration :: {Declaration Loc}
 
 Process :: {Process Loc}
     : Name '<->' Name                       {% locate $ Link $1 $3  }
-    | 'nu' Name '.' '(' Process '|' Process ')'         {% locate $ Par $2 $5 $7 }
+    | 'nu' Name '.' '(' Process '|' Process ')'         {% locate $ Compose $2 $5 $7 }
     | Name '[' Name ']' '.' '(' Process '|' Process ')' {% locate $ Output $1 $3 $7 $9 }
     | Name '(' Name ')' '.' Process                     {% locate $ Input $1 $3 $6 }
     | Name '[inl]' '.' Process              {% locate $ SelectL $1 $4 }

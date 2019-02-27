@@ -19,7 +19,7 @@ data Declaration  ann = Declaration  (Name ann)  (Process ann)              ann
                       deriving (Show, Functor)
 
 data Process  ann = Link      (Name ann) (Name ann)                         ann
-                  | Par       (Name ann) (Process ann) (Process ann)        ann
+                  | Compose   (Name ann) (Process ann) (Process ann)        ann
                   | Output    (Name ann) (Name ann)    (Process ann) (Process ann) ann
                   | Input     (Name ann) (Name ann)    (Process ann)        ann
                   | SelectL   (Name ann) (Process ann)                      ann
@@ -46,7 +46,7 @@ instance Located (Declaration Loc) where
 
 instance Located (Process Loc) where
   locOf (Link _ _ loc) = loc
-  locOf (Par _ _ _ loc) = loc
+  locOf (Compose _ _ _ loc) = loc
   locOf (Output _ _ _ _ loc) = loc
   locOf (Input _ _ _ loc) = loc
   locOf (SelectL _ _ loc) = loc
