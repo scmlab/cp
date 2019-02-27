@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a8696396b21a460c16050ce0533ff5f981fbcca8fa557deb97cdb0e6f70ec748
+-- hash: a4fb2ed0db7573b1eb60d1e26969119e0a962decf6e9139f1631a9a06a92f6a2
 
 name:           cp
 version:        0.1.0.0
@@ -28,6 +28,7 @@ executable cp
       Syntax.Parser.Lexer
       Syntax.Parser.Parser
       Syntax.Parser.Type
+      TypeChecker
       Paths_cp
   hs-source-dirs:
       src

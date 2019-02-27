@@ -1,0 +1,41 @@
+module TypeChecker where
+--
+-- import Syntax.Abstract
+-- import Data.Map (Map)
+-- import qualified Data.Map as Map
+--
+-- data TypeError = Conflict Variable Type Type | TypeError
+--     deriving (Show)
+--
+-- infer :: Environment -> Process -> Either TypeError Environment
+-- infer env (EmptyOutput var) = addToEnv env var One
+-- infer env (Times x y p q) = do
+--     envA <- infer env p
+--     envB <- infer env q
+-- -- infer env (SelectL var proc) = do
+-- --     env' <- infer env proc
+-- --     case Map.lookup var env' of
+-- --         Nothing -> Right $ updateEnv env' var (Par Hole Hole)
+-- --         Just t  -> Right $ updateEnv env' var (Par t Hole)
+-- infer _ _ = Left TypeError
+--
+--
+-- --------------------------------------------------------------------------------
+-- -- | Environment
+--
+-- type Environment =  Map Variable Type
+--
+-- emptyEnv :: Environment
+-- emptyEnv = Map.empty
+--
+-- addToEnv :: Environment -> Variable -> Type -> Either TypeError Environment
+-- addToEnv env var t = case Map.lookup var env of
+--     Just Hole ->
+--         Right $ Map.insert var t env
+--     Just u -> if normalize t == normalize u
+--         then Right env
+--         else Left $ Conflict var u t
+--     Nothing -> Right $ Map.insert var t env
+--
+-- updateEnv :: Environment -> Variable -> Type -> Environment
+-- updateEnv env var t = Map.insert var t env

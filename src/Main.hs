@@ -2,9 +2,11 @@ module Main where
 
 import Syntax.Abstract
 import Syntax.Parser
--- import Data.ByteString.Lazy (ByteString)
+import TypeChecker
+
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BC
+
 
 main :: IO ()
 main = do
@@ -15,4 +17,7 @@ main = do
   let parseResult = parseProgram filePath readResult
   case parseResult of
     Left err -> print (err :: ParseError)
-    Right result -> print (result :: Program)
+    Right (Program declarations) -> do
+      let TermDecl _ term = head declarations
+      -- print (infer emptyEnv term)
+      print term
