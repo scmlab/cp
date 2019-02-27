@@ -12,9 +12,27 @@ import Language.Lexer.Applicative
 -- | Tokens
 
 data Token
-  -- Name = Process
   = TokenDefn
+  | TokenHasType
+  -- Names and Variables
   | TokenName Text
+  -- Types
+  | TokenDual
+  | TokenTimes
+  | TokenPar
+  | TokenPlus
+  | TokenWith
+  | TokenAcc
+  | TokenReq
+  | TokenExists
+  | TokenForall
+  | TokenOne
+  | TokenBot
+  | TokenZero
+  | TokenTop
+
+  -- Terms
+
   -- <->
   | TokenLink
   -- \x.(P | Q)

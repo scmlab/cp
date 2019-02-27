@@ -15,7 +15,8 @@ data Name         ann = Name Text ann
 data Program      ann = Program     [Declaration ann]                       ann
                       deriving (Show, Functor)
 
-data Declaration  ann = Declaration  (Name ann)  (Process ann)              ann
+data Declaration  ann = TypeDecl  (Name ann)  (Type ann)                    ann
+                      | TermDecl  (Name ann)  (Process ann)                 ann
                       deriving (Show, Functor)
 
 data Process  ann = Link      (Name ann) (Name ann)                         ann
@@ -32,6 +33,21 @@ data Process  ann = Link      (Name ann) (Name ann)                         ann
                   | EmptyChoice          (Name ann)                         ann
                   deriving (Show, Functor)
 
+data Type ann = Dual    (Type ann)              ann
+              | Times   (Type ann)  (Type ann)  ann
+              | Par     (Type ann)  (Type ann)  ann
+              | Plus    (Type ann)  (Type ann)  ann
+              | With    (Type ann)  (Type ann)  ann
+              | Acc     (Type ann)              ann
+              | Req     (Type ann)              ann
+              | Exists  (Name ann)  (Type ann)  ann
+              | Forall  (Name ann)  (Type ann)  ann
+              | One                             ann
+              | Bot                             ann
+              | Zero                            ann
+              | Top                             ann
+              deriving (Show, Functor)
+
 --------------------------------------------------------------------------------
 -- | Instance of Located
 
@@ -42,7 +58,8 @@ instance Located (Program Loc) where
   locOf (Program _ loc) = loc
 
 instance Located (Declaration Loc) where
-  locOf (Declaration _ _ loc) = loc
+  locOf (TypeDecl _ _ loc) = loc
+  locOf (TermDecl _ _ loc) = loc
 
 instance Located (Process Loc) where
   locOf (Link _ _ loc) = loc
@@ -57,3 +74,18 @@ instance Located (Process Loc) where
   locOf (EmptyOutput _ loc) = loc
   locOf (EmptyInput _ _ loc) = loc
   locOf (EmptyChoice _ loc) = loc
+
+instance Located (Type Loc) where
+  locOf (Dual _ loc) = loc
+  locOf (Times _ _ loc) = loc
+  locOf (Par _ _ loc) = loc
+  locOf (Plus _ _ loc) = loc
+  locOf (With _ _ loc) = loc
+  locOf (Acc _ loc) = loc
+  locOf (Req _ loc) = loc
+  locOf (Exists _ _ loc) = loc
+  locOf (Forall _ _ loc) = loc
+  locOf (One loc) = loc
+  locOf (Bot loc) = loc
+  locOf (Zero loc) = loc
+  locOf (Top loc) = loc

@@ -19,8 +19,25 @@ matchWhen p symbol = msym (\t -> if p t then Just symbol else Nothing)
 
 
 tokenRE :: RE Char Token
-tokenRE =
-      TokenDefn         <$ "="
+tokenRE
+  =   TokenDefn         <$ "="
+  <|> TokenHasType      <$ ":"
+  -- type
+  <|> TokenDual         <$ "^"
+  <|> TokenTimes        <$ "*"
+  <|> TokenPar          <$ "%"
+  <|> TokenPlus         <$ "+"
+  <|> TokenWith         <$ "&"
+  <|> TokenAcc          <$ "!"
+  <|> TokenReq          <$ "?"
+  <|> TokenExists       <$ "exists"
+  <|> TokenForall       <$ "forall"
+  <|> TokenOne          <$ "1"
+  <|> TokenBot          <$ "Bot"
+  <|> TokenZero         <$ "0"
+  <|> TokenTop          <$ "Top"
+
+  -- term
   <|> TokenLink         <$ "<->"
   <|> TokenScope        <$ "\\"
   <|> TokenSeq          <$ "."
@@ -33,10 +50,8 @@ tokenRE =
   <|> TokenSelectR      <$ "[inr]"
   <|> TokenCase         <$ "case"
   <|> TokenCaseSep      <$ ","
-  <|> TokenAccept       <$ "!"
-  <|> TokenRequest      <$ "?"
   <|> TokenEmptyOutput  <$ "[]"
-  <|> TokenEnd          <$ "0"
+  <|> TokenEnd          <$ "end"
   <|> TokenEmptyInput   <$ "()"
   <|> TokenEmptyChoice  <$ "case()"
   <|> TokenName         <$> name

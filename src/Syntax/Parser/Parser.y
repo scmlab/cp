@@ -23,6 +23,21 @@ import Data.Text (Text)
 %token
         name            { TokenName $$          }
         '='             { TokenDefn             }
+        ':'             { TokenHasType          }
+        '^'             { TokenDual             }
+        '*'             { TokenTimes            }
+        '%'             { TokenPar              }
+        '+'             { TokenPlus             }
+        '&'             { TokenWith             }
+        '!'             { TokenAcc              }
+        '?'             { TokenReq              }
+        'exists'        { TokenExists           }
+        'forall'        { TokenForall           }
+        '1'             { TokenOne              }
+        'Bot'           { TokenBot              }
+        '0'             { TokenZero             }
+        'Top'           { TokenTop              }
+
         '<->'           { TokenLink             }
         'nu'            { TokenScope            }
         '.'             { TokenSeq              }
@@ -35,10 +50,8 @@ import Data.Text (Text)
         '[inr]'         { TokenSelectR          }
         'case'          { TokenCase             }
         ','             { TokenCaseSep          }
-        '!'             { TokenAccept           }
-        '?'             { TokenRequest          }
         '[]'            { TokenEmptyOutput      }
-        '0'             { TokenEnd              }
+        'end'           { TokenEnd              }
         '()'            { TokenEmptyInput       }
         'case()'        { TokenEmptyChoice      }
 
@@ -55,7 +68,8 @@ Declarations :: {[Declaration Loc]}
     | Declarations Declaration              { $2:$1 }
 
 Declaration :: {Declaration Loc}
-    : Name '=' Process                      {% locate $ Declaration $1 $3 }
+    : Name ':' Type                         {% locate $ TypeDecl $1 $3 }
+    | Name '=' Process                      {% locate $ TermDecl $1 $3 }
 
 Process :: {Process Loc}
     : Name '<->' Name                       {% locate $ Link $1 $3  }
@@ -67,9 +81,39 @@ Process :: {Process Loc}
     | Name '.' 'case' '(' Process ',' Process ')'       {% locate $ Choice $1 $5 $7 }
     | '!' Name '(' Name ')' '.' Process     {% locate $ Accept $2 $4 $7 }
     | '?' Name '[' Name ']' '.' Process     {% locate $ Request $2 $4 $7 }
-    | Name '[]' '.' '0'                     {% locate $ EmptyOutput $1 }
+    | Name '[]' '.' 'end'                   {% locate $ EmptyOutput $1 }
     | Name '()' '.' Process                 {% locate $ EmptyInput $1 $4 }
     | Name '.' 'case()'                     {% locate $ EmptyChoice $1 }
+
+Type :: {Type Loc}
+    : Type1                                 { $1 }
+    | 'exists' Name Type1                   {% locate $ Exists $2 $3 }
+    | 'forall' Name Type1                   {% locate $ Forall $2 $3 }
+
+-- right associative
+Type1 :: {Type Loc}
+    : Type2                                 { $1 }
+    | Type2 '*' Type1                       {% locate $ Times $1 $3 }
+    | Type2 '%' Type1                       {% locate $ Par $1 $3 }
+
+-- right associative
+Type2 :: {Type Loc}
+    : Type3                                 { $1 }
+    | Type3 '+' Type2                       {% locate $ Plus $1 $3 }
+    | Type3 '&' Type2                       {% locate $ With $1 $3 }
+
+Type3 :: {Type Loc}
+    : Type4                                 { $1 }
+    | '!' Type3                             {% locate $ Acc $2 }
+    | '?' Type3                             {% locate $ Req $2 }
+
+Type4 :: {Type Loc}
+    : '(' Type ')'                          { $2 }
+    |  '^' Type4                            {% locate $ Dual $2  }
+    | '1'                                   {% locate $ One }
+    | 'Bot'                                 {% locate $ Bot }
+    | '0'                                   {% locate $ Zero }
+    | 'Top'                                 {% locate $ Top }
 
 
 Name :: {Name Loc}

@@ -14,7 +14,9 @@ type Variable = Text
 
 data Program = Program [Declaration]
     deriving (Show)
-data Declaration = Declaration Name Process
+data Declaration
+    = TypeDecl Name Type
+    | TermDecl Name Process
     deriving (Show)
 data Process
     -- link: x ↔ y
@@ -100,8 +102,10 @@ instance FromConcrete (C.Program ann) Program where
         Program (map fromConcrete declarations)
 
 instance FromConcrete (C.Declaration ann) Declaration where
-    fromConcrete (C.Declaration name process _) =
-        Declaration (fromConcrete name) (fromConcrete process)
+    fromConcrete (C.TypeDecl name typ _) =
+        TypeDecl (fromConcrete name) (fromConcrete typ)
+    fromConcrete (C.TermDecl name process _) =
+        TermDecl (fromConcrete name) (fromConcrete process)
 
 instance FromConcrete (C.Name ann) Name where
     fromConcrete (C.Name name    _) = name
@@ -160,3 +164,42 @@ instance FromConcrete (C.Process ann) Process where
     fromConcrete (C.EmptyChoice name _) =
         EmptyChoice
             (fromConcrete name)
+
+instance FromConcrete (C.Type ann) Type where
+    fromConcrete (C.Dual t _) =
+        Dual
+            (fromConcrete t)
+    fromConcrete (C.Times t u _) =
+        Times
+            (fromConcrete t)
+            (fromConcrete u)
+    fromConcrete (C.Par t u _) =
+        Par
+            (fromConcrete t)
+            (fromConcrete u)
+    fromConcrete (C.Plus t u _) =
+        Plus
+            (fromConcrete t)
+            (fromConcrete u)
+    fromConcrete (C.With t u _) =
+        With
+            (fromConcrete t)
+            (fromConcrete u)
+    fromConcrete (C.Acc t _) =
+        Acc
+            (fromConcrete t)
+    fromConcrete (C.Req t _) =
+        Req
+            (fromConcrete t)
+    fromConcrete (C.Exists x t _) =
+        Exists
+            (fromConcrete x)
+            (fromConcrete t)
+    fromConcrete (C.Forall x t _) =
+        Forall
+            (fromConcrete x)
+            (fromConcrete t)
+    fromConcrete (C.One _) = One
+    fromConcrete (C.Bot _) = Bot
+    fromConcrete (C.Zero _) = Zero
+    fromConcrete (C.Top _) = Top
