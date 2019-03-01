@@ -16,7 +16,7 @@ data Token
   | TokenHasType
   --
   | TokenTermName Text -- for terms and variables
-  | TokenTypeName Text -- for types 
+  | TokenTypeName Text -- for types
   -- Types
   | TokenDual
   | TokenTimes

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: a4fb2ed0db7573b1eb60d1e26969119e0a962decf6e9139f1631a9a06a92f6a2
+-- hash: 474f320bd1a3eab2dcafa615f40a2f9a92ab0898c6ce6fcfc0aeac6829ea5628
 
 name:           cp
 version:        0.1.0.0
@@ -36,12 +36,14 @@ executable cp
   build-tools:
       happy
   build-depends:
-      array
+      ansi-terminal
+    , array
     , base >=4.7 && <5
     , bytestring
     , containers
     , lexer-applicative
     , mtl
+    , prettyprinter
     , regex-applicative
     , srcloc
     , text
