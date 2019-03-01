@@ -9,50 +9,55 @@ import Prelude hiding (LT, EQ, GT)
 --------------------------------------------------------------------------------
 -- | Concrete Syntax Tree
 
-data Name         ann = Name Text ann
+data TermName     ann = TermName Text ann
+                      deriving (Show, Functor)
+data TypeName     ann = TypeName Text ann
                       deriving (Show, Functor)
 
 data Program      ann = Program     [Declaration ann]                       ann
                       deriving (Show, Functor)
 
-data Declaration  ann = TypeDecl  (Name ann)  (Type ann)                    ann
-                      | TermDecl  (Name ann)  (Process ann)                 ann
+data Declaration  ann = TypeDecl  (TypeName ann)  (Type ann)                ann
+                      | TermDecl  (TermName ann)  (Process ann)             ann
                       deriving (Show, Functor)
 
-data Process  ann = Link      (Name ann) (Name ann)                         ann
-                  | Compose   (Name ann) (Process ann) (Process ann)        ann
-                  | Output    (Name ann) (Name ann)    (Process ann) (Process ann) ann
-                  | Input     (Name ann) (Name ann)    (Process ann)        ann
-                  | SelectL   (Name ann) (Process ann)                      ann
-                  | SelectR   (Name ann) (Process ann)                      ann
-                  | Choice    (Name ann) (Process ann) (Process ann)        ann
-                  | Accept    (Name ann) (Name ann)    (Process ann)        ann
-                  | Request   (Name ann) (Name ann)    (Process ann)        ann
-                  | EmptyOutput          (Name ann)                         ann
-                  | EmptyInput           (Name ann)    (Process ann)        ann
-                  | EmptyChoice          (Name ann)                         ann
+data Process  ann = Link      (TermName ann) (TermName ann)                 ann
+                  | Compose   (TermName ann) (Process  ann) (Process ann)   ann
+                  | Output    (TermName ann) (TermName ann) (Process ann) (Process ann) ann
+                  | Input     (TermName ann) (TermName ann) (Process ann)   ann
+                  | SelectL   (TermName ann) (Process  ann)                 ann
+                  | SelectR   (TermName ann) (Process  ann)                 ann
+                  | Choice    (TermName ann) (Process  ann) (Process ann)   ann
+                  | Accept    (TermName ann) (TermName ann) (Process ann)   ann
+                  | Request   (TermName ann) (TermName ann) (Process ann)   ann
+                  | EmptyOutput              (TermName ann)                 ann
+                  | EmptyInput               (TermName ann) (Process ann)   ann
+                  | EmptyChoice              (TermName ann)                 ann
                   deriving (Show, Functor)
 
-data Type ann = Dual    (Type ann)              ann
-              | Times   (Type ann)  (Type ann)  ann
-              | Par     (Type ann)  (Type ann)  ann
-              | Plus    (Type ann)  (Type ann)  ann
-              | With    (Type ann)  (Type ann)  ann
-              | Acc     (Type ann)              ann
-              | Req     (Type ann)              ann
-              | Exists  (Name ann)  (Type ann)  ann
-              | Forall  (Name ann)  (Type ann)  ann
-              | One                             ann
-              | Bot                             ann
-              | Zero                            ann
-              | Top                             ann
+data Type ann = Dual    (Type ann)                  ann
+              | Times   (Type ann)      (Type ann)  ann
+              | Par     (Type ann)      (Type ann)  ann
+              | Plus    (Type ann)      (Type ann)  ann
+              | With    (Type ann)      (Type ann)  ann
+              | Acc     (Type ann)                  ann
+              | Req     (Type ann)                  ann
+              | Exists  (TypeName ann)  (Type ann)  ann
+              | Forall  (TypeName ann)  (Type ann)  ann
+              | One                                 ann
+              | Bot                                 ann
+              | Zero                                ann
+              | Top                                 ann
               deriving (Show, Functor)
 
 --------------------------------------------------------------------------------
 -- | Instance of Located
 
-instance Located (Name Loc) where
-  locOf (Name _ loc) = loc
+instance Located (TypeName Loc) where
+  locOf (TypeName _ loc) = loc
+
+instance Located (TermName Loc) where
+  locOf (TermName _ loc) = loc
 
 instance Located (Program Loc) where
   locOf (Program _ loc) = loc

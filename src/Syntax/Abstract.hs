@@ -9,40 +9,40 @@ import Data.Text (Text)
 --------------------------------------------------------------------------------
 -- | Term level
 
-type Name = Text
-type Variable = Text
+type TypeName = Text
+type TermName = Text
 
 data Program = Program [Declaration]
     deriving (Show)
 data Declaration
-    = TypeDecl Name Type
-    | TermDecl Name Process
+    = TypeDecl TypeName Type
+    | TermDecl TermName Process
     deriving (Show)
 data Process
     -- link: x ↔ y
-    = Link Variable Variable
+    = Link TermName TermName
     -- parallelcomposition: νx.(P|Q)
-    | Compose Variable Process Process
+    | Compose TermName Process Process
     -- output: x[y].(P|Q)
-    | Output Variable Variable Process Process
+    | Output TermName TermName Process Process
     -- input: x(y).P
-    | Input Variable Variable Process
+    | Input TermName TermName Process
     -- left selection: x[inl].P
-    | SelectL Variable Process
+    | SelectL TermName Process
     -- right selection: x[inr].P
-    | SelectR Variable Process
+    | SelectR TermName Process
     -- choice: x.case(P,Q)
-    | Choice Variable Process Process
+    | Choice TermName Process Process
     -- server accept: !x(y).P
-    | Accept Variable Variable Process
+    | Accept TermName TermName Process
     -- client request: ?x[y].P
-    | Request Variable Variable Process
+    | Request TermName TermName Process
     -- empty output: x[].0
-    | EmptyOutput Variable
+    | EmptyOutput TermName
     -- empty input: x().P
-    | EmptyInput Variable Process
+    | EmptyInput TermName Process
     -- empty choice: x.case()
-    | EmptyChoice Variable
+    | EmptyChoice TermName
     deriving (Eq, Show)
 
 --------------------------------------------------------------------------------
@@ -63,9 +63,9 @@ data Type
     -- why not?
     | Req Type
     -- existential
-    | Exists Variable Type
+    | Exists TermName Type
     -- universal
-    | Forall Variable Type
+    | Forall TermName Type
     -- 1: unit for Times ⊗
     | One
     -- ⊥: unit for Par ⅋
@@ -107,8 +107,11 @@ instance FromConcrete (C.Declaration ann) Declaration where
     fromConcrete (C.TermDecl name process _) =
         TermDecl (fromConcrete name) (fromConcrete process)
 
-instance FromConcrete (C.Name ann) Name where
-    fromConcrete (C.Name name    _) = name
+instance FromConcrete (C.TypeName ann) TypeName where
+    fromConcrete (C.TypeName name    _) = name
+
+instance FromConcrete (C.TermName ann) TermName where
+    fromConcrete (C.TermName name    _) = name
 
 instance FromConcrete (C.Process ann) Process where
     fromConcrete (C.Link nameA nameB _) =

@@ -54,16 +54,23 @@ tokenRE
   <|> TokenEnd          <$ "end"
   <|> TokenEmptyInput   <$ "()"
   <|> TokenEmptyChoice  <$ "case()"
-  <|> TokenName         <$> name
+  <|> TokenTypeName     <$> typeName
+  <|> TokenTermName     <$> termName
 
 (+++) :: RE Char String -> RE Char String -> RE Char String
 (+++) = liftA2 (++)
 
-name :: RE Char Text
-name = fmap pack $ (:) <$> psym isLower <*> many (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
---
--- labelRE :: RE Char Text
--- labelRE = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isUpper c || isDigit c || c == '_' || c == '\''))
+-- starts with lowercase alphabets
+termName :: RE Char Text
+termName = fmap pack $ (:) <$> psym isLower <*> many (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
+
+-- starts with uppercase alphabets
+typeName :: RE Char Text
+typeName = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
+
+-- all uppercase alphabets
+labelRE :: RE Char Text
+labelRE = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isUpper c || isDigit c || c == '_' || c == '\''))
 
 -- stringRE :: RE Char Text
 -- stringRE = fmap pack $ string "\"" +++ firstPart +++ secondPart +++ string "\""

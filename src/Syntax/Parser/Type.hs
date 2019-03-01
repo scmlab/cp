@@ -14,8 +14,9 @@ import Language.Lexer.Applicative
 data Token
   = TokenDefn
   | TokenHasType
-  -- Names and Variables
-  | TokenName Text
+  --
+  | TokenTermName Text -- for terms and variables
+  | TokenTypeName Text -- for types 
   -- Types
   | TokenDual
   | TokenTimes
