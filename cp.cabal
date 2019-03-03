@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 474f320bd1a3eab2dcafa615f40a2f9a92ab0898c6ce6fcfc0aeac6829ea5628
+-- hash: 7442b7b490476c638050a14d222f3f1d85ca15a885174d49f871eeb6ec426d33
 
 name:           cp
 version:        0.1.0.0
@@ -22,6 +22,7 @@ extra-source-files:
 executable cp
   main-is: Main.hs
   other-modules:
+      Pretty
       Syntax.Abstract
       Syntax.Concrete
       Syntax.Parser

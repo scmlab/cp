@@ -69,8 +69,8 @@ Declarations :: {[Declaration Loc]}
     | Declarations Declaration              { $2:$1 }
 
 Declaration :: {Declaration Loc}
-    : TypeName ':' Type                         {% locate $ TypeDecl $1 $3 }
-    | TermName '=' Process                      {% locate $ TermDecl $1 $3 }
+    : TermName ':' Type                         {% locate $ TypeSig $1 $3 }
+    | TermName '=' Process                      {% locate $ TermDefn $1 $3 }
 
 Process :: {Process Loc}
     : TermName '<->' TermName                   {% locate $ Link $1 $3  }

@@ -17,8 +17,8 @@ data TypeName     ann = TypeName Text ann
 data Program      ann = Program     [Declaration ann]                       ann
                       deriving (Show, Functor)
 
-data Declaration  ann = TypeDecl  (TypeName ann)  (Type ann)                ann
-                      | TermDecl  (TermName ann)  (Process ann)             ann
+data Declaration  ann = TypeSig   (TermName ann)  (Type ann)                ann
+                      | TermDefn  (TermName ann)  (Process ann)             ann
                       deriving (Show, Functor)
 
 data Process  ann = Link      (TermName ann) (TermName ann)                 ann
@@ -63,8 +63,8 @@ instance Located (Program Loc) where
   locOf (Program _ loc) = loc
 
 instance Located (Declaration Loc) where
-  locOf (TypeDecl _ _ loc) = loc
-  locOf (TermDecl _ _ loc) = loc
+  locOf (TypeSig _ _ loc) = loc
+  locOf (TermDefn _ _ loc) = loc
 
 instance Located (Process Loc) where
   locOf (Link _ _ loc) = loc

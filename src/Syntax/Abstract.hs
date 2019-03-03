@@ -15,8 +15,8 @@ type TermName = Text
 data Program = Program [Declaration]
     deriving (Show)
 data Declaration
-    = TypeDecl TypeName Type
-    | TermDecl TermName Process
+    = TypeSig  TermName Type
+    | TermDefn TermName Process
     deriving (Show)
 data Process
     -- link: x ↔ y
@@ -102,10 +102,10 @@ instance FromConcrete (C.Program ann) Program where
         Program (map fromConcrete declarations)
 
 instance FromConcrete (C.Declaration ann) Declaration where
-    fromConcrete (C.TypeDecl name typ _) =
-        TypeDecl (fromConcrete name) (fromConcrete typ)
-    fromConcrete (C.TermDecl name process _) =
-        TermDecl (fromConcrete name) (fromConcrete process)
+    fromConcrete (C.TypeSig name typ _) =
+        TypeSig (fromConcrete name) (fromConcrete typ)
+    fromConcrete (C.TermDefn name process _) =
+        TermDefn (fromConcrete name) (fromConcrete process)
 
 instance FromConcrete (C.TypeName ann) TypeName where
     fromConcrete (C.TypeName name    _) = name

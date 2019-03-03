@@ -6,11 +6,9 @@ import TypeChecker
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
-import qualified Data.ByteString.Lazy.Char8 as BC
+-- import qualified Data.ByteString.Lazy.Char8 as BC
 
--- import Control.IOException (IOException)
-
-import Control.Exception (IOException, Exception, try)
+import Control.Exception (IOException, try)
 import Control.Monad.State
 import Control.Monad.Except
 
@@ -19,6 +17,7 @@ data MState = MState
   } deriving (Show)
 
 data Error = ParseError ParseError
+           | TypeError TypeError
            | OtherError String
            deriving (Show)
 
@@ -49,11 +48,24 @@ parseSource filePath source = do
 handleError :: M () -> M ()
 handleError program = program `catchError` \ err -> case err of
   ParseError parseError -> gets getSource >>= liftIO . printParseError parseError
+  TypeError typeError -> liftIO $ print typeError
   OtherError msg -> liftIO (putStrLn (show msg))
+
+
+runTCM :: TCM a -> M (a, TCState)
+runTCM program = do
+    let (result, s) = runState (runExceptT program) initialTCState
+    case result of
+      Left err -> throwError $ TypeError err
+      Right val -> return (val, s)
 
 main :: IO ()
 main = void $ runM $ handleError $ do
     let filePath = "test/source/a.clp"
     program <- readSource filePath >>= parseSource filePath
+
+    tc <- runTCM $ do
+      ruleOutDuplications program
+    liftIO $ print tc
     liftIO $ print program
     return ()
