@@ -1,8 +1,12 @@
 module TypeChecker where
 
 
-import Syntax.Abstract
-import Data.List (sort, group)
+import Syntax.Concrete
+-- import qualified Syntax.Concrete as C
+import Data.Loc (Loc)
+
+
+import qualified Data.List as List
 import Data.Map (Map)
 import Data.Maybe (mapMaybe)
 import qualified Data.Map as Map
@@ -12,16 +16,16 @@ import Control.Monad.State
 import Control.Monad.Except
 
 data TCState = TCState
-    { stateTypeSigs  :: Map TermName Type
-    , stateTermDefns :: Map TermName Process
+    { stateTypeSigs  :: Map (TermName Loc) (Type Loc)
+    , stateTermDefns :: Map (TermName Loc) (Process Loc)
     } deriving (Show)
 
 initialTCState :: TCState
 initialTCState = TCState Map.empty Map.empty
 
-data TypeError = TypeSigNotFound TermName
-               | TypeSigDuplicated TermName
-               | TermDefnDuplicated TermName
+data TypeError = TypeSigDuplicated (TermName Loc) (TermName Loc)
+               | TermDefnDuplicated (TermName Loc) (TermName Loc)
+               -- TypeSigNotFound (TermName Loc)
                -- | Conflict Variable Type Type
                | Others String
     deriving (Show)
@@ -30,29 +34,29 @@ type TCM = ExceptT TypeError (State TCState)
 
 
 -- there should be only at most one type signature or term definition
-ruleOutDuplications :: Program -> TCM ()
-ruleOutDuplications (Program declarations) = do
+checkDuplications :: Program Loc -> TCM ()
+checkDuplications (Program declarations _) = do
     let typeSigNames = mapMaybe typeSigName declarations
     let termDefnNames = mapMaybe termDefnName declarations
 
-    let duplicatedTypeSigs = filter ((> 1) . length) $ group $ sort typeSigNames
-    let duplicatedTermDefns = filter ((> 1) . length) $ group $ sort termDefnNames
-
-    when (length duplicatedTypeSigs > 0) $ do
-        throwError $ TypeSigDuplicated $ head $ head duplicatedTypeSigs
-    when (length duplicatedTermDefns > 0) $ do
-        throwError $ TermDefnDuplicated $ head $ head duplicatedTermDefns
-    -- let duplicatedTermDefn = length $ filter (> 1) $ map length $ group $ sort typeSigNames
-
-    return ()
+    case getDuplicatedPair typeSigNames of
+        Nothing     -> return ()
+        Just (a, b) -> throwError $ TypeSigDuplicated a b
+    case getDuplicatedPair termDefnNames of
+        Nothing     -> return ()
+        Just (a, b) -> throwError $ TermDefnDuplicated a b
 
     where
-        typeSigName (TypeSig n _) = Just n
+        typeSigName (TypeSig n _ _) = Just n
         typeSigName _             = Nothing
 
-        termDefnName (TermDefn n _) = Just n
+        termDefnName (TermDefn n _ _) = Just n
         termDefnName _              = Nothing
 
+        getDuplicatedPair :: [TermName Loc] -> Maybe (TermName Loc, TermName Loc)
+        getDuplicatedPair names =
+            let dup = filter ((> 1) . length) $ List.group $ List.sort names
+            in if null dup then Nothing else Just (head dup !! 0, head dup !! 1)
 
 -- check if a type signature is paired with a term definition,
 -- a temporary measure before the type inference algorithm is implelemented
@@ -91,3 +95,19 @@ ruleOutDuplications (Program declarations) = do
 --
 -- updateEnv :: Environment -> Variable -> Type -> Environment
 -- updateEnv env var t = Map.insert var t env
+
+
+--  (Lexical pos)         source = do
+--   setSGR [SetColor Foreground Vivid Red]
+--   putStr "\n  Lexical parse error\n  "
+--   setSGR [SetColor Foreground Dull Blue]
+--   putStrLn $ displayPos pos
+--   setSGR []
+--   printSourceCode $ SourceCode (BS.unpack source) (Loc pos pos) 2
+-- printParseError (Syntatical loc _) (Just source) = do
+--   setSGR [SetColor Foreground Vivid Red]
+--   putStr "\n  Syntatical parse error\n  "
+--   setSGR [SetColor Foreground Dull Blue]
+--   putStrLn $ displayLoc loc
+--   setSGR []
+--   printSourceCode $ SourceCode (BS.unpack source) loc 2

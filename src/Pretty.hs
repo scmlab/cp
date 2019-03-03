@@ -3,6 +3,8 @@ module Pretty where
 
 import Syntax.Abstract
 
+import Data.ByteString.Lazy (ByteString)
+import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Loc hiding (Pos)
 import qualified Data.Text.IO as Text
 import Data.Text.Prettyprint.Doc hiding (line)
@@ -19,9 +21,9 @@ data SourceCodeAnnotation
   | HighlightedArea
 
 data SourceCode = SourceCode
-                    String    -- source code
-                    Loc       -- highlighted location
-                    Int       -- number of the neighboring lines to be rendered
+                    ByteString  -- source code
+                    Loc         -- highlighted location
+                    Int         -- number of the neighboring lines to be rendered
 
 printSourceCode :: SourceCode -> IO ()
 printSourceCode = printAnnotation . layoutPretty defaultLayoutOptions . prettySourceCode
@@ -56,13 +58,13 @@ translateSourceCodeAnnotation HighlightedArea   = [SetColor Foreground Vivid Red
 
 -- instance Pretty SourceCode where
 prettySourceCode :: SourceCode -> Doc SourceCodeAnnotation
-prettySourceCode (SourceCode source NoLoc _) = pretty source
+prettySourceCode (SourceCode source NoLoc _) = pretty $ BS.unpack source
 prettySourceCode (SourceCode source (Loc from to) spread) =
   vsep $  [softline']
       ++  zipWith (<+>) lineNos lines'
       ++  [softline', softline']
 
-  where   sourceLines = lines source
+  where   sourceLines = lines (BS.unpack source)
 
           start = (posLine from - spread) `max` 1
           end   = (posLine to   + spread) `min` length sourceLines

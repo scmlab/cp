@@ -51,6 +51,15 @@ data Type ann = Dual    (Type ann)                  ann
               deriving (Show, Functor)
 
 --------------------------------------------------------------------------------
+-- | Instances
+
+instance Eq (TermName Loc) where
+  (==) (TermName a _) (TermName b _) = a == b
+
+instance Ord (TermName Loc) where
+  compare (TermName a _) (TermName b _) = compare a b
+
+--------------------------------------------------------------------------------
 -- | Instance of Located
 
 instance Located (TypeName Loc) where
