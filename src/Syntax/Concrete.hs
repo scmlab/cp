@@ -54,20 +54,20 @@ data Type ann = Dual    (Type ann)                  ann
               | Top                                 ann
               deriving (Show, Functor)
 
-dual :: Type ann -> Type ann
-dual (Dual a _)       = a
-dual (Times a b l)      = Par (dual a) (dual b) l
-dual (Par a b l)      = Times (dual a) (dual b) l
-dual (Plus a b l)     = With (dual a) (dual b) l
-dual (With a b l)     = Plus (dual a) (dual b) l
-dual (Acc a l)        = Req (dual a) l
-dual (Req a l)        = Acc (dual a) l
-dual (Exists x a l)   = Forall x (dual a) l
-dual (Forall x a l)   = Exists x (dual a) l
-dual (One l)          = Bot l
-dual (Bot l)          = One l
-dual (Zero l)         = Top l
-dual (Top l)          = Zero l
+instance HasDual (Type ann) where
+  dual (Dual a _)       = a
+  dual (Times a b l)      = Par (dual a) (dual b) l
+  dual (Par a b l)      = Times (dual a) (dual b) l
+  dual (Plus a b l)     = With (dual a) (dual b) l
+  dual (With a b l)     = Plus (dual a) (dual b) l
+  dual (Acc a l)        = Req (dual a) l
+  dual (Req a l)        = Acc (dual a) l
+  dual (Exists x a l)   = Forall x (dual a) l
+  dual (Forall x a l)   = Exists x (dual a) l
+  dual (One l)          = Bot l
+  dual (Bot l)          = One l
+  dual (Zero l)         = Top l
+  dual (Top l)          = Zero l
 
 typeSigName :: Declaration ann -> Maybe (TermName ann)
 typeSigName (TypeSig n _ _) = Just n
@@ -133,6 +133,7 @@ instance Located (Type Loc) where
   locOf (Bot loc) = loc
   locOf (Zero loc) = loc
   locOf (Top loc) = loc
+
 
 --------------------------------------------------------------------------------
 -- | Converting to Abstract Syntax Tree
@@ -249,3 +250,24 @@ instance ToAbstract (Type ann) A.Type where
     toAbstract (Bot _) = A.Bot
     toAbstract (Zero _) = A.Zero
     toAbstract (Top _) = A.Top
+
+--------------------------------------------------------------------------------
+-- | Duality
+
+class HasDual a where
+  dual :: a -> a
+
+instance HasDual A.Type where
+    dual (A.Dual a)       = a
+    dual (A.Times a b)    = A.Par (dual a) (dual b)
+    dual (A.Par a b)      = A.Times (dual a) (dual b)
+    dual (A.Plus a b)     = A.With (dual a) (dual b)
+    dual (A.With a b)     = A.Plus (dual a) (dual b)
+    dual (A.Acc a)        = A.Req (dual a)
+    dual (A.Req a)        = A.Acc (dual a)
+    dual (A.Exists x a)   = A.Forall x (dual a)
+    dual (A.Forall x a)   = A.Exists x (dual a)
+    dual A.One            = A.Bot
+    dual A.Bot            = A.One
+    dual A.Zero           = A.Top
+    dual A.Top            = A.Zero

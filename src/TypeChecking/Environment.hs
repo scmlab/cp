@@ -8,6 +8,7 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Except
 
+import Data.Function (on)
 import Data.Loc (Loc)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -21,7 +22,15 @@ import Data.Text (Text)
 type Var = TermName Loc
 
 data Index = Pos Int | Neg Int
-    deriving (Eq, Show)
+    deriving (Show)
+
+instance HasDual Index where
+  dual (Pos i) = Neg i
+  dual (Neg i) = Pos i
+
+instance Eq Index where
+  (==) = (==) `on` dual
+
 -- Props are basically just Types
 data Prop = Concrete (Type Loc) | Abstract Index
   deriving (Show)
