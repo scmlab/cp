@@ -1,2 +1,2 @@
-a = x[] . end
-a : 0
+a : 1 * 1
+a = x[y] . (y[] . end | x[] . end)

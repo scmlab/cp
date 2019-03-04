@@ -4,7 +4,7 @@ module Main where
 import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
 import Syntax.Parser
-import TypeChecker
+import TypeChecking
 import Pretty
 
 import Data.Monoid (mempty, (<>))
@@ -92,11 +92,8 @@ main = void $ runM $ handleError $ do
     let filePath = "test/source/a.clp"
     program <- readSource filePath >>= parseSource filePath
 
-    tc <- runTCM $ do
-      checkDuplications program
-      checkTypeTermPairing program
+    (tc, _) <- runTCM (checkAll program)
     liftIO $ print tc
-    liftIO $ print program
     return ()
 
 --------------------------------------------------------------------------------
