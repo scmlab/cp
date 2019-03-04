@@ -41,6 +41,7 @@ data InferError
   | VarNotFoundInTypes Var
   | VarNotFoundInContext Var Context
   | OverlappedContext Context
+  | ContextShouldBeTheSame Context Context
   | CannotUnify Type Type
 --   | VarNotFresh Var (Maybe Term)
   deriving (Show)
@@ -76,44 +77,45 @@ getFreshType = do
 infer :: Term -> EnvM Context
 infer (C.Link x y _) = do
   t <- assumeType
-  -- u <- lookupType y
-  -- (t, dual t) <- unifyOpposite t u
   return $ Map.fromList
-    [ (x, t)
+    [ (x,      t)
     , (y, dual t)
     ]
 infer (C.Compose x p q _) = do
-  ctxP <- Map.delete x <$> infer p
-  ctxQ <- Map.delete x <$> infer q
+  (a, ctxP) <- infer p >>= splitCtx x
+  (b, ctxQ) <- infer q >>= splitCtx x
   checkOverlappedContext ctxP ctxQ
+  unifyOpposite a b
   return $ mergeContext ctxP ctxQ
 infer (C.Output x y p q _) = do
-  ctxP <- infer p
-  ctxQ <- infer q
-  typeX <- lookup x ctxQ
-  typeY <- lookup y ctxP
-  return $ Map.insert x (Times typeY typeX) $
-    mergeContext (Map.delete y ctxP) (Map.delete x ctxQ)
+  (a, ctxP) <- infer p >>= splitCtx y
+  (b, ctxQ) <- infer q >>= splitCtx x
+  return
+    $ Map.insert x (Times a b)
+    $ mergeContext ctxP ctxQ
 
 infer (C.Input x y p _) = do
-  ctx <- infer p
-  typeX <- lookup x ctx
-  typeY <- lookup y ctx
-  return $ Map.insert x (Par typeY typeX)
-    $ Map.delete y
-    $ Map.delete x ctx
+  (b, ctx) <- infer p >>= splitCtx x
+  (a, ctx') <- splitCtx y ctx
+  return $ Map.insert x (Par a b)
+    $ ctx'
 
--- infer (C.SelectL x p _) = do
---   ctx <- infer p
+infer (C.SelectL x p _) = do
+  (a, ctx) <- infer p >>= splitCtx x
+  b <- assumeType
+  return $ Map.insert x (Plus a b) ctx
 
 infer (C.SelectR x p _) = do
-  ctx <- infer p
-  a <- lookup x ctx
-  b <- assumeType
-  return  $ Map.insert x (Plus a b)
-          $ Map.delete x ctx
+  (b, ctx) <- infer p >>= splitCtx x
+  a <- assumeType
+  return $ Map.insert x (Plus a b) ctx
 
-infer (C.Choice x p q _) = undefined
+infer (C.Choice x p q _) = do
+  (a, ctxP) <- infer p >>= splitCtx x
+  (b, ctxQ) <- infer q >>= splitCtx x
+  contextShouldBeTheSame ctxP ctxQ
+  return $ Map.insert x (With a b) ctxP
+
 infer (C.Accept x y p _) = undefined
 infer (C.Request x y p _) = undefined
 infer (C.EmptyOutput x _) = do
@@ -129,6 +131,13 @@ infer (C.EmptyChoice x _) = undefined
 --   b <- infer q
 
 
+splitCtx :: Var -> Context -> EnvM (Type, Context)
+splitCtx var ctx = do
+  case Map.lookup var ctx of
+    Nothing -> throwError $ VarNotFoundInContext var ctx
+    Just t -> return (t, Map.delete var ctx)
+
+
 assumeType :: EnvM Type
 assumeType = do
   t <- getFreshType
@@ -142,12 +151,6 @@ mergeContext = Map.merge
   (Map.mapMaybeMissing (\_ x -> Just x))
   (Map.mapMaybeMissing (\_ x -> Just x))
   (Map.zipWithMaybeMatched (\_ x _ -> Just x))
-
-lookup :: Var -> Context -> EnvM Type
-lookup var ctx = do
-  case Map.lookup var ctx of
-    Nothing -> throwError $ VarNotFoundInContext var ctx
-    Just t -> return t
 
 -- lookupType :: Var -> EnvM Type
 -- lookupType var = do
@@ -190,6 +193,12 @@ unifyOpposite t u = if t == dual u
 
 checkOverlappedContext :: Context -> Context -> EnvM ()
 checkOverlappedContext a b = do
-  let overlapped = Map.difference a b
+  let overlapped = Map.intersection a b
   unless (Map.null overlapped) $
     throwError $ OverlappedContext overlapped
+
+contextShouldBeTheSame :: Context -> Context -> EnvM ()
+contextShouldBeTheSame a b = do
+  let overlapped = Map.difference a b
+  unless (Map.null overlapped) $
+    throwError $ ContextShouldBeTheSame a b
