@@ -2,11 +2,9 @@ module Syntax.Parser
   ( parseProgram
   , parseConcreteProgram
   , ParseError(..)
-  , printParseError
   )
   where
 
-import Pretty
 import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
 import Syntax.Parser.Parser (programParser)
@@ -19,7 +17,6 @@ import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Loc
 import Language.Lexer.Applicative
-import System.Console.ANSI
 
 -- parseProcess :: ByteString -> Either ParseError Pi
 -- parseProcess src = fromConcrete <$> runExcept (evalStateT processParser initState)
@@ -34,20 +31,3 @@ parseConcreteProgram filePath src = runExcept (evalStateT programParser initStat
 
 parseProgram :: FilePath -> ByteString -> Either ParseError A.Program
 parseProgram filePath src = A.fromConcrete <$> parseConcreteProgram filePath src
-
-printParseError :: ParseError -> Maybe ByteString -> IO ()
-printParseError _ Nothing = error "panic: no source file to print parse errors"
-printParseError (Lexical pos)        (Just source) = do
-  setSGR [SetColor Foreground Vivid Red]
-  putStr "\n  Lexical parse error\n  "
-  setSGR [SetColor Foreground Dull Blue]
-  putStrLn $ displayPos pos
-  setSGR []
-  printSourceCode $ SourceCode source (Loc pos pos) 2
-printParseError (Syntatical loc _) (Just source) = do
-  setSGR [SetColor Foreground Vivid Red]
-  putStr "\n  Syntatical parse error\n  "
-  setSGR [SetColor Foreground Dull Blue]
-  putStrLn $ displayLoc loc
-  setSGR []
-  printSourceCode $ SourceCode source loc 2

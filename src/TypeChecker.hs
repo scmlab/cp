@@ -7,6 +7,7 @@ import Data.Loc (Loc)
 
 
 import qualified Data.List as List
+import Data.Text (Text)
 import Data.Map (Map)
 import Data.Maybe (mapMaybe)
 import qualified Data.Map as Map
@@ -27,7 +28,7 @@ data TypeError = TypeSigDuplicated (TermName Loc) (TermName Loc)
                | TermDefnDuplicated (TermName Loc) (TermName Loc)
                -- TypeSigNotFound (TermName Loc)
                -- | Conflict Variable Type Type
-               | Others String
+               | Others Text
     deriving (Show)
 
 type TCM = ExceptT TypeError (State TCState)

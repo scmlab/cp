@@ -6,9 +6,10 @@ import Syntax.Abstract
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Loc hiding (Pos)
+import Data.Monoid (mempty, (<>))
 import qualified Data.Text.IO as Text
 import Data.Text.Prettyprint.Doc hiding (line)
-import System.Console.ANSI
+import Data.Text.Prettyprint.Doc.Render.Terminal
 import System.IO
 
 
@@ -26,35 +27,12 @@ data SourceCode = SourceCode
                     Int         -- number of the neighboring lines to be rendered
 
 printSourceCode :: SourceCode -> IO ()
-printSourceCode = printAnnotation . layoutPretty defaultLayoutOptions . prettySourceCode
+printSourceCode = renderIO stdout . reAnnotateS toAnsiStyle . layoutPretty defaultLayoutOptions . prettySourceCode
 
-
-printAnnotation :: SimpleDocStream SourceCodeAnnotation -> IO ()
-printAnnotation x = case x of
-  SFail -> error "panic: failed to render annotated source code"
-  SEmpty -> do
-    hFlush stdout
-    return ()
-  SChar c xs -> do
-    putChar c
-    printAnnotation xs
-  SText _ t xs -> do
-    Text.putStr t
-    printAnnotation xs
-  SLine i xs -> do
-    putStr ('\n' : replicate i ' ')
-    printAnnotation xs
-  SAnnPush code xs -> do
-    setSGR (translateSourceCodeAnnotation code)
-    printAnnotation xs
-  SAnnPop xs -> do
-    setSGR []
-    printAnnotation xs
-
-translateSourceCodeAnnotation :: SourceCodeAnnotation -> [SGR]
-translateSourceCodeAnnotation Other             = [Reset]
-translateSourceCodeAnnotation HighlightedLineNo = [SetColor Foreground Dull Blue]
-translateSourceCodeAnnotation HighlightedArea   = [SetColor Foreground Vivid Red]
+toAnsiStyle :: SourceCodeAnnotation -> AnsiStyle
+toAnsiStyle Other = mempty
+toAnsiStyle HighlightedLineNo = colorDull Blue
+toAnsiStyle HighlightedArea = color Red
 
 -- instance Pretty SourceCode where
 prettySourceCode :: SourceCode -> Doc SourceCodeAnnotation

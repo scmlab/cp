@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings                  #-}
 module Main where
 
 import qualified Syntax.Abstract as A
@@ -6,11 +7,15 @@ import Syntax.Parser
 import TypeChecker
 import Pretty
 
+import Data.Monoid (mempty, (<>))
+
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import Data.Loc (Loc(..))
 import qualified Data.Loc as Loc
-import System.Console.ANSI
+import Data.Text (Text)
+import Data.Text.Prettyprint.Doc
+import Data.Text.Prettyprint.Doc.Render.Terminal
 
 -- import qualified Data.ByteString.Lazy.Char8 as BC
 
@@ -70,8 +75,8 @@ parseSource filePath source = do
 
 handleError :: M () -> M ()
 handleError program = program `catchError` \ err -> case err of
-  ParseError parseError -> gets stSource >>= liftIO . printParseError parseError
-  TypeError typeError -> printTypeError typeError
+  ParseError parseError -> prettyParseError parseError >>= liftIO . putDoc
+  TypeError typeError -> prettyTypeError typeError >>= liftIO . putDoc
   Panic msg -> liftIO (putStrLn (show msg))
 
 
@@ -96,37 +101,42 @@ main = void $ runM $ handleError $ do
 --------------------------------------------------------------------------------
 -- | Printing errors
 
-printTypeError :: TypeError -> M ()
-printTypeError (TypeSigDuplicated a b) = do
+prettyError :: Text -> Maybe Text -> [Loc] -> M (Doc AnsiStyle)
+prettyError header message locations = do
+  let text = vsep
+        [ annotate (color Red) $ pretty header
+        , case message of
+            Just m -> pretty m <> line
+            Nothing -> mempty
+        ]
   source <- getSourceOrThrow
+  let pieces = vsep $ map (\loc -> vsep
+        [ annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
+        , reAnnotate toAnsiStyle $ prettySourceCode $ SourceCode source loc 1
+        ]) locations
 
-  liftIO $ do
-    setSGR [SetColor Foreground Vivid Red]
-    putStr "\n  Type signature duplicated\n  "
-    setSGR [SetColor Foreground Dull Blue]
-    putStrLn $ Loc.displayLoc $ Loc.locOf a
-    setSGR []
-    printSourceCode $ SourceCode source (Loc.locOf a) 1
-    setSGR [SetColor Foreground Dull Blue]
-    putStr "\n  "
-    putStrLn $ Loc.displayLoc $ Loc.locOf b
-    setSGR []
-    printSourceCode $ SourceCode source (Loc.locOf b) 1
-    putStr "\n"
-printTypeError (TermDefnDuplicated a b) = do
-  source <- getSourceOrThrow
+  return $ vsep
+    [ softline'
+    , indent 2 text
+    , indent 4 pieces
+    , softline'
+    ]
 
-  liftIO $ do
-    setSGR [SetColor Foreground Vivid Red]
-    putStr "\n  Term definition duplicated\n  "
-    setSGR [SetColor Foreground Dull Blue]
-    putStrLn $ Loc.displayLoc $ Loc.locOf a
-    setSGR []
-    printSourceCode $ SourceCode source (Loc.locOf a) 1
-    setSGR [SetColor Foreground Dull Blue]
-    putStr "\n  "
-    putStrLn $ Loc.displayLoc $ Loc.locOf b
-    setSGR []
-    printSourceCode $ SourceCode source (Loc.locOf b) 1
-    putStr "\n"
-printTypeError (Others msg) = liftIO $ putStrLn $ msg
+prettyParseError :: ParseError -> M (Doc AnsiStyle)
+prettyParseError (Lexical pos) = do
+  prettyError "Lexical parse error" Nothing
+    [Loc.locOf pos]
+prettyParseError (Syntatical loc _) = do
+  prettyError "Lexical parse error" Nothing
+  -- (Just $ pack $ "got " ++ show token)
+    [loc]
+
+prettyTypeError :: TypeError -> M (Doc AnsiStyle)
+prettyTypeError (TypeSigDuplicated a b) =
+  prettyError "Type signature duplicated" Nothing
+    [Loc.locOf a, Loc.locOf b]
+prettyTypeError (TermDefnDuplicated a b) =
+  prettyError "Term definition duplicated" Nothing
+    [Loc.locOf a, Loc.locOf b]
+prettyTypeError (Others msg) =
+  prettyError "Other unformatted type errors" (Just msg) []
