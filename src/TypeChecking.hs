@@ -1,8 +1,8 @@
 module TypeChecking where
 
 
+import TypeChecking.Environment
 import Syntax.Concrete
-import qualified Syntax.TypeChecking as TC
 import Data.Loc (Loc)
 
 
@@ -21,11 +21,10 @@ import Control.Monad.Except
 data TCState = TCState
   { stTypeSigs  :: Map (TermName Loc) (Type Loc)
   , stTermDefns :: Map (TermName Loc) (Process Loc)
-  , stEnv       :: Map (TermName Loc) TC.Type
   } deriving (Show)
 
 initialTCState :: TCState
-initialTCState = TCState Map.empty Map.empty Map.empty
+initialTCState = TCState Map.empty Map.empty
 
 data TypeError = TypeSigDuplicated (TermName Loc) (TermName Loc)
                | TermDefnDuplicated (TermName Loc) (TermName Loc)
@@ -48,13 +47,13 @@ putTermDefns (Program declarations _) = modify $ \ st -> st { stTermDefns = Map.
     toPair (TermDefn n t _) = Just (n, t)
     toPair _                = Nothing
 
-addToEnv :: TermName Loc -> TC.Type -> TCM ()
-addToEnv var t = modify $ \ st -> st { stEnv = Map.insert var t (stEnv st) }
+-- addToEnv :: TermName Loc -> TC.Type -> TCM ()
+-- addToEnv var t = modify $ \ st -> st { stEnv = Map.insert var t (stEnv st) }
 
 --------------------------------------------------------------------------------
 -- | All kinds of checkings
 
--- checkAll :: Program Loc -> TCM ()
+-- checkAll :: Program Loc -> TCM [(Either InferError a, EnvState)]
 checkAll program = do
   -- checking the definitions
   checkDuplications program
@@ -63,11 +62,14 @@ checkAll program = do
   putTypeSigs program
   putTermDefns program
   --
-  -- termDefns <- Map.toList <$> gets stTermDefns
-  -- forM termDefns $ \ (var, term) -> do
-  --   infer term
+  termDefns <- Map.toList <$> gets stTermDefns
+  forM termDefns $ \ (var, term) -> do
+    return $ runEnvM $ infer term
 
   -- gets stEnv
+
+runEnvM :: EnvM a -> (Either InferError a, EnvState)
+runEnvM program = runState (runExceptT program) initialEnvState
 
 
 -- there should be only at most one type signature or term definition
@@ -132,16 +134,16 @@ freeVariable (EmptyInput x p _) = Set.insert x $ freeVariable p
 freeVariable (EmptyChoice x _) = Set.singleton x
 
 
-
-infer :: Process Loc -> TCM TC.Type
-infer (EmptyOutput var _) = return TC.One
-    -- addToEnv var TC.One
-infer (Output x y p q _) = do
-  t <- infer p
-  u <- infer q
-  return (TC.Times t u)
-  -- Map.insert var TC.One Map.empty
-infer _ = undefined
+--
+-- infer :: Process Loc -> TCM TC.Type
+-- infer (EmptyOutput var _) = return TC.One
+--     -- addToEnv var TC.One
+-- infer (Output x y p q _) = do
+--   t <- infer p
+--   u <- infer q
+--   return (TC.Times t u)
+--   -- Map.insert var TC.One Map.empty
+-- infer _ = undefined
 
 -- infer :: Environment -> Process -> Either TypeError Environment
 -- infer env (EmptyOutput var) = addToEnv env var One

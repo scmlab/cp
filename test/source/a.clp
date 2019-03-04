@@ -1,2 +1,2 @@
-a : 1
-a = \ x . (x[] . end | x() . y[] . 0)
+a : 1 * 1 * 1
+a = x[putName] . ( putName[].end | x[putName] . (putName[].end | x(getReceipt) . x().getReceipt[].end))

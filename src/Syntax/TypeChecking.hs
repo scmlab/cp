@@ -13,7 +13,7 @@ import Data.Function (on)
 
 
 data Index = Pos Int | Neg Int
-    deriving (Show)
+    deriving (Show, Ord)
 
 instance C.HasDual Index where
   dual (Pos i) = Neg i
@@ -37,7 +37,7 @@ data Type
     | Bot
     | Zero
     | Top
-    deriving (Show)
+    deriving (Show, Ord)
 
 instance Eq Type where
   Var    i   == Var    j      = i == j

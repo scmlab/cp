@@ -30,4 +30,4 @@ parseConcreteProgram filePath src = runExcept (evalStateT programParser initStat
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
 parseProgram :: FilePath -> ByteString -> Either ParseError A.Program
-parseProgram filePath src = A.fromConcrete <$> parseConcreteProgram filePath src
+parseProgram filePath src = C.toAbstract <$> parseConcreteProgram filePath src
