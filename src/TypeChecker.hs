@@ -26,13 +26,13 @@ initialTCState = TCState Map.empty Map.empty
 
 data TypeError = TypeSigDuplicated (TermName Loc) (TermName Loc)
                | TermDefnDuplicated (TermName Loc) (TermName Loc)
-               -- TypeSigNotFound (TermName Loc)
+               | TypeSigNotFound (TermName Loc)
+               | TermDefnNotFound (TermName Loc)
                -- | Conflict Variable Type Type
                | Others Text
     deriving (Show)
 
 type TCM = ExceptT TypeError (State TCState)
-
 
 -- there should be only at most one type signature or term definition
 checkDuplications :: Program Loc -> TCM ()
@@ -48,12 +48,6 @@ checkDuplications (Program declarations _) = do
         Just (a, b) -> throwError $ TermDefnDuplicated a b
 
     where
-        typeSigName (TypeSig n _ _) = Just n
-        typeSigName _             = Nothing
-
-        termDefnName (TermDefn n _ _) = Just n
-        termDefnName _              = Nothing
-
         getDuplicatedPair :: [TermName Loc] -> Maybe (TermName Loc, TermName Loc)
         getDuplicatedPair names =
             let dup = filter ((> 1) . length) $ List.group $ List.sort names
@@ -61,8 +55,22 @@ checkDuplications (Program declarations _) = do
 
 -- check if a type signature is paired with a term definition,
 -- a temporary measure before the type inference algorithm is implelemented
--- checkTypeTermPairing :: Program -> TCM ()
--- checkTypeTermPairing =
+checkTypeTermPairing :: Program Loc -> TCM ()
+checkTypeTermPairing (Program declarations _) = do
+  let typeSigNames = mapMaybe typeSigName declarations
+  let termDefnNames = mapMaybe termDefnName declarations
+  let lonelyTypeSigNames = (List.\\) typeSigNames termDefnNames
+  let lonelyTermDefnNames = (List.\\) termDefnNames typeSigNames
+
+  unless (null lonelyTypeSigNames) $
+    throwError $ TermDefnNotFound (head lonelyTypeSigNames)
+
+  unless (null lonelyTermDefnNames) $
+    throwError $ TypeSigNotFound (head lonelyTermDefnNames)
+
+  return ()
+
+
 
 -- infer :: Environment -> Process -> Either TypeError Environment
 -- infer env (EmptyOutput var) = addToEnv env var One

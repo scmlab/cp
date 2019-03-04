@@ -50,6 +50,14 @@ data Type ann = Dual    (Type ann)                  ann
               | Top                                 ann
               deriving (Show, Functor)
 
+typeSigName :: Declaration ann -> Maybe (TermName ann)
+typeSigName (TypeSig n _ _) = Just n
+typeSigName _             = Nothing
+
+termDefnName :: Declaration ann -> Maybe (TermName ann)
+termDefnName (TermDefn n _ _) = Just n
+termDefnName _              = Nothing
+
 --------------------------------------------------------------------------------
 -- | Instances
 

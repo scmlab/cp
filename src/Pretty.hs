@@ -1,13 +1,10 @@
 module Pretty where
 
 
-import Syntax.Abstract
-
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Loc hiding (Pos)
 import Data.Monoid (mempty, (<>))
-import qualified Data.Text.IO as Text
 import Data.Text.Prettyprint.Doc hiding (line)
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import System.IO

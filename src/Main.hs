@@ -11,7 +11,7 @@ import Data.Monoid (mempty, (<>))
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
-import Data.Loc (Loc(..))
+import Data.Loc (Loc(..), locOf)
 import qualified Data.Loc as Loc
 import Data.Text (Text)
 import Data.Text.Prettyprint.Doc
@@ -94,6 +94,7 @@ main = void $ runM $ handleError $ do
 
     tc <- runTCM $ do
       checkDuplications program
+      checkTypeTermPairing program
     liftIO $ print tc
     liftIO $ print program
     return ()
@@ -125,7 +126,7 @@ prettyError header message locations = do
 prettyParseError :: ParseError -> M (Doc AnsiStyle)
 prettyParseError (Lexical pos) = do
   prettyError "Lexical parse error" Nothing
-    [Loc.locOf pos]
+    [locOf pos]
 prettyParseError (Syntatical loc _) = do
   prettyError "Lexical parse error" Nothing
   -- (Just $ pack $ "got " ++ show token)
@@ -133,10 +134,16 @@ prettyParseError (Syntatical loc _) = do
 
 prettyTypeError :: TypeError -> M (Doc AnsiStyle)
 prettyTypeError (TypeSigDuplicated a b) =
-  prettyError "Type signature duplicated" Nothing
-    [Loc.locOf a, Loc.locOf b]
+  prettyError "Duplicating type signature" Nothing
+    [locOf a, locOf b]
 prettyTypeError (TermDefnDuplicated a b) =
-  prettyError "Term definition duplicated" Nothing
-    [Loc.locOf a, Loc.locOf b]
+  prettyError "Duplicating term definition" Nothing
+    [locOf a, locOf b]
+prettyTypeError (TypeSigNotFound a) =
+  prettyError "Missing type signature" (Just "the following term has no type signature")
+    [locOf a]
+prettyTypeError (TermDefnNotFound a) =
+  prettyError "Missing term definition" (Just "the following type has no term definition")
+    [locOf a]
 prettyTypeError (Others msg) =
   prettyError "Other unformatted type errors" (Just msg) []
