@@ -9,10 +9,10 @@ import Data.Loc (Loc)
 import qualified Data.List as List
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe)
+import Data.Text (Text)
 
 import Control.Monad
 import Control.Monad.State

@@ -1,6 +1,10 @@
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE DeriveFunctor, FlexibleInstances #-}
 
 module Syntax.Concrete where
+
+import qualified Syntax.Abstract as A
 
 import Data.Text (Text)
 import Data.Loc
@@ -50,6 +54,21 @@ data Type ann = Dual    (Type ann)                  ann
               | Top                                 ann
               deriving (Show, Functor)
 
+dual :: Type ann -> Type ann
+dual (Dual a _)       = a
+dual (Times a b l)      = Par (dual a) (dual b) l
+dual (Par a b l)      = Times (dual a) (dual b) l
+dual (Plus a b l)     = With (dual a) (dual b) l
+dual (With a b l)     = Plus (dual a) (dual b) l
+dual (Acc a l)        = Req (dual a) l
+dual (Req a l)        = Acc (dual a) l
+dual (Exists x a l)   = Forall x (dual a) l
+dual (Forall x a l)   = Exists x (dual a) l
+dual (One l)          = Bot l
+dual (Bot l)          = One l
+dual (Zero l)         = Top l
+dual (Top l)          = Zero l
+
 typeSigName :: Declaration ann -> Maybe (TermName ann)
 typeSigName (TypeSig n _ _) = Just n
 typeSigName _             = Nothing
@@ -57,6 +76,9 @@ typeSigName _             = Nothing
 termDefnName :: Declaration ann -> Maybe (TermName ann)
 termDefnName (TermDefn n _ _) = Just n
 termDefnName _              = Nothing
+
+instance Eq (Type Loc) where
+  (==) a b = toAbstract (dual a) == toAbstract (dual b)
 
 --------------------------------------------------------------------------------
 -- | Instances
@@ -111,3 +133,119 @@ instance Located (Type Loc) where
   locOf (Bot loc) = loc
   locOf (Zero loc) = loc
   locOf (Top loc) = loc
+
+--------------------------------------------------------------------------------
+-- | Converting to Abstract Syntax Tree
+
+class ToAbstract a b | a -> b where
+    toAbstract :: a -> b
+
+instance ToAbstract (Program ann) A.Program where
+    toAbstract (Program  declarations _) =
+        A.Program (map toAbstract declarations)
+
+instance ToAbstract (Declaration ann) A.Declaration where
+    toAbstract (TypeSig name typ _) =
+        A.TypeSig (toAbstract name) (toAbstract typ)
+    toAbstract (TermDefn name process _) =
+        A.TermDefn (toAbstract name) (toAbstract process)
+
+instance ToAbstract (TypeName ann) A.TypeName where
+    toAbstract (TypeName name    _) = name
+
+instance ToAbstract (TermName ann) A.TermName where
+    toAbstract (TermName name    _) = name
+
+instance ToAbstract (Process ann) A.Process where
+    toAbstract (Link nameA nameB _) =
+        A.Link
+            (toAbstract nameA)
+            (toAbstract nameB)
+    toAbstract (Compose name procA procB _) =
+        A.Compose
+            (toAbstract name)
+            (toAbstract procA)
+            (toAbstract procB)
+    toAbstract (Output nameA nameB procA procB _) =
+        A.Output
+            (toAbstract nameA)
+            (toAbstract nameB)
+            (toAbstract procA)
+            (toAbstract procB)
+    toAbstract (Input nameA nameB proc _) =
+        A.Input
+            (toAbstract nameA)
+            (toAbstract nameB)
+            (toAbstract proc)
+    toAbstract (SelectL name proc _) =
+        A.SelectL
+            (toAbstract name)
+            (toAbstract proc)
+    toAbstract (SelectR name proc _) =
+        A.SelectR
+            (toAbstract name)
+            (toAbstract proc)
+    toAbstract (Choice name procA procB _) =
+        A.Choice
+            (toAbstract name)
+            (toAbstract procA)
+            (toAbstract procB)
+    toAbstract (Accept nameA nameB proc _) =
+        A.Accept
+            (toAbstract nameA)
+            (toAbstract nameB)
+            (toAbstract proc)
+    toAbstract (Request nameA nameB proc _) =
+        A.Request
+            (toAbstract nameA)
+            (toAbstract nameB)
+            (toAbstract proc)
+    toAbstract (EmptyOutput name _) =
+        A.EmptyOutput
+            (toAbstract name)
+    toAbstract (EmptyInput name proc _) =
+        A.EmptyInput
+            (toAbstract name)
+            (toAbstract proc)
+    toAbstract (EmptyChoice name _) =
+        A.EmptyChoice
+            (toAbstract name)
+
+instance ToAbstract (Type ann) A.Type where
+    toAbstract (Dual t _) =
+        A.Dual
+            (toAbstract t)
+    toAbstract (Times t u _) =
+        A.Times
+            (toAbstract t)
+            (toAbstract u)
+    toAbstract (Par t u _) =
+        A.Par
+            (toAbstract t)
+            (toAbstract u)
+    toAbstract (Plus t u _) =
+        A.Plus
+            (toAbstract t)
+            (toAbstract u)
+    toAbstract (With t u _) =
+        A.With
+            (toAbstract t)
+            (toAbstract u)
+    toAbstract (Acc t _) =
+        A.Acc
+            (toAbstract t)
+    toAbstract (Req t _) =
+        A.Req
+            (toAbstract t)
+    toAbstract (Exists x t _) =
+        A.Exists
+            (toAbstract x)
+            (toAbstract t)
+    toAbstract (Forall x t _) =
+        A.Forall
+            (toAbstract x)
+            (toAbstract t)
+    toAbstract (One _) = A.One
+    toAbstract (Bot _) = A.Bot
+    toAbstract (Zero _) = A.Zero
+    toAbstract (Top _) = A.Top
