@@ -31,8 +31,8 @@ data Type
     | With Type Type
     | Acc Type
     | Req Type
-    | Exists Int Type
-    | Forall Int Type
+    | Exists (C.TypeName Loc) Type
+    | Forall (C.TypeName Loc) Type
     | One
     | Bot
     | Zero

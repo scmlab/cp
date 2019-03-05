@@ -11,7 +11,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (mapMaybe)
+import Data.Maybe (mapMaybe, catMaybes)
 import Data.Text (Text)
 
 import Control.Monad
@@ -31,6 +31,7 @@ data TypeError = TypeSigDuplicated (TermName Loc) (TermName Loc)
                | TypeSigNotFound (TermName Loc)
                | TermDefnNotFound (TermName Loc)
                | InferError InferError
+               -- | ExpectButGot (Type Loc) (Type Loc) Term
                | Others Text
     deriving (Show)
 
@@ -52,27 +53,39 @@ putTermDefns (Program declarations _) = modify $ \ st -> st { stTermDefns = Map.
     toPair (TermDefn n t _) = Just (n, t)
     toPair _                = Nothing
 
+
+
 --------------------------------------------------------------------------------
--- | All kinds of checkings
+-- |
 
 -- checkAll :: Program Loc -> TCM [(Either InferError a, EnvState)]
 checkAll program = do
   -- checking the definitions
   checkDuplications program
-  checkTypeTermPairing program
+  -- checkTypeTermPairing program
   -- store the definitions
   putTypeSigs program
   putTermDefns program
+
+
+  -- -- get TypeSig - TermDefn pairs
+  -- pairs <- do
+  --   typeSigs <- gets stTypeSigs
+  --   termDefns <- gets stTermDefns
+  --   return $ catMaybes $ map (\(k, v) -> fmap (\t -> (v, t)) $ Map.lookup k termDefns) $ Map.toList typeSigs
   --
+  -- -- type check the pairs
+  -- forM pairs $ \ (typ, term) -> do
+  --   return ()
+
+
+  -- inference
   termDefns <- Map.toList <$> gets stTermDefns
-  forM_ termDefns $ \ (var, term) -> do
+  forM termDefns $ \ (var, term) -> do
     let (result, _) = runInferM $ infer term
     case result of
       Left e -> throwError $ InferError e
-      Right _ -> return ()
-
-  -- gets stEnv
-
+      Right t -> return t
 
 -- there should be only at most one type signature or term definition
 checkDuplications :: Program Loc -> TCM ()
@@ -112,7 +125,7 @@ checkTypeTermPairing (Program declarations _) = do
 
 freeVariable :: Process Loc -> Set (TermName Loc)
 freeVariable (Link x y _) = Set.fromList [x, y]
-freeVariable (Compose x t p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)
+freeVariable (Compose x _ p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)
 freeVariable (Output x y p q _) = Set.insert x $ Set.delete y $ Set.union (freeVariable p) (freeVariable q)
 freeVariable (Input x y p _) = Set.insert x $ Set.delete y (freeVariable p)
 freeVariable (SelectL x p _) = Set.insert x $ freeVariable p
@@ -120,6 +133,18 @@ freeVariable (SelectR x p _) = Set.insert x $ freeVariable p
 freeVariable (Choice x p q _) = Set.insert x $ Set.union (freeVariable p) (freeVariable q)
 freeVariable (Accept x y p _) = Set.insert x $ Set.delete y (freeVariable p)
 freeVariable (Request x y p _) = Set.insert x $ Set.delete y (freeVariable p)
+freeVariable (OutputT x _ p _) = Set.insert x (freeVariable p)
+freeVariable (InputT x _ p _) = Set.insert x (freeVariable p)
 freeVariable (EmptyOutput x _) = Set.singleton x
 freeVariable (EmptyInput x p _) = Set.insert x $ freeVariable p
 freeVariable (EmptyChoice x _) = Set.singleton x
+
+-- --------------------------------------------------------------------------------
+-- -- | Type checking
+--
+-- typeCheck :: Term -> Type Loc -> TCM ()
+-- typeCheck (Link ) t =
+--
+-- -- typeCheck (Dual t l) term = throwError $ ExpectButGot t (Dual t l) term
+-- -- typeCheck (Times t l) (Output ) = throwError $ ExpectButGot t (Dual t l) term
+-- typeCheck _ _ = undefined

@@ -54,7 +54,7 @@ data Type ann = Dual    (Type ann)                  ann
               | Bot                                 ann
               | Zero                                ann
               | Top                                 ann
-              deriving (Show, Functor)
+              deriving (Show, Functor, Ord)
 
 instance HasDual (Type ann) where
   dual (Dual a _)       = a
@@ -79,17 +79,23 @@ termDefnName :: Declaration ann -> Maybe (TermName ann)
 termDefnName (TermDefn n _ _) = Just n
 termDefnName _              = Nothing
 
-instance Eq (Type Loc) where
+instance Eq (Type ann) where
   (==) a b = toAbstract (dual a) == toAbstract (dual b)
 
 --------------------------------------------------------------------------------
 -- | Instances
 
-instance Eq (TermName Loc) where
+instance Eq (TermName ann) where
   (==) (TermName a _) (TermName b _) = a == b
 
-instance Ord (TermName Loc) where
+instance Ord (TermName ann) where
   compare (TermName a _) (TermName b _) = compare a b
+
+instance Eq (TypeName ann) where
+  (==) (TypeName a _) (TypeName b _) = a == b
+
+instance Ord (TypeName ann) where
+  compare (TypeName a _) (TypeName b _) = compare a b
 
 --------------------------------------------------------------------------------
 -- | Instance of Located

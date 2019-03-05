@@ -11,6 +11,7 @@ import Control.Monad.Except
 
 import Data.Loc (Loc)
 import Data.Map (Map)
+import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Map.Merge.Lazy as Map
 import Data.Set (Set)
@@ -27,9 +28,10 @@ type Term = C.Process Loc
 type Context = Map Var Type
 
 data InferState = InferState
-  { stContext   :: Context
+  {
+    -- stContext   :: Context
   -- type variables
-  , stTypeSet   :: Set Type         -- bunch of types
+    stTypeSet   :: Set Type         -- bunch of types
   , stTypeCount :: Int              -- for type variables
   -- context variables
   -- , stCtxSet    :: Set Context      -- bunch of contexts
@@ -37,7 +39,7 @@ data InferState = InferState
   } deriving (Show)
 
 initialInferState :: InferState
-initialInferState = InferState Map.empty Set.empty 0  -- Set.empty 0
+initialInferState = InferState Set.empty 0  -- Set.empty 0
 
 --------------------------------------------------------------------------------
 -- | Error
@@ -48,6 +50,7 @@ data InferError
   | VarNotInContext Var Context
   | OverlappedContext Context
   | ContextShouldBeTheSame Context Context
+  | ContextShouldAllBeRequests Context
   | CannotUnify Type Type
 --   | VarNotFresh Var (Maybe Term)
   deriving (Show)
@@ -57,8 +60,8 @@ data InferError
 
 type InferM = ExceptT InferError (State InferState)
 
-putContext :: Context -> InferM ()
-putContext x = modify $ \ st -> st { stContext = x }
+-- putContext :: Context -> InferM ()
+-- putContext x = modify $ \ st -> st { stContext = x }
 
 putTypeSet :: Set Type -> InferM ()
 putTypeSet x = modify $ \ st -> st { stTypeSet = x }
@@ -89,42 +92,53 @@ infer (C.Link x y _) = do
     , (y, dual t)
     ]
 infer (C.Compose x t p q _) = do
-  (a, ctxP) <- infer p >>= splitCtx x
-  (b, ctxQ) <- infer q >>= splitCtx x
+  (a, ctxP) <- infer p >>= split x
+  (b, ctxQ) <- infer q >>= split x
   checkOverlappedContext ctxP ctxQ
   unifyOpposite a b
   return $ mergeContext ctxP ctxQ
 infer (C.Output x y p q _) = do
-  (a, ctxP) <- infer p >>= splitCtx y
-  (b, ctxQ) <- infer q >>= splitCtx x
+  (a, ctxP) <- infer p >>= split y
+  (b, ctxQ) <- infer q >>= split x
   return
     $ Map.insert x (Times a b)
     $ mergeContext ctxP ctxQ
-
 infer (C.Input x y p _) = do
-  (b, ctx) <- infer p >>= splitCtx x
-  (a, ctx') <- splitCtx y ctx
+  (b, ctx) <- infer p >>= split x
+  (a, ctx') <- split y ctx
   return $ Map.insert x (Par a b)
     $ ctx'
 
 infer (C.SelectL x p _) = do
-  (a, ctx) <- infer p >>= splitCtx x
+  (a, ctx) <- infer p >>= split x
   b <- assumeType
   return $ Map.insert x (Plus a b) ctx
 
 infer (C.SelectR x p _) = do
-  (b, ctx) <- infer p >>= splitCtx x
+  (b, ctx) <- infer p >>= split x
   a <- assumeType
   return $ Map.insert x (Plus a b) ctx
 
 infer (C.Choice x p q _) = do
-  (a, ctxP) <- infer p >>= splitCtx x
-  (b, ctxQ) <- infer q >>= splitCtx x
+  (a, ctxP) <- infer p >>= split x
+  (b, ctxQ) <- infer q >>= split x
   contextShouldBeTheSame ctxP ctxQ
   return $ Map.insert x (With a b) ctxP
 
-infer (C.Accept x y p _) = undefined
-infer (C.Request x y p _) = undefined
+infer (C.Accept x y p _) = do
+  (a, ctx) <- infer p >>= split x
+  contextShouldAllBeRequests ctx
+  return $ Map.insert x (Acc a) ctx
+
+infer (C.Request x y p _) = do
+  (a, ctx) <- infer p >>= split x
+  return $ Map.insert x (Req a) ctx
+
+infer (C.OutputT x t p _) = undefined
+infer (C.InputT x t p _) = do
+  (a, ctx) <- infer p >>= split x
+  return $ Map.insert x (Forall t a) ctx 
+
 infer (C.EmptyOutput x _) = do
   return $ Map.fromList
     [ (x, One)
@@ -138,8 +152,8 @@ infer (C.EmptyChoice x _) = undefined
   -- b <- infer q
 
 
-splitCtx :: Var -> Context -> InferM (Type, Context)
-splitCtx var ctx = do
+split :: Var -> Context -> InferM (Type, Context)
+split var ctx = do
   case Map.lookup var ctx of
     Nothing -> throwError $ VarNotInContext var ctx
     Just t -> return (t, Map.delete var ctx)
@@ -169,8 +183,8 @@ mergeContext = Map.merge
 -- substitute type variables with concrete types or other type variables
 substituteType :: Index -> Type -> InferM ()
 substituteType i t = do
-  context <- gets stContext
-  putContext $ fmap substType context
+  -- context <- gets stContext
+  -- putContext $ fmap substType context
   types <- gets stTypeSet
   putTypeSet $ Set.fromList $ map substType $ Set.toList types
   -- ctxs <- gets stCtxSet
@@ -212,7 +226,11 @@ contextShouldBeTheSame a b = do
   unless (Map.null overlapped) $
     throwError $ ContextShouldBeTheSame a b
 
--- contextShouldBeEmpty :: InferM ()
--- contextShouldBeEmpty = do
---   ctx <- gets stContext
---   unless (Set.null ctx) $ throwError ContextShouldBeEmpty
+contextShouldAllBeRequests :: Context -> InferM ()
+contextShouldAllBeRequests ctx = do
+  unless (List.all beRequest $ Map.elems ctx) $
+    throwError $ ContextShouldAllBeRequests ctx
+  where
+    beRequest :: Type -> Bool
+    beRequest (Req _) = True
+    beRequest _ = False
