@@ -26,7 +26,7 @@ data Declaration  ann = TypeSig   (TermName ann)  (Type ann)                ann
                       deriving (Show, Functor)
 
 data Process  ann = Link      (TermName ann) (TermName ann)                 ann
-                  | Compose   (TermName ann) (Process  ann) (Process ann)   ann
+                  | Compose   (TermName ann) (Type     ann) (Process  ann) (Process ann)   ann
                   | Output    (TermName ann) (TermName ann) (Process ann) (Process ann) ann
                   | Input     (TermName ann) (TermName ann) (Process ann)   ann
                   | SelectL   (TermName ann) (Process  ann)                 ann
@@ -34,6 +34,8 @@ data Process  ann = Link      (TermName ann) (TermName ann)                 ann
                   | Choice    (TermName ann) (Process  ann) (Process ann)   ann
                   | Accept    (TermName ann) (TermName ann) (Process ann)   ann
                   | Request   (TermName ann) (TermName ann) (Process ann)   ann
+                  | OutputT   (TermName ann) (TypeName ann) (Process ann)   ann
+                  | InputT    (TermName ann) (TypeName ann) (Process ann)   ann
                   | EmptyOutput              (TermName ann)                 ann
                   | EmptyInput               (TermName ann) (Process ann)   ann
                   | EmptyChoice              (TermName ann)                 ann
@@ -107,7 +109,7 @@ instance Located (Declaration Loc) where
 
 instance Located (Process Loc) where
   locOf (Link _ _ loc) = loc
-  locOf (Compose _ _ _ loc) = loc
+  locOf (Compose _ _ _ _ loc) = loc
   locOf (Output _ _ _ _ loc) = loc
   locOf (Input _ _ _ loc) = loc
   locOf (SelectL _ _ loc) = loc
@@ -115,6 +117,8 @@ instance Located (Process Loc) where
   locOf (Choice _ _ _ loc) = loc
   locOf (Accept _ _ _ loc) = loc
   locOf (Request _ _ _ loc) = loc
+  locOf (OutputT _ _ _ loc) = loc
+  locOf (InputT _ _ _ loc) = loc
   locOf (EmptyOutput _ loc) = loc
   locOf (EmptyInput _ _ loc) = loc
   locOf (EmptyChoice _ loc) = loc
@@ -162,9 +166,10 @@ instance ToAbstract (Process ann) A.Process where
         A.Link
             (toAbstract nameA)
             (toAbstract nameB)
-    toAbstract (Compose name procA procB _) =
+    toAbstract (Compose name typ procA procB _) =
         A.Compose
             (toAbstract name)
+            (toAbstract typ)
             (toAbstract procA)
             (toAbstract procB)
     toAbstract (Output nameA nameB procA procB _) =
@@ -200,6 +205,16 @@ instance ToAbstract (Process ann) A.Process where
         A.Request
             (toAbstract nameA)
             (toAbstract nameB)
+            (toAbstract proc)
+    toAbstract (OutputT name typ proc _) =
+        A.OutputT
+            (toAbstract name)
+            (toAbstract typ)
+            (toAbstract proc)
+    toAbstract (InputT name typ proc _) =
+        A.InputT
+            (toAbstract name)
+            (toAbstract typ)
             (toAbstract proc)
     toAbstract (EmptyOutput name _) =
         A.EmptyOutput

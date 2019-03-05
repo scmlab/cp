@@ -112,7 +112,7 @@ checkTypeTermPairing (Program declarations _) = do
 
 freeVariable :: Process Loc -> Set (TermName Loc)
 freeVariable (Link x y _) = Set.fromList [x, y]
-freeVariable (Compose x p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)
+freeVariable (Compose x t p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)
 freeVariable (Output x y p q _) = Set.insert x $ Set.delete y $ Set.union (freeVariable p) (freeVariable q)
 freeVariable (Input x y p _) = Set.insert x $ Set.delete y (freeVariable p)
 freeVariable (SelectL x p _) = Set.insert x $ freeVariable p

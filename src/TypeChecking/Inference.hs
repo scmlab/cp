@@ -88,7 +88,7 @@ infer (C.Link x y _) = do
     [ (x,      t)
     , (y, dual t)
     ]
-infer (C.Compose x p q _) = do
+infer (C.Compose x t p q _) = do
   (a, ctxP) <- infer p >>= splitCtx x
   (b, ctxQ) <- infer q >>= splitCtx x
   checkOverlappedContext ctxP ctxQ

@@ -74,7 +74,7 @@ Declaration :: {Declaration Loc}
 
 Process :: {Process Loc}
     : TermName '<->' TermName                   {% locate $ Link $1 $3  }
-    | 'nu' TermName '.' '(' Process '|' Process ')'             {% locate $ Compose $2 $5 $7 }
+    | 'nu' TermName ':' Type '.' '(' Process '|' Process ')'    {% locate $ Compose $2 $4 $7 $9 }
     | TermName '[' TermName ']' '.' '(' Process '|' Process ')' {% locate $ Output $1 $3 $7 $9 }
     | TermName '(' TermName ')' '.' Process                     {% locate $ Input $1 $3 $6 }
     | TermName '[inl]' '.' Process              {% locate $ SelectL $1 $4 }
@@ -82,6 +82,8 @@ Process :: {Process Loc}
     | TermName '.' 'case' '(' Process ',' Process ')'           {% locate $ Choice $1 $5 $7 }
     | '!' TermName '(' TermName ')' '.' Process {% locate $ Accept $2 $4 $7 }
     | '?' TermName '[' TermName ']' '.' Process {% locate $ Request $2 $4 $7 }
+    | TermName '[' TypeName ']' '.' Process     {% locate $ OutputT $1 $3 $6 }
+    | TermName '(' TypeName ')' '.' Process     {% locate $ InputT $1 $3 $6 }
     | TermName '[]' '.' 'end'                   {% locate $ EmptyOutput $1 }
     | TermName '()' '.' Process                 {% locate $ EmptyInput $1 $4 }
     | TermName '.' 'case()'                     {% locate $ EmptyChoice $1 }

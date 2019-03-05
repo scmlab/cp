@@ -18,8 +18,8 @@ data Declaration
 data Process
     -- link: x ↔ y
     = Link TermName TermName
-    -- parallelcomposition: νx.(P|Q)
-    | Compose TermName Process Process
+    -- parallelcomposition: νx:A.(P|Q)
+    | Compose TermName Type Process Process
     -- output: x[y].(P|Q)
     | Output TermName TermName Process Process
     -- input: x(y).P
@@ -34,6 +34,10 @@ data Process
     | Accept TermName TermName Process
     -- client request: ?x[y].P
     | Request TermName TermName Process
+    -- output type: x[Y].P
+    | OutputT TermName TypeName Process
+    -- input type: x(Y).P
+    | InputT TermName TypeName Process
     -- empty output: x[].0
     | EmptyOutput TermName
     -- empty input: x().P
