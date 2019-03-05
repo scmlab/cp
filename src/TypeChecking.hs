@@ -1,7 +1,7 @@
 module TypeChecking where
 
 
-import TypeChecking.Environment
+import TypeChecking.Inference
 import Syntax.Concrete
 import Data.Loc (Loc)
 
@@ -30,10 +30,15 @@ data TypeError = TypeSigDuplicated (TermName Loc) (TermName Loc)
                | TermDefnDuplicated (TermName Loc) (TermName Loc)
                | TypeSigNotFound (TermName Loc)
                | TermDefnNotFound (TermName Loc)
+               | InferError InferError
                | Others Text
     deriving (Show)
 
 type TCM = ExceptT TypeError (State TCState)
+
+runInferM :: InferM a -> (Either InferError a, InferState)
+runInferM program = runState (runExceptT program) initialInferState
+
 
 putTypeSigs :: Program Loc -> TCM ()
 putTypeSigs (Program declarations _) = modify $ \ st -> st { stTypeSigs = Map.fromList (mapMaybe toPair declarations) }
@@ -46,9 +51,6 @@ putTermDefns (Program declarations _) = modify $ \ st -> st { stTermDefns = Map.
   where
     toPair (TermDefn n t _) = Just (n, t)
     toPair _                = Nothing
-
--- addToEnv :: TermName Loc -> TC.Type -> TCM ()
--- addToEnv var t = modify $ \ st -> st { stEnv = Map.insert var t (stEnv st) }
 
 --------------------------------------------------------------------------------
 -- | All kinds of checkings
@@ -63,13 +65,13 @@ checkAll program = do
   putTermDefns program
   --
   termDefns <- Map.toList <$> gets stTermDefns
-  forM termDefns $ \ (var, term) -> do
-    return $ runEnvM $ infer term
+  forM_ termDefns $ \ (var, term) -> do
+    let (result, _) = runInferM $ infer term
+    case result of
+      Left e -> throwError $ InferError e
+      Right _ -> return ()
 
   -- gets stEnv
-
-runEnvM :: EnvM a -> (Either InferError a, EnvState)
-runEnvM program = runState (runExceptT program) initialEnvState
 
 
 -- there should be only at most one type signature or term definition
@@ -107,18 +109,7 @@ checkTypeTermPairing (Program declarations _) = do
     throwError $ TypeSigNotFound (head lonelyTermDefnNames)
 
   return ()
--- Link      (TermName ann) (TermName ann)                 ann
---                   | Compose   (TermName ann) (Process  ann) (Process ann)   ann
---                   | Output    (TermName ann) (TermName ann) (Process ann) (Process ann) ann
---                   | Input     (TermName ann) (TermName ann) (Process ann)   ann
---                   | SelectL   (TermName ann) (Process  ann)                 ann
---                   | SelectR   (TermName ann) (Process  ann)                 ann
---                   | Choice    (TermName ann) (Process  ann) (Process ann)   ann
---                   | Accept    (TermName ann) (TermName ann) (Process ann)   ann
---                   | Request   (TermName ann) (TermName ann) (Process ann)   ann
---                   | EmptyOutput              (TermName ann)                 ann
---                   | EmptyInput               (TermName ann) (Process ann)   ann
---                   | EmptyChoice
+
 freeVariable :: Process Loc -> Set (TermName Loc)
 freeVariable (Link x y _) = Set.fromList [x, y]
 freeVariable (Compose x p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)
@@ -132,59 +123,3 @@ freeVariable (Request x y p _) = Set.insert x $ Set.delete y (freeVariable p)
 freeVariable (EmptyOutput x _) = Set.singleton x
 freeVariable (EmptyInput x p _) = Set.insert x $ freeVariable p
 freeVariable (EmptyChoice x _) = Set.singleton x
-
-
---
--- infer :: Process Loc -> TCM TC.Type
--- infer (EmptyOutput var _) = return TC.One
---     -- addToEnv var TC.One
--- infer (Output x y p q _) = do
---   t <- infer p
---   u <- infer q
---   return (TC.Times t u)
---   -- Map.insert var TC.One Map.empty
--- infer _ = undefined
-
--- infer :: Environment -> Process -> Either TypeError Environment
--- infer env (EmptyOutput var) = addToEnv env var One
--- infer env (Times x y p q) = do
---     envA <- infer env p
---     envB <- infer env q
--- -- infer env (SelectL var proc) = do
--- --     env' <- infer env proc
--- --     case Map.lookup var env' of
--- --         Nothing -> Right $ updateEnv env' var (Par Hole Hole)
--- --         Just t  -> Right $ updateEnv env' var (Par t Hole)
--- infer _ _ = Left TypeError
---
---
---------------------------------------------------------------------------------
--- | Typing Environment
-
--- addToEnv :: Environment -> Variable -> Type -> Either TypeError Environment
--- addToEnv env var t = case Map.lookup var env of
---     Just Hole ->
---         Right $ Map.insert var t env
---     Just u -> if normalize t == normalize u
---         then Right env
---         else Left $ Conflict var u t
---     Nothing -> Right $ Map.insert var t env
---
--- updateEnv :: Environment -> Variable -> Type -> Environment
--- updateEnv env var t = Map.insert var t env
-
-
---  (Lexical pos)         source = do
---   setSGR [SetColor Foreground Vivid Red]
---   putStr "\n  Lexical parse error\n  "
---   setSGR [SetColor Foreground Dull Blue]
---   putStrLn $ displayPos pos
---   setSGR []
---   printSourceCode $ SourceCode (BS.unpack source) (Loc pos pos) 2
--- printParseError (Syntatical loc _) (Just source) = do
---   setSGR [SetColor Foreground Vivid Red]
---   putStr "\n  Syntatical parse error\n  "
---   setSGR [SetColor Foreground Dull Blue]
---   putStrLn $ displayLoc loc
---   setSGR []
---   printSourceCode $ SourceCode (BS.unpack source) loc 2

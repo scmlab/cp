@@ -5,6 +5,7 @@ import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
 import Syntax.Parser
 import TypeChecking
+import TypeChecking.Inference
 import Pretty
 
 import Data.Monoid (mempty, (<>))
@@ -13,7 +14,7 @@ import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import Data.Loc (Loc(..), locOf)
 import qualified Data.Loc as Loc
-import Data.Text (Text)
+import Data.Text (Text, pack)
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 
@@ -142,5 +143,15 @@ prettyTypeError (TypeSigNotFound a) =
 prettyTypeError (TermDefnNotFound a) =
   prettyError "Missing term definition" (Just "the following type has no term definition")
     [locOf a]
+prettyTypeError (InferError a) =
+   prettyInferError a
 prettyTypeError (Others msg) =
   prettyError "Other unformatted type errors" (Just msg) []
+
+prettyInferError :: InferError -> M (Doc AnsiStyle)
+prettyInferError (General msg) = prettyError "Other unformatted inference errors" (Just msg) []
+prettyInferError (VarNotAssumed var) = prettyError "Variable found in assumption" (Just $ pack $ show var) [locOf var]
+prettyInferError (VarNotInContext var ctx) = prettyError "Variable not in context" (Just $ pack $ show var ++ "\n" ++ show ctx) [locOf var]
+prettyInferError (OverlappedContext ctx) = prettyError "Overlapped context" (Just $ pack $ show ctx) []
+prettyInferError (ContextShouldBeTheSame a b) = prettyError "Context not the same" (Just $ pack $ show a ++ "\n" ++ show b) []
+prettyInferError (CannotUnify a b) = prettyError "Cannot unify" (Just $ pack $ show a ++ "\n" ++ show b) []
