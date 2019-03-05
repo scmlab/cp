@@ -81,9 +81,6 @@ getFreshType = do
 -- addToContext :: Var -> Prop -> InferM ()
 -- addToContext var prop = modify $ \ st -> st { stContext = Map.insert var prop (stContext st) }
 
---------------------------------------------------------------------------------
--- |
-
 infer :: Term -> InferM Context
 infer (C.Link x y _) = do
   t <- assumeType
@@ -137,7 +134,7 @@ infer (C.Request x y p _) = do
 infer (C.OutputT x t p _) = undefined
 infer (C.InputT x t p _) = do
   (a, ctx) <- infer p >>= split x
-  return $ Map.insert x (Forall t a) ctx 
+  return $ Map.insert x (Forall t a) ctx
 
 infer (C.EmptyOutput x _) = do
   return $ Map.fromList
@@ -234,3 +231,24 @@ contextShouldAllBeRequests ctx = do
     beRequest :: Type -> Bool
     beRequest (Req _) = True
     beRequest _ = False
+
+-- --------------------------------------------------------------------------------
+-- -- |
+--
+-- data Ctx = Has Var Type Ctx | Empty | Some Int
+--   deriving (Show)
+--
+-- data Judgement = Judgement Term Ctx | Done
+--   deriving (Show)
+--
+-- -- ruleAx :: Judgement
+--
+-- -- unify ::
+--
+--
+-- infer' :: Judgement -> InferM Judgement
+-- -- infer' (Judgement (C.Link w x _) ctx) = ctx
+-- infer' (Judgement (C.EmptyOutput x _) ctx) = do
+--   unify ctx (Has x One Empty)
+--   return Done
+-- infer' _ = undefined
