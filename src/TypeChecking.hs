@@ -5,7 +5,6 @@ import TypeChecking.Inference2
 import Syntax.Concrete
 import Data.Loc (Loc)
 
-
 import qualified Data.List as List
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -38,7 +37,7 @@ data TypeError = TypeSigDuplicated (TermName Loc) (TermName Loc)
 type TCM = ExceptT TypeError (State TCState)
 
 runInferM :: InferM a -> (Either InferError a, InferState)
-runInferM program = runState (runExceptT program) initialInferState
+runInferM program = runState (runExceptT program) initInferState
 
 
 putTypeSigs :: Program Loc -> TCM ()
@@ -82,10 +81,10 @@ checkAll program = do
   -- inference
   termDefns <- Map.toList <$> gets stTermDefns
   forM termDefns $ \ (var, term) -> do
-    let (result, _) = runInferM $ infer term
+    let (result, s) = runInferM $ inferM term
     case result of
       Left e -> throwError $ InferError e
-      Right t -> return t
+      Right t -> return (t, s)
 
 -- there should be only at most one type signature or term definition
 checkDuplications :: Program Loc -> TCM ()
