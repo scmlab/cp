@@ -151,9 +151,11 @@ prettyTypeError (Others msg) =
 prettyInferError :: InferError -> M (Doc AnsiStyle)
 prettyInferError (General msg) = prettyError "Other unformatted inference errors" (Just msg) []
 prettyInferError (ChannelNotInContext term chan ctx) = prettyError "Channel not in context" (Just $ pack $ show chan ++ "\n" ++ show ctx) [locOf chan]
+prettyInferError (ChannelNotUsed v) = prettyError "Channel not used" (Just $ pack $ show v) []
+prettyInferError (ShouldBeTypeVar v) = prettyError "Channel type should be some variable" (Just $ pack $ show v) []
+prettyInferError (CannotUnify a b) = prettyError "Cannot unify" (Just $ pack $ show a ++ "\n" ++ show b) []
 -- prettyInferError (VarNotAssumed var) = prettyError "Variable found in assumption" (Just $ pack $ show var) [locOf var]
 -- prettyInferError (VarNotInContext var ctx) = prettyError "Variable not in context" (Just $ pack $ show var ++ "\n" ++ show ctx) [locOf var]
 -- prettyInferError (OverlappedContext ctx) = prettyError "Overlapped context" (Just $ pack $ show ctx) []
 -- prettyInferError (ContextShouldBeTheSame a b) = prettyError "Context not the same" (Just $ pack $ show a ++ "\n" ++ show b) []
 -- prettyInferError (ContextShouldAllBeRequests ctx) = prettyError "Context should all be requests" (Just $ pack $ show ctx) []
--- prettyInferError (CannotUnify a b) = prettyError "Cannot unify" (Just $ pack $ show a ++ "\n" ++ show b) []

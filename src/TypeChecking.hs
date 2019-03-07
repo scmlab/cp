@@ -10,7 +10,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (mapMaybe, catMaybes)
+import Data.Maybe (mapMaybe)
 import Data.Text (Text)
 
 import Control.Monad
@@ -80,7 +80,7 @@ checkAll program = do
 
   -- inference
   termDefns <- Map.toList <$> gets stTermDefns
-  forM termDefns $ \ (var, term) -> do
+  forM termDefns $ \ (_, term) -> do
     let (result, s) = runInferM $ inferM term
     case result of
       Left e -> throwError $ InferError e

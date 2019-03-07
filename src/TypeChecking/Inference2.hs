@@ -60,8 +60,15 @@ freshCtx = do
   modify $ \ st -> st { stCtxCount = i + 1 }
   return $ i
 
-putTarget :: Session -> InferM ()
-putTarget x = modify $ \ st -> st { stTarget = x }
+modifyPairs :: (Context -> Context) -> InferM ()
+modifyPairs f = do
+  Session pairs contexts <- gets stTarget
+  modify $ \ st -> st { stTarget = Session (f pairs) contexts }
+
+modifyContexts :: (Set CtxVar -> Set CtxVar) -> InferM ()
+modifyContexts f = do
+  Session pairs contexts <- gets stTarget
+  modify $ \ st -> st { stTarget = Session pairs (f contexts) }
 
 --------------------------------------------------------------------------------
 -- | Error
@@ -71,11 +78,12 @@ data InferError
   -- | ToManyContextVariables Term (Set CtxVar)
   -- | VarNotAssumed Var
   | ChannelNotInContext Term Chan Context
-  | ShouleBeTypeVar Type
+  | ChannelNotUsed Context
+  | ShouldBeTypeVar Type
   -- | OverlappedContext Session
   -- | ContextShouldBeTheSame Session Session
   -- | ContextShouldAllBeRequests Context
-  -- | CannotUnify Type Type
+  | CannotUnify Type Type
   -- | CannotUnifyContext Context Context
 --   | VarNotFresh Var (Maybe Term)
   deriving (Show)
@@ -133,34 +141,37 @@ infer term@(C.Output x y p q _) (Crude pairs var) = do
   return $ Session (Map.insert x newType pairs) (Set.fromList [varP, varQ])
 
 infer term@(C.EmptyOutput x _) (Crude pairs var) = do
-  -- we check that if the channel "x" is in the context
+  -- pairs should either be empty or has variable "x"
+  let notFound = Map.withoutKeys pairs (Set.singleton x)
+  unless (Map.null notFound) $
+    throwError $ ChannelNotUsed notFound
+
+
   t <- checkChannelInContext term x pairs
   -- replace t with One
   refineTargetType t One
+  removeTargetCtx var
 
   return $ Session (Map.insert x One pairs) (Set.fromList [var])
 
 infer _ _ = undefined
 
-refineTargetCtx :: CtxVar   -- the context variable to be substituted
-          -> Session
-          -> InferM ()
-refineTargetCtx var (Session pairs vars) = do
-  -- substitute all references to "var" with the provided context and ctx vars
-  Session pairs vars <- gets stTarget
+removeTargetCtx :: CtxVar -> InferM ()
+removeTargetCtx var = refineTargetCtx var (Session Map.empty Set.empty)
+
+-- substitute all references to "var" with the provided context and ctx vars
+refineTargetCtx :: CtxVar -> Session -> InferM ()
+refineTargetCtx var (Session pairs' vars') = do
+  Session _ vars <- gets stTarget
   when (Set.member var vars) $ do
-    putTarget $ Session
-                  (Map.union pairs pairs)
-                  (Set.union vars $ Set.delete var vars)
+    modifyPairs    (Map.union pairs')
+    modifyContexts (Set.union vars' . Set.delete var)
 
-refineTargetType  :: TypeVar
-                  -> Type
-                  -> InferM ()
-refineTargetType var t = do
-  Session pairs vars <- gets stTarget
-  let pairs' = Map.map (substitute var t) pairs
-  putTarget $ Session pairs' vars
+-- substitute some type variable with some type
+refineTargetType :: TypeVar -> Type -> InferM ()
+refineTargetType var t = modifyPairs (Map.map (substitute var t))
 
+-- replace a type variable in some type with another type
 substitute :: TypeVar -> Type -> Type -> Type
 substitute (Pos i) new (Var (Pos j)) = new
 substitute (Pos i) new (Var (Neg j)) = dual new
@@ -177,6 +188,11 @@ substitute var new (Exists t u) = Exists t (substitute var new u)
 substitute var new (Forall t u) = Forall t (substitute var new u)
 substitute _ _ others = others
 
+-- unify :: Type -> Type -> InferM ()
+-- unify (Var i)  t        = modifyPairs (Map.map (substitute i t))
+-- unify (Dual t) (Dual u) = unify t u
+-- unify (Times t u) (Times v w) = unify t v >> unify u w
+-- unify t u = throwError $ CannotUnify t u
 
 -- -- there should be only one context variable before refining
 -- checkContextVariableSize :: Set CtxVar -> InferM ()
@@ -191,13 +207,12 @@ checkChannelInContext term chan ctx = case Map.lookup chan ctx of
   Nothing -> do
     -- generate a fresh type variable
     t <- freshType
-    Session pairs vars <- gets stTarget
-    putTarget $ Session (Map.insert chan (Var t) pairs) vars
+    modifyPairs (Map.insert chan (Var t))
     return t
 
     -- throwError $ ChannelNotInContext term chan ctx
   Just (Var i) -> return i
-  Just t -> throwError $ ShouleBeTypeVar t
+  Just t -> throwError $ ShouldBeTypeVar t
 
 --
 -- infer' :: Term -> Context -> InferM Context
