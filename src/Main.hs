@@ -5,7 +5,7 @@ import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
 import Syntax.Parser
 import TypeChecking
-import TypeChecking.Inference2
+import TypeChecking.Inference
 import Pretty
 
 import Data.Monoid (mempty, (<>))

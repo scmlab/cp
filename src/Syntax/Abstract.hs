@@ -1,6 +1,8 @@
 
 module Syntax.Abstract where
 
+import Syntax.Base
+
 import Data.Text (Text)
 
 --------------------------------------------------------------------------------
@@ -18,7 +20,7 @@ data Declaration
 data Process
     -- link: x ↔ y
     = Link TermName TermName
-    -- parallelcomposition: νx:A.(P|Q)
+    -- parallelcomposition: νx:(P|Q)
     | Compose TermName Type Process Process
     -- output: x[y].(P|Q)
     | Output TermName TermName Process Process
@@ -50,7 +52,8 @@ data Process
 -- | Type level
 
 data Type
-    = Dual Type
+    = Var TypeVar
+    | Dual Type
     -- A ⊗ B: output A then behave as B
     | Times Type Type
     -- A 􏰂􏰂􏰂⅋ B: input A then behave as B
@@ -76,3 +79,18 @@ data Type
     -- ⊤: unit for With &
     | Top
     deriving (Eq, Show)
+
+instance HasDual Type where
+    dual (Dual a)       = a
+    dual (Times a b)    = Par (dual a) (dual b)
+    dual (Par a b)      = Times (dual a) (dual b)
+    dual (Plus a b)     = With (dual a) (dual b)
+    dual (With a b)     = Plus (dual a) (dual b)
+    dual (Acc a)        = Req (dual a)
+    dual (Req a)        = Acc (dual a)
+    dual (Exists x a)   = Forall x (dual a)
+    dual (Forall x a)   = Exists x (dual a)
+    dual One            = Bot
+    dual Bot            = One
+    dual Zero           = Top
+    dual Top            = Zero

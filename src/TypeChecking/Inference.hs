@@ -1,17 +1,19 @@
 module TypeChecking.Inference where
 
 import qualified Syntax.Concrete as C
-import Syntax.Concrete (HasDual(..))
-import Syntax.TypeChecking
+import Syntax.Abstract (Type(..))
+import Syntax.Base
 
 import Prelude hiding (lookup)
-import Control.Monad
+-- import Control.Monad
 import Control.Monad.State
 import Control.Monad.Except
 
-import Data.Loc (Loc)
-import Data.Map (Map)
 import qualified Data.List as List
+import Data.Loc (Loc, locOf)
+-- import Data.IntMap (IntMap)
+-- import qualified Data.IntMap as IntMap
+import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Map.Merge.Lazy as Map
 import Data.Set (Set)
@@ -21,37 +23,67 @@ import Data.Text (Text)
 --------------------------------------------------------------------------------
 -- | State
 
-type Var = C.TermName Loc
+type Chan = C.TermName Loc
 type Term = C.Process Loc
 
--- Γ, Δ, bunch of Var - Type pair
-type Context = Map Var Type
+type CtxVar = Int
+
+-- pairs of channels and their type
+type Context = Map Chan Type
+data CrudeSession = Crude Context CtxVar
+data Session = Session Context (Set CtxVar)
+  deriving (Show)
 
 data InferState = InferState
   {
-    -- stContext   :: Context
-  -- type variables
-    stTypeSet   :: Set Type         -- bunch of types
+    stTarget    :: Session
   , stTypeCount :: Int              -- for type variables
-  -- context variables
-  -- , stCtxSet    :: Set Context      -- bunch of contexts
-  -- , stCtxCount  :: Int              -- for context variables
+  , stCtxCount  :: Int              -- for context variables
   } deriving (Show)
 
-initialInferState :: InferState
-initialInferState = InferState Set.empty 0  -- Set.empty 0
+initTarget :: Session
+initTarget = Session Map.empty (Set.singleton 0)
+
+initInferState :: InferState
+initInferState = InferState initTarget 0 1  -- Set.empty 0
+
+freshType :: InferM TypeVar
+freshType = do
+  i <- gets stTypeCount
+  modify $ \ st -> st { stTypeCount = i + 1 }
+  return $ Pos i
+
+freshCtx :: InferM CtxVar
+freshCtx = do
+  i <- gets stCtxCount
+  modify $ \ st -> st { stCtxCount = i + 1 }
+  return $ i
+
+modifyPairs :: (Context -> Context) -> InferM ()
+modifyPairs f = do
+  Session pairs contexts <- gets stTarget
+  modify $ \ st -> st { stTarget = Session (f pairs) contexts }
+
+modifyContexts :: (Set CtxVar -> Set CtxVar) -> InferM ()
+modifyContexts f = do
+  Session pairs contexts <- gets stTarget
+  modify $ \ st -> st { stTarget = Session pairs (f contexts) }
 
 --------------------------------------------------------------------------------
 -- | Error
 
 data InferError
   = General Text
-  | VarNotAssumed Var
-  | VarNotInContext Var Context
-  | OverlappedContext Context
-  | ContextShouldBeTheSame Context Context
-  | ContextShouldAllBeRequests Context
+  -- | ToManyContextVariables Term (Set CtxVar)
+  -- | VarNotAssumed Var
+  | ChannelNotInContext Term Chan Context
+  | ChannelNotUsed Context
+  | ShouldBeTypeVar Type
+  -- | OverlappedContext Session
+  -- | ContextShouldBeTheSame Session Session
+  -- | ContextShouldAllBeRequests Context
   | CannotUnify Type Type
+  -- | CannotUnifyContext Context Context
 --   | VarNotFresh Var (Maybe Term)
   deriving (Show)
 
@@ -60,195 +92,282 @@ data InferError
 
 type InferM = ExceptT InferError (State InferState)
 
--- putContext :: Context -> InferM ()
--- putContext x = modify $ \ st -> st { stContext = x }
-
-putTypeSet :: Set Type -> InferM ()
-putTypeSet x = modify $ \ st -> st { stTypeSet = x }
-
-addToTypeSet :: Type -> InferM ()
-addToTypeSet t = modify $ \ st -> st { stTypeSet = Set.insert t (stTypeSet st) }
-
--- putContexts :: Map Int Context -> InferM ()
--- putContexts x = modify $ \ st -> st { stCtxSet = x }
-
-getFreshType :: InferM Type
-getFreshType = do
-  i <- gets stTypeCount
-  modify $ \ st -> st { stTypeCount = i + 1 }
-  return $ Var (Pos i)
-
--- addToContext :: Var -> Prop -> InferM ()
--- addToContext var prop = modify $ \ st -> st { stContext = Map.insert var prop (stContext st) }
-
-infer :: Term -> InferM Context
-infer (C.Link x y _) = do
-  t <- assumeType
-  return $ Map.fromList
-    [ (x,      t)
-    , (y, dual t)
-    ]
-infer (C.Compose x t p q _) = do
-  (a, ctxP) <- infer p >>= split x
-  (b, ctxQ) <- infer q >>= split x
-  checkOverlappedContext ctxP ctxQ
-  unifyOpposite a b
-  return $ mergeContext ctxP ctxQ
-infer (C.Output x y p q _) = do
-  (a, ctxP) <- infer p >>= split y
-  (b, ctxQ) <- infer q >>= split x
-  return
-    $ Map.insert x (Times a b)
-    $ mergeContext ctxP ctxQ
-infer (C.Input x y p _) = do
-  (b, ctx) <- infer p >>= split x
-  (a, ctx') <- split y ctx
-  return $ Map.insert x (Par a b)
-    $ ctx'
-
-infer (C.SelectL x p _) = do
-  (a, ctx) <- infer p >>= split x
-  b <- assumeType
-  return $ Map.insert x (Plus a b) ctx
-
-infer (C.SelectR x p _) = do
-  (b, ctx) <- infer p >>= split x
-  a <- assumeType
-  return $ Map.insert x (Plus a b) ctx
-
-infer (C.Choice x p q _) = do
-  (a, ctxP) <- infer p >>= split x
-  (b, ctxQ) <- infer q >>= split x
-  contextShouldBeTheSame ctxP ctxQ
-  return $ Map.insert x (With a b) ctxP
-
-infer (C.Accept x y p _) = do
-  (a, ctx) <- infer p >>= split x
-  contextShouldAllBeRequests ctx
-  return $ Map.insert x (Acc a) ctx
-
-infer (C.Request x y p _) = do
-  (a, ctx) <- infer p >>= split x
-  return $ Map.insert x (Req a) ctx
-
-infer (C.OutputT x t p _) = undefined
-infer (C.InputT x t p _) = do
-  (a, ctx) <- infer p >>= split x
-  return $ Map.insert x (Forall t a) ctx
-
-infer (C.EmptyOutput x _) = do
-  return $ Map.fromList
-    [ (x, One)
-    ]
-infer (C.EmptyInput x p _) = do
-  a <- infer p
-  return $ Map.insert x Bot a
-infer (C.EmptyChoice x _) = undefined
-  -- return $ Map.insert x Top
-  -- a <- infer p
-  -- b <- infer q
-
-
-split :: Var -> Context -> InferM (Type, Context)
-split var ctx = do
-  case Map.lookup var ctx of
-    Nothing -> throwError $ VarNotInContext var ctx
-    Just t -> return (t, Map.delete var ctx)
-
-
-assumeType :: InferM Type
-assumeType = do
-  t <- getFreshType
-  addToTypeSet t
-  return t
-
-
--- unsafe, does not check if contexts are overlapping
-mergeContext :: Context -> Context -> Context
-mergeContext = Map.merge
-  (Map.mapMaybeMissing (\_ x -> Just x))
-  (Map.mapMaybeMissing (\_ x -> Just x))
-  (Map.zipWithMaybeMatched (\_ x _ -> Just x))
-
--- lookupType :: Var -> InferM Type
--- lookupType var = do
---   types <- gets stTypes
---   case Map.lookup var types of
---     Nothing -> throwError $ VarNotAssumed var
---     Just t -> return t
-
--- substitute type variables with concrete types or other type variables
-substituteType :: Index -> Type -> InferM ()
-substituteType i t = do
-  -- context <- gets stContext
-  -- putContext $ fmap substType context
-  types <- gets stTypeSet
-  putTypeSet $ Set.fromList $ map substType $ Set.toList types
-  -- ctxs <- gets stCtxSet
-  -- putContexts $ fmap substCtx  ctxs
-
-  where
-    substType :: Type -> Type
-    substType (Var j) = if i == j then t else Var j
-    substType others = others
-
-    -- substCtx :: Context -> Context
-    -- substCtx ctx = fmap substType ctx
-
-unifyOpposite :: Type -> Type -> InferM (Type, Type)
-unifyOpposite (Var i) (Var j) = do
-  let i' = Var (dual i)
-  -- replace j with the opposite of i
-  substituteType j i'
-  return (Var i, i')
-unifyOpposite (Var i) u = do
-  substituteType i (dual u)
-  return (dual u, u)
-unifyOpposite t (Var i) = do
-  substituteType i (dual t)
-  return (t, dual t)
-unifyOpposite t u = if t == dual u
-  then throwError $ CannotUnify t u
-  else return (t, u)
-
-checkOverlappedContext :: Context -> Context -> InferM ()
-checkOverlappedContext a b = do
-  let overlapped = Map.intersection a b
-  unless (Map.null overlapped) $
-    throwError $ OverlappedContext overlapped
-
-contextShouldBeTheSame :: Context -> Context -> InferM ()
-contextShouldBeTheSame a b = do
-  let overlapped = Map.difference a b
-  unless (Map.null overlapped) $
-    throwError $ ContextShouldBeTheSame a b
-
-contextShouldAllBeRequests :: Context -> InferM ()
-contextShouldAllBeRequests ctx = do
-  unless (List.all beRequest $ Map.elems ctx) $
-    throwError $ ContextShouldAllBeRequests ctx
-  where
-    beRequest :: Type -> Bool
-    beRequest (Req _) = True
-    beRequest _ = False
-
--- --------------------------------------------------------------------------------
--- -- |
+--------------------------------------------------------------------------------
+-- |
 --
--- data Ctx = Has Var Type Ctx | Empty | Some Int
---   deriving (Show)
+inferM :: Term -> InferM Session
+inferM term = do
+  _ <- infer term (Crude Map.empty 0)
+  -- return the final result
+  gets stTarget
+
+infer :: Term -> CrudeSession -> InferM Session
+infer term@(C.Compose x _ p q _) (Crude pairs var) = do
+  -- instantiate a new type variable, ignore the annotated type for the moment
+  t <- freshType
+  -- generate fresh context variables
+  varP <- freshCtx
+  varQ <- freshCtx
+  -- refine the target
+  refineTargetCtx var (Session Map.empty $ Set.fromList [varP, varQ])
+
+  _ <- infer p (Crude (Map.insert x (Var t)        pairs) varP)
+  _ <- infer q (Crude (Map.insert x (Var (dual t)) pairs) varQ)
+
+  return $ Session pairs (Set.fromList [varP, varQ])
+
+
+
+infer term@(C.Output x y p q _) (Crude pairs var) = do
+  -- first we check that if the channel "x" is in the context
+  t <- checkChannelInContext term x pairs
+  -- instantiate some new type variables
+  u <- freshType
+  v <- freshType
+  let newType = Times (Var u) (Var v)
+  -- replace t with (Times u v)
+  refineTargetType t newType
+  -- generate fresh context variables
+  varP <- freshCtx
+  varQ <- freshCtx
+  -- split the context
+  refineTargetCtx var (Session Map.empty $ Set.fromList [varP, varQ])
+
+
+  _ <- infer p (Crude (Map.insert y (Var u) pairs) varP)
+  _ <- infer q (Crude (Map.insert x (Var v) pairs) varQ)
+
+  return $ Session (Map.insert x newType pairs) (Set.fromList [varP, varQ])
+
+infer term@(C.EmptyOutput x _) (Crude pairs var) = do
+  -- pairs should either be empty or has variable "x"
+  let notFound = Map.withoutKeys pairs (Set.singleton x)
+  unless (Map.null notFound) $
+    throwError $ ChannelNotUsed notFound
+
+
+  t <- checkChannelInContext term x pairs
+  -- replace t with One
+  refineTargetType t One
+  removeTargetCtx var
+
+  return $ Session (Map.insert x One pairs) (Set.fromList [var])
+
+infer _ _ = undefined
+
+removeTargetCtx :: CtxVar -> InferM ()
+removeTargetCtx var = refineTargetCtx var (Session Map.empty Set.empty)
+
+-- substitute all references to "var" with the provided context and ctx vars
+refineTargetCtx :: CtxVar -> Session -> InferM ()
+refineTargetCtx var (Session pairs' vars') = do
+  Session _ vars <- gets stTarget
+  when (Set.member var vars) $ do
+    modifyPairs    (Map.union pairs')
+    modifyContexts (Set.union vars' . Set.delete var)
+
+-- substitute some type variable with some type
+refineTargetType :: TypeVar -> Type -> InferM ()
+refineTargetType var t = modifyPairs (Map.map (substitute var t))
+
+-- replace a type variable in some type with another type
+substitute :: TypeVar -> Type -> Type -> Type
+substitute (Pos i) new (Var (Pos j)) = new
+substitute (Pos i) new (Var (Neg j)) = dual new
+substitute (Neg i) new (Var (Pos j)) = dual new
+substitute (Neg i) new (Var (Neg j)) = new
+substitute var new (Dual t) = Dual (substitute var new t)
+substitute var new (Times t u) = Times (substitute var new t) (substitute var new u)
+substitute var new (Par t u) = Par (substitute var new t) (substitute var new u)
+substitute var new (Plus t u) = Plus (substitute var new t) (substitute var new u)
+substitute var new (With t u) = With (substitute var new t) (substitute var new u)
+substitute var new (Acc t) = Acc (substitute var new t)
+substitute var new (Req t) = Req (substitute var new t)
+substitute var new (Exists t u) = Exists t (substitute var new u)
+substitute var new (Forall t u) = Forall t (substitute var new u)
+substitute _ _ others = others
+
+-- unify :: Type -> Type -> InferM ()
+-- unify (Var i)  t        = modifyPairs (Map.map (substitute i t))
+-- unify (Dual t) (Dual u) = unify t u
+-- unify (Times t u) (Times v w) = unify t v >> unify u w
+-- unify t u = throwError $ CannotUnify t u
+
+-- -- there should be only one context variable before refining
+-- checkContextVariableSize :: Set CtxVar -> InferM ()
+-- checkContextVariableSize term vars =
+--   when (Set.size vars > 1)
+--     (throwError $ ToManyContextVariables term vars)
+
+  -- modifyTarget $ \ Context ctx vars ->
+
+checkChannelInContext :: Term -> Chan -> Context -> InferM TypeVar
+checkChannelInContext term chan ctx = case Map.lookup chan ctx of
+  Nothing -> do
+    -- generate a fresh type variable
+    t <- freshType
+    modifyPairs (Map.insert chan (Var t))
+    return t
+
+    -- throwError $ ChannelNotInContext term chan ctx
+  Just (Var i) -> return i
+  Just t -> throwError $ ShouldBeTypeVar t
+
 --
--- data Judgement = Judgement Term Ctx | Done
---   deriving (Show)
+-- infer' :: Term -> Context -> InferM Context
+-- infer' (C.Output x y p q _) ctx = do
+--   Context m s <- infer' y p
+--   Context n t <- infer' x q
 --
--- -- ruleAx :: Judgement
+--   -- unify ctx (Context (Map.fromList [(x, One)]) Nothing)
 --
--- -- unify ::
+-- infer' (C.EmptyOutput x _) ctx = do
+--   unify ctx (Context (Map.fromList [(x, One)]) Nothing)
+-- infer' _ _ = undefined
+--
+-- data Target = Target
+--                 (Map Var Type)  -- e : T, ....
+--                 (Set CtxVar)    -- Γ, Δ, ...
+--                 deriving (Show)
+--
+-- -- only one ore zero variable Γ is allowed
+-- data Context = Context (Map Var Type) (Maybe CtxVar)
+--              deriving (Show)
+--
+-- -- empty :: Context
+-- -- empty = Context Map.empty Nothing
+--
+-- isEmpty :: Context -> Bool
+-- isEmpty (Context _ (Just _)) = False
+-- isEmpty (Context m Nothing) = Map.null m
+--
+-- -- insert :: Var -> Type -> Context -> Context
+-- -- insert x t (Context m s) = Context (Map.insert x t m) s
+-- --
+-- -- add :: CtxVar -> Context -> Context
+-- -- add var (Context m _) = Context m (Just var)
+--
+-- -- unifyType :: Type -> Type -> InferM Type
 --
 --
--- infer' :: Judgement -> InferM Judgement
--- -- infer' (Judgement (C.Link w x _) ctx) = ctx
--- infer' (Judgement (C.EmptyOutput x _) ctx) = do
---   unify ctx (Has x One Empty)
---   return Done
--- infer' _ = undefined
+-- -- substitute the context of the target
+-- substitute :: CtxVar -> Context -> InferM ()
+-- substitute var ctx = do
+--   target <- gets stTarget
+--   putTarget (subst var ctx target)
+--
+--   where
+--     -- substitute references to "var" in the latter context with the former context
+--     subst :: CtxVar -> Context -> Target -> Target
+--     subst v (Context m s) (Target n t) = if Set.member v t
+--       then Target (Map.union m n) (case s of
+--                                       Just s' -> (Set.insert s' $ Set.delete v t)
+--                                       Nothing -> (Set.delete v t))
+--       else Target n t
+--
+--   --   case viewContext ctx of
+--   -- Empty      -> Context m s
+--   -- NoPairs s' -> Context m (Set.update )
+--
+-- -- substitute var ctx = do
+-- --   modify $ \ st -> st { stCtxMap = IntMap.update (\_ -> Just ctx) var (stCtxMap st) }
+--
+-- unify :: Context -> Context -> InferM Context
+-- unify (Context m Nothing) (Context n Nothing)  = do
+--   o <- unifyPairs m n
+--   return $ Context o Nothing
+-- unify (Context m Nothing) (Context n (Just t)) = undefined
+-- unify (Context m (Just s)) (Context n Nothing)  = do
+--   -- eliminate context variable s
+--   substitute s (Context n Nothing)
+--   --
+--   o <- unifyPairs m n
+--   return $ Context o Nothing
+-- unify (Context m (Just s)) (Context n (Just t)) = undefined
+--
+-- unifyPairs :: Map Var Type -> Map Var Type -> InferM (Map Var Type)
+-- unifyPairs a b = do
+--   -- find out if the same variable appear in both maps
+--   -- variables appear in both side should have the same type
+--   let intersected = Map.elems $ Map.intersectionWith (,) a b
+--   forM_ intersected $ \ (s, t) -> do
+--     unless (s == t) $ throwError $ CannotUnify s t
+--   -- after the previous step it should be safe to return the union of both maps
+--   return $ Map.union a b
+--
+--
+--   --
+--   --   Map.merge
+--   -- -- basically just union if one is missing
+--   -- (Map.mapMaybeMissing (\_ x -> Just x))
+--   -- (Map.mapMaybeMissing (\_ x -> Just x))
+--   -- -- unify the type if exist in both maps
+--   -- (Map.zipWithMaybeMatched (\_ x y -> if x == y then Just x else Nothing))
+--
+--
+-- -- unify :: Context -> Context -> InferM Context
+-- -- unify a b = case (viewContext a, viewContext b) of
+-- --   -- nothing to do
+-- --   (Empty         , Empty         ) -> return empty
+-- --   -- throw if one is empty but the another has a pair
+-- --   (Empty         , NoPairs _     ) -> throwError $ CannotUnifyContext a b
+-- --   (Empty         , Everything _ _) -> throwError $ CannotUnifyContext a b
+-- --   (NoPairs s    , Empty         ) -> do
+-- --     forM_ s (flip substitute empty)
+-- --     return empty
+-- --   -- decree that s & t should both be of size 1
+-- --   (NoPairs s     , NoPairs t     ) -> undefined
+-- --     -- unless (Set.size s == 1 && Set.size t == 1) $
+-- --     --    throwError $ CannotUnifyContext a b
+-- --   (NoPairs _     , Everything _ _) -> return empty
+-- --   (Everything _ _, Empty         ) -> return empty
+-- --   (Everything _ _, NoPairs _     ) -> return empty
+-- --   (Everything _ _, Everything _ _) -> return empty
+--
+-- --
+-- -- data ContextView  = Empty
+-- --                   | NoPairs (Set CtxVar)
+-- --                   | Everything (Map Var Type) (Set CtxVar)
+-- --                   deriving (Show)
+-- --
+-- -- viewContext :: Context -> ContextView
+-- -- viewContext (Context m s)
+-- --   |      Map.null m  &&      Set.null s  = Empty
+-- --   |      Map.null m  && not (Set.null s) = NoPairs s
+-- --   -- | not (Map.null m) &&     (Set.null s) = PairsOnly m
+-- --   | otherwise                            = Everything m s
+--
+--
+-- -- unify :: Context -> Context -> InferM Context
+-- -- unify (Has x t a) (Has y u b)   = if x == y
+-- --                                     then do
+-- --                                       v <- unifyType t u
+-- --                                       c <- unifyType a b
+-- --                                       return $ Has x v c
+-- --                                     else do
+-- --
+-- -- unify (Has x t a) (Some b)      = Empty
+-- -- unify (Has x t a) Empty         = throwError CannotUnify2
+-- -- unify (Some a)    (Has x t b)   = Empty
+-- -- unify (Some a)    (Some b)      = Some (unify a b)
+-- -- unify (Some a)    Empty         = Empty
+-- -- unify Empty       (Has x t a)   = throwError CannotUnify2
+-- -- unify Empty       (Some a)      = Empty
+-- -- unify Empty       Empty         = Empty
+--
+--
+--
+-- -- data Judgement = Judgement Term Ctx
+-- --   deriving (Show)
+--
+-- -- -- ruleAx :: Judgement
+-- --
+-- -- -- unify ::
+-- --
+-- --
+-- -- infer' :: Judgement -> InferM Judgement
+-- -- -- infer' (Judgement (C.Link w x _) ctx) = ctx
+-- -- infer' (Judgement (C.EmptyOutput x _) ctx) = do
+-- --   unify ctx (Has x One Empty)
+-- --   return Done
+-- -- infer' _ = undefined

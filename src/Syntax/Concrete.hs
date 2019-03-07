@@ -4,10 +4,11 @@
 
 module Syntax.Concrete where
 
+import Syntax.Base
 import qualified Syntax.Abstract as A
 
+import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
-import Data.Loc
 import Prelude hiding (LT, EQ, GT)
 
 --------------------------------------------------------------------------------
@@ -41,7 +42,8 @@ data Process  ann = Link      (TermName ann) (TermName ann)                 ann
                   | EmptyChoice              (TermName ann)                 ann
                   deriving (Show, Functor)
 
-data Type ann = Dual    (Type ann)                  ann
+data Type ann = Var     TypeVar                     ann
+              | Dual    (Type ann)                  ann
               | Times   (Type ann)      (Type ann)  ann
               | Par     (Type ann)      (Type ann)  ann
               | Plus    (Type ann)      (Type ann)  ann
@@ -57,8 +59,9 @@ data Type ann = Dual    (Type ann)                  ann
               deriving (Show, Functor, Ord)
 
 instance HasDual (Type ann) where
+  dual (Var i l)        = Var (dual i) l
   dual (Dual a _)       = a
-  dual (Times a b l)      = Par (dual a) (dual b) l
+  dual (Times a b l)    = Par (dual a) (dual b) l
   dual (Par a b l)      = Times (dual a) (dual b) l
   dual (Plus a b l)     = With (dual a) (dual b) l
   dual (With a b l)     = Plus (dual a) (dual b) l
@@ -130,6 +133,7 @@ instance Located (Process Loc) where
   locOf (EmptyChoice _ loc) = loc
 
 instance Located (Type Loc) where
+  locOf (Var _ loc) = loc
   locOf (Dual _ loc) = loc
   locOf (Times _ _ loc) = loc
   locOf (Par _ _ loc) = loc
@@ -234,6 +238,7 @@ instance ToAbstract (Process ann) A.Process where
             (toAbstract name)
 
 instance ToAbstract (Type ann) A.Type where
+    toAbstract (Var i _) = A.Var i
     toAbstract (Dual t _) =
         A.Dual
             (toAbstract t)
@@ -271,24 +276,3 @@ instance ToAbstract (Type ann) A.Type where
     toAbstract (Bot _) = A.Bot
     toAbstract (Zero _) = A.Zero
     toAbstract (Top _) = A.Top
-
---------------------------------------------------------------------------------
--- | Duality
-
-class HasDual a where
-  dual :: a -> a
-
-instance HasDual A.Type where
-    dual (A.Dual a)       = a
-    dual (A.Times a b)    = A.Par (dual a) (dual b)
-    dual (A.Par a b)      = A.Times (dual a) (dual b)
-    dual (A.Plus a b)     = A.With (dual a) (dual b)
-    dual (A.With a b)     = A.Plus (dual a) (dual b)
-    dual (A.Acc a)        = A.Req (dual a)
-    dual (A.Req a)        = A.Acc (dual a)
-    dual (A.Exists x a)   = A.Forall x (dual a)
-    dual (A.Forall x a)   = A.Exists x (dual a)
-    dual A.One            = A.Bot
-    dual A.Bot            = A.One
-    dual A.Zero           = A.Top
-    dual A.Top            = A.Zero

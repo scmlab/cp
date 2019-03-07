@@ -1,7 +1,7 @@
 module TypeChecking where
 
 
-import TypeChecking.Inference2
+import TypeChecking.Inference
 import Syntax.Concrete
 import Data.Loc (Loc)
 
