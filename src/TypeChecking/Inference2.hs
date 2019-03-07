@@ -161,10 +161,6 @@ refineTargetType var t = do
   let pairs' = Map.map (substitute var t) pairs
   putTarget $ Session pairs' vars
 
-
-
-
-
 substitute :: TypeVar -> Type -> Type -> Type
 substitute (Pos i) new (Var (Pos j)) = new
 substitute (Pos i) new (Var (Neg j)) = dual new
@@ -192,8 +188,14 @@ substitute _ _ others = others
 
 checkChannelInContext :: Term -> Chan -> Context -> InferM TypeVar
 checkChannelInContext term chan ctx = case Map.lookup chan ctx of
-  Nothing ->
-    throwError $ ChannelNotInContext term chan ctx
+  Nothing -> do
+    -- generate a fresh type variable
+    t <- freshType
+    Session pairs vars <- gets stTarget
+    putTarget $ Session (Map.insert chan (Var t) pairs) vars
+    return t
+
+    -- throwError $ ChannelNotInContext term chan ctx
   Just (Var i) -> return i
   Just t -> throwError $ ShouleBeTypeVar t
 

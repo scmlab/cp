@@ -3,9 +3,9 @@
 -- c = \ chan : 1 . ( chan(a) . chan(b) . a <-> b | chan[a] . ( a[] . end | chan[b] . (b[] . end | a <-> b ) ) )
 
 
--- run = x[].end
+run = x[].end
 
-run = \ x: 1 . (x[y] . (y[].end | x[].end) | x[].end)
+-- run = \ x: 1 . (x[y] . (y[].end | x[].end) | x[].end)
 
 
 
