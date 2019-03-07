@@ -100,6 +100,25 @@ main = void $ runM $ handleError $ do
 --------------------------------------------------------------------------------
 -- | Printing errors
 
+prettyError' :: Text -> [Doc AnsiStyle] -> [Loc] -> M (Doc AnsiStyle)
+prettyError' header paragraphs locations = do
+  let text = vsep $
+        [ annotate (color Red) $ pretty header
+        , softline
+        ]
+        ++ (map (\ x -> x <> line) paragraphs)
+  source <- getSourceOrThrow
+  let pieces = vsep $ map (\loc -> vsep
+        [ annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
+        , reAnnotate toAnsiStyle $ prettySourceCode $ SourceCode source loc 1
+        ]) locations
+
+  return $ vsep
+    [ softline'
+    , indent 2 text
+    , indent 2 pieces
+    , softline'
+    ]
 prettyError :: Text -> Maybe Text -> [Loc] -> M (Doc AnsiStyle)
 prettyError header message locations = do
   let text = vsep
@@ -150,12 +169,14 @@ prettyTypeError (Others msg) =
 
 prettyInferError :: InferError -> M (Doc AnsiStyle)
 prettyInferError (General msg) = prettyError "Other unformatted inference errors" (Just msg) []
-prettyInferError (ChannelsNotInContext term chan context) = prettyError "Channel not in context" (Just $ pack $ show chan ++ "\n" ++ show context) [locOf term]
--- prettyInferError (ChannelNotUsed v) = prettyError "Channel not used" (Just $ pack $ show v) []
+-- prettyInferError (ChannelsNotInContext term chan context) = prettyError "Channel not in context" (Just $ pack $ show chan ++ "\n" ++ show context) [locOf term]
+prettyInferError (ChannelsNotInContext term chan context) =
+  prettyError' "Channel not in context"
+    [ "these channels "
+        <> (annotate (colorDull Blue) (pretty chan))
+        <> " are not in context"
+        <> line
+        <> "when checking the following term"
+    ] [locOf term]
 prettyInferError (ShouldBeTypeVar v) = prettyError "Channel type should be some variable" (Just $ pack $ show v) []
 prettyInferError (CannotUnify a b) = prettyError "Cannot unify" (Just $ pack $ show a ++ "\n" ++ show b) []
--- prettyInferError (VarNotAssumed var) = prettyError "Variable found in assumption" (Just $ pack $ show var) [locOf var]
--- prettyInferError (VarNotInContext var ctx) = prettyError "Variable not in context" (Just $ pack $ show var ++ "\n" ++ show ctx) [locOf var]
--- prettyInferError (OverlappedContext ctx) = prettyError "Overlapped context" (Just $ pack $ show ctx) []
--- prettyInferError (ContextShouldBeTheSame a b) = prettyError "Context not the same" (Just $ pack $ show a ++ "\n" ++ show b) []
--- prettyInferError (ContextShouldAllBeRequests ctx) = prettyError "Context should all be requests" (Just $ pack $ show ctx) []

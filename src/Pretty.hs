@@ -1,14 +1,19 @@
+{-# LANGUAGE OverloadedStrings                  #-}
+
 module Pretty where
 
+import Pretty.Syntax.Base
+import Pretty.Syntax.Concrete
+import Pretty.TypeChecking
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Loc hiding (Pos)
+import qualified Data.Set as Set
 import Data.Monoid (mempty, (<>))
 import Data.Text.Prettyprint.Doc hiding (line)
 import Data.Text.Prettyprint.Doc.Render.Terminal
 import System.IO
-
 
 --------------------------------------------------------------------------------
 -- | Source Code Annotation
@@ -90,3 +95,10 @@ prettySourceCode (SourceCode source (Loc from to) spread) =
                     annotate HighlightedArea  (pretty line)
             | otherwise =
                     annotate Other            (pretty line)
+
+
+--------------------------------------------------------------------------------
+-- | Instances
+
+instance Pretty a => Pretty (Set.Set a) where
+  pretty s = encloseSep "{" "}" ", " (map pretty $ Set.toList s)
