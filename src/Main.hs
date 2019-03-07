@@ -150,8 +150,8 @@ prettyTypeError (Others msg) =
 
 prettyInferError :: InferError -> M (Doc AnsiStyle)
 prettyInferError (General msg) = prettyError "Other unformatted inference errors" (Just msg) []
-prettyInferError (ChannelNotInContext term chan ctx) = prettyError "Channel not in context" (Just $ pack $ show chan ++ "\n" ++ show ctx) [locOf chan]
-prettyInferError (ChannelNotUsed v) = prettyError "Channel not used" (Just $ pack $ show v) []
+prettyInferError (ChannelsNotInContext term chan context) = prettyError "Channel not in context" (Just $ pack $ show chan ++ "\n" ++ show context) [locOf term]
+-- prettyInferError (ChannelNotUsed v) = prettyError "Channel not used" (Just $ pack $ show v) []
 prettyInferError (ShouldBeTypeVar v) = prettyError "Channel type should be some variable" (Just $ pack $ show v) []
 prettyInferError (CannotUnify a b) = prettyError "Cannot unify" (Just $ pack $ show a ++ "\n" ++ show b) []
 -- prettyInferError (VarNotAssumed var) = prettyError "Variable found in assumption" (Just $ pack $ show var) [locOf var]
