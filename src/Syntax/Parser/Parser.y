@@ -60,6 +60,9 @@ import Data.Text (Text)
 
 %%
 
+s :: { Loc }
+    : {- empty -}                               {% getLoc }
+
 Program :: {Program Loc}
     : Declarations                          {% locate $ Program (reverse $1) }
 
@@ -69,50 +72,50 @@ Declarations :: {[Declaration Loc]}
     | Declarations Declaration              { $2:$1 }
 
 Declaration :: {Declaration Loc}
-    : TermName ':' Type                         {% locate $ TypeSig $1 $3 }
-    | TermName '=' Process                      {% locate $ TermDefn $1 $3 }
+    : s TermName ':' Type                         {% locate' $1 $ TypeSig $2 $4 }
+    | s TermName '=' Process                      {% locate' $1 $ TermDefn $2 $4 }
 
 Process :: {Process Loc}
-    : TermName '<->' TermName                   {% locate $ Link $1 $3  }
-    | 'nu' TermName ':' Type '.' '(' Process '|' Process ')'    {% locate $ Compose $2 $4 $7 $9 }
-    | TermName '[' TermName ']' '.' '(' Process '|' Process ')' {% locate $ Output $1 $3 $7 $9 }
-    | TermName '(' TermName ')' '.' Process                     {% locate $ Input $1 $3 $6 }
-    | TermName '[inl]' '.' Process              {% locate $ SelectL $1 $4 }
-    | TermName '[inr]' '.' Process              {% locate $ SelectR $1 $4 }
-    | TermName '.' 'case' '(' Process ',' Process ')'           {% locate $ Choice $1 $5 $7 }
-    | '!' TermName '(' TermName ')' '.' Process {% locate $ Accept $2 $4 $7 }
-    | '?' TermName '[' TermName ']' '.' Process {% locate $ Request $2 $4 $7 }
-    | TermName '[' TypeName ']' '.' Process     {% locate $ OutputT $1 $3 $6 }
-    | TermName '(' TypeName ')' '.' Process     {% locate $ InputT $1 $3 $6 }
-    | TermName '[]' '.' 'end'                   {% locate $ EmptyOutput $1 }
-    | TermName '()' '.' Process                 {% locate $ EmptyInput $1 $4 }
-    | TermName '.' 'case()'                     {% locate $ EmptyChoice $1 }
+    : s TermName '<->' TermName                   {% locate' $1 $ Link $2 $4  }
+    | s 'nu' TermName ':' Type '.' '(' Process '|' Process ')'    {% locate' $1 $ Compose $3 $5 $8 $10 }
+    | s TermName '[' TermName ']' '.' '(' Process '|' Process ')' {% locate' $1 $ Output $2 $4 $8 $10 }
+    | s TermName '(' TermName ')' '.' Process                     {% locate' $1 $ Input $2 $4 $7 }
+    | s TermName '[inl]' '.' Process              {% locate' $1 $ SelectL $2 $5 }
+    | s TermName '[inr]' '.' Process              {% locate' $1 $ SelectR $2 $5 }
+    | s TermName '.' 'case' '(' Process ',' Process ')'           {% locate' $1 $ Choice $2 $6 $8 }
+    | s '!' TermName '(' TermName ')' '.' Process {% locate' $1 $ Accept $3 $5 $8 }
+    | s '?' TermName '[' TermName ']' '.' Process {% locate' $1 $ Request $3 $5 $8 }
+    | s TermName '[' TypeName ']' '.' Process     {% locate' $1 $ OutputT $2 $4 $7 }
+    | s TermName '(' TypeName ')' '.' Process     {% locate' $1 $ InputT $2 $4 $7 }
+    | s TermName '[]' '.' 'end'                   {% locate' $1 $ EmptyOutput $2 }
+    | s TermName '()' '.' Process                 {% locate' $1 $ EmptyInput $2 $5 }
+    | s TermName '.' 'case()'                     {% locate' $1 $ EmptyChoice $2 }
 
 Type :: {Type Loc}
-    : Type1                                     { $1 }
-    | 'exists' TypeName Type1                   {% locate $ Exists $2 $3 }
-    | 'forall' TypeName Type1                   {% locate $ Forall $2 $3 }
+    : s Type1                                   { $2 }
+    | s 'exists' TypeName Type1                 {% locate' $1 $ Exists $3 $4 }
+    | s 'forall' TypeName Type1                 {% locate' $1 $ Forall $3 $4 }
 
 -- right associative
 Type1 :: {Type Loc}
-    : Type2                                     { $1 }
-    | Type2 '*' Type1                           {% locate $ Times $1 $3 }
-    | Type2 '%' Type1                           {% locate $ Par $1 $3 }
+    : s Type2                                   { $2 }
+    | s Type2 '*' Type1                         {% locate' $1 $ Times $2 $4 }
+    | s Type2 '%' Type1                         {% locate' $1 $ Par $2 $4 }
 
 -- right associative
 Type2 :: {Type Loc}
-    : Type3                                     { $1 }
-    | Type3 '+' Type2                           {% locate $ Plus $1 $3 }
-    | Type3 '&' Type2                           {% locate $ With $1 $3 }
+    : s Type3                                   { $2 }
+    | s Type3 '+' Type2                         {% locate' $1 $ Plus $2 $4 }
+    | s Type3 '&' Type2                         {% locate' $1 $ With $2 $4 }
 
 Type3 :: {Type Loc}
-    : Type4                                     { $1 }
-    | '!' Type3                                 {% locate $ Acc $2 }
-    | '?' Type3                                 {% locate $ Req $2 }
+    : s Type4                                   { $2 }
+    | s '!' Type3                               {% locate' $1 $ Acc $3 }
+    | s '?' Type3                               {% locate' $1 $ Req $3 }
 
 Type4 :: {Type Loc}
     : '(' Type ')'                              { $2 }
-    |  '^' Type4                                {% locate $ Dual $2  }
+    | s '^' Type4                               {% locate' $1 $ Dual $3  }
     | '1'                                       {% locate $ One }
     | 'Bot'                                     {% locate $ Bot }
     | '0'                                       {% locate $ Zero }

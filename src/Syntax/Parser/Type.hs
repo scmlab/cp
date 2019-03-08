@@ -87,5 +87,13 @@ syntaticalError tok = do
   loc <- gets lookaheadLoc
   throwError $ Syntatical loc tok
 
+getLoc :: Parser Loc
+getLoc = gets lookaheadLoc
+
 locate :: (Loc -> a) -> Parser a
 locate f = f <$> gets currentLoc
+
+locate' :: Loc -> (Loc -> a) -> Parser a
+locate' start f = do
+  end <- gets currentLoc
+  return $ f (start <--> end)

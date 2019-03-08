@@ -174,7 +174,7 @@ prettyInferError (ChannelsNotInContext term chan context) =
   prettyError' "Channel not in context"
     [ "these channels "
         <> (annotate (colorDull Blue) (pretty chan))
-        <> " are not in context"
+        <> " are not in the context"
         <> line
         <> "when checking the following term"
     ] [locOf term]
