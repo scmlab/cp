@@ -94,7 +94,10 @@ main = void $ runM $ handleError $ do
     program <- readSource filePath >>= parseSource filePath
 
     (tc, _) <- runTCM (checkAll program)
-    liftIO $ print tc
+
+    forM_ tc $ liftIO . putStrLn . show . pretty
+    -- liftIO $ putStrLn $ show $ pretty tc
+    -- liftIO $ putStrLn $ pretty vsep $ map pretty tc
     return ()
 
 --------------------------------------------------------------------------------
@@ -180,5 +183,12 @@ prettyInferError (ChannelsNotInContext term chan context) =
         <> line
         <> "when checking the following term"
     ] [locOf term]
-prettyInferError (ShouldBeTypeVar v) = prettyError "Channel type should be some variable" (Just $ pack $ show v) []
+prettyInferError (ShouldBeTypeVar term t) =
+  prettyError' "Channel type should be some variable"
+    [ "the type"
+        <> (annotate (colorDull Blue) (pretty t))
+        <> " should be some type variable"
+        <> line
+        <> "when checking the following term"
+    ] [locOf term]
 prettyInferError (CannotUnify a b) = prettyError "Cannot unify" (Just $ pack $ show a ++ "\n" ++ show b) []

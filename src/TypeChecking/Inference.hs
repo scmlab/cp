@@ -20,6 +20,8 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 
+import Debug.Trace
+
 --------------------------------------------------------------------------------
 -- | State
 
@@ -28,11 +30,7 @@ type Term = C.Process Loc
 
 type CtxVar = Int
 
--- pairs of channels and their type
 type Session = Map Chan Type
--- data CrudeSession = Crude Context CtxVar
--- data Session = Session Context (Set CtxVar)
---   deriving (Show)
 data Judgement = Judgement Term Session (Set CtxVar)
   deriving (Show)
 
@@ -79,22 +77,8 @@ pop = do
 push :: Judgement -> InferM ()
 push judgement = modifyFrontier (\ stack -> judgement : stack)
 
-
--- initialize :: Term -> Infer ()
--- initialize term = do
--- modify $ \ state -> state
---   { stFrontier = [Judgement term Map.empty (Set.singleton 0)]
---   }
-
--- modifyPairs :: (Context -> Context) -> InferM ()
--- modifyPairs f = do
---   Session pairs contexts <- gets stTarget
---   modify $ \ st -> st { stTarget = Session (f pairs) contexts }
---
--- modifyContexts :: (Set CtxVar -> Set CtxVar) -> InferM ()
--- modifyContexts f = do
---   Session pairs contexts <- gets stTarget
---   modify $ \ st -> st { stTarget = Session pairs (f contexts) }
+pushMany :: [Judgement] -> InferM ()
+pushMany = mapM_ push
 
 --------------------------------------------------------------------------------
 -- | Error
@@ -105,11 +89,13 @@ data InferError
   -- | VarNotAssumed Var
   | ChannelsNotInContext Term (Set Chan) Session
   -- | ChannelNotUsed Context
-  | ShouldBeTypeVar Type
+  | ShouldBeTypeVar Term Type
   -- | OverlappedContext Session
   -- | ContextShouldBeTheSame Session Session
   -- | ContextShouldAllBeRequests Context
   | CannotUnify Type Type
+  | ToManyContextVariablesToStartWith Term (Set CtxVar)
+  | NoContextVariableToStartWith Term
   | NoContextVariableForRefining Term
   -- | CannotUnifyContext Context Context
 --   | VarNotFresh Var (Maybe Term)
@@ -135,71 +121,129 @@ run :: InferM Session
 run = do
   result <- pop
   case result of
-    Just j  -> step j >> run
+    Just j  -> do
+      step j >>= pushMany
+      run
     Nothing -> do
       Judgement _ s _ <- gets stResult
       return s
 
-step :: Judgement -> InferM ()
-step (Judgement term@(C.Output x y p q _) session ctxs) =
-  undefined
-  -- case Map.lookup x session of
-  --   -- "x" occured free
-  --   Nothing      -> do
-  --     t <- freshType
-  --
-  --     -- take one of the context variable and refine it with the generated pair
-  --     case Set.lookupMin ctxs of
-  --       Nothing -> throwError $ NoContextVariableForRefining term
-  --       Just ctx -> do
-  --         ctx' <- freshCtx
-  --         refineContext ctx (Map.fromList [(x, Var t)]) (Set.singleton ctx')
-  --
-  --   -- "x" is some type variable, ready to be refined
-  --   Just (Var v) ->
-  --     refineType v One
-  --   -- "x" is some other type
-  --   Just t       -> when (t /= One) $ throwError $ CannotUnify t One
+step :: Judgement -> InferM [Judgement]
+step judgement@(Judgement term session ctxs) = case term of
 
-step (Judgement term@(C.EmptyOutput x _) session ctxs) = do
+  C.Compose x _ p q _ -> do
+
+    t <- freshType
+
+    ctx <- extractCtxVar term ctxs
+    ctxP <- freshCtx
+    ctxQ <- freshCtx
+    refineContext ctx Map.empty (Set.fromList [ctxP, ctxQ])
+
+    return
+      [ Judgement q (Map.insert x (dual (Var t)) session) (Set.singleton ctxQ)
+      , Judgement p (Map.insert x (      Var t ) session) (Set.singleton ctxP)
+      ]
+
+
+
+
+  C.Output x y p q _ -> do
+
+    (var, ctx) <- extractChannel judgement x
+
+    -- form new type
+    a <- freshType
+    b <- freshType
+    let t = Times (Var a) (Var b)
+    -- refine "var" with "a ⊗ b"
+    t' <- unify var t
+
+    -- instantiate new context variables
+    ctxP <- freshCtx
+    ctxQ <- freshCtx
+    -- replace "ctx" with the new stuff
+    refineContext ctx (Map.fromList [(x, t')]) (Set.fromList [ctxP, ctxQ])
+
+    return
+      [ Judgement q (Map.insert x (Var b) session) (Set.singleton ctxQ)
+      , Judgement p (Map.insert y (Var a) session) (Set.singleton ctxP)
+      ]
+
+  C.Input x y p _ -> do
+
+    (var, ctx) <- extractChannel judgement x
+
+
+    -- form new type
+    a <- freshType
+    b <- freshType
+    let t = Par (Var a) (Var b)
+
+    -- refine
+    _ <- unify var t
+
+    return
+      [ Judgement p (Map.insert y (Var a) $ Map.insert x (Var b) session) (Set.singleton ctx)
+      ]
+
+  C.EmptyOutput x _ -> do
+
+
+    (var, ctx) <- extractChannel judgement x
+    unify var One
+    refineContext ctx Map.empty Set.empty
+    return []
+
+  C.EmptyInput x p _ -> do
+
+
+    (var, ctx) <- extractChannel judgement x
+
+    unify var Bot
+
+    return
+      [ Judgement p session (Set.singleton ctx)
+      ]
+
+
+  _ -> undefined
+
+extractChannel :: Judgement -> Chan -> InferM (Type, CtxVar)
+extractChannel (Judgement term session ctxs) x = do
   case Map.lookup x session of
     -- "x" occured free
     Nothing      -> do
-      t <- freshType
+      ctx <- extractCtxVar term ctxs
+      -- instantiate a new type variable and context variable
+      var <- freshType
+      ctx' <- freshCtx
+      -- replace "ctx" with "var" + "ctx'"
+      refineContext ctx (Map.fromList [(x, Var var)]) (Set.singleton ctx')
 
-      -- take one of the context variable and refine it with the generated pair
-      case Set.lookupMin ctxs of
-        Nothing -> throwError $ NoContextVariableForRefining term
-        Just ctx -> do
-          ctx' <- freshCtx
-          refineContext ctx (Map.fromList [(x, Var t)]) (Set.singleton ctx')
+      return (Var var, ctx')
 
-          -- eliminate all contexts
-          forM_ (Set.toList ctxs) $ \ var -> do
-            refineContext var Map.empty Set.empty
-
-    -- "x" is some type variable, ready to be refined
-    Just (Var v) -> do
-      refineType v One
-
-      -- eliminate all contexts
-      forM_ (Set.toList ctxs) $ \ var -> do
-        refineContext var Map.empty Set.empty
-
-    -- "x" is some other type
-    Just t       -> do
-      when (t /= One) $ throwError $ CannotUnify t One
-
-      -- eliminate all contexts
-      forM_ (Set.toList ctxs) $ \ var -> do
-        refineContext var Map.empty Set.empty
+    -- "x" found, return its type
+    Just t -> do
+      ctx <- extractCtxVar term ctxs
+      return (t, ctx)
 
 
-step (Judgement _ _ _) = undefined
+    -- do
+    --   when (t /= One) $ throwError $ CannotUnify t One
+    --
+    --   -- eliminate all contexts
+    --   forM_ (Set.toList ctxs) $ \ var -> do
+    --     refineContext var Map.empty Set.empty
 
+extractCtxVar :: Term -> Set CtxVar -> InferM CtxVar
+extractCtxVar term ctxs = case Set.size ctxs of
+  0 -> throwError $ NoContextVariableToStartWith term
+  1 -> return     $ Set.findMin ctxs
+  _ -> throwError $ ToManyContextVariablesToStartWith term ctxs
 
 -- substitute all references to "var" with the provided session and ctx vars
-refineContext :: CtxVar -> Session -> (Set CtxVar) -> InferM ()
+refineContext :: CtxVar -> Session -> Set CtxVar -> InferM ()
 refineContext var session ctxs = do
   -- refine the result session
   modifyResult $ \ (Judgement term ss cs) ->
@@ -232,18 +276,35 @@ substitute var new (Var var')
   | var ==      var' = new
   | var == dual var' = dual new
   | otherwise        = Var var'
-substitute var new (Dual t) = Dual (substitute var new t)
-substitute var new (Times t u) = Times (substitute var new t) (substitute var new u)
-substitute var new (Par t u) = Par (substitute var new t) (substitute var new u)
-substitute var new (Plus t u) = Plus (substitute var new t) (substitute var new u)
-substitute var new (With t u) = With (substitute var new t) (substitute var new u)
-substitute var new (Acc t) = Acc (substitute var new t)
-substitute var new (Req t) = Req (substitute var new t)
+substitute var new (Dual t)     = Dual (substitute var new t)
+substitute var new (Times t u)  = Times (substitute var new t) (substitute var new u)
+substitute var new (Par t u)    = Par (substitute var new t) (substitute var new u)
+substitute var new (Plus t u)   = Plus (substitute var new t) (substitute var new u)
+substitute var new (With t u)   = With (substitute var new t) (substitute var new u)
+substitute var new (Acc t)      = Acc (substitute var new t)
+substitute var new (Req t)      = Req (substitute var new t)
 substitute var new (Exists t u) = Exists t (substitute var new u)
 substitute var new (Forall t u) = Forall t (substitute var new u)
-substitute _ _ others = others
+substitute _   _   others       = others
 
-
+unify :: Type -> Type -> InferM Type
+unify (Var    i  ) v            = refineType i v >> return v
+unify t            (Var    j  ) = refineType j t >> return t
+unify (Dual   t  ) v            = unify t        (dual v)
+unify t            (Dual   v  ) = unify (dual t) v
+unify (Times  t u) (Times  v w) = Times  <$> unify t v <*> unify u w
+unify (Par    t u) (Par    v w) = Par    <$> unify t v <*> unify u w
+unify (Plus   t u) (Plus   v w) = Plus   <$> unify t v <*> unify u w
+unify (With   t u) (With   v w) = With   <$> unify t v <*> unify u w
+unify (Acc    t  ) (Acc    v  ) = unify t v
+unify (Req    t  ) (Req    v  ) = unify t v
+unify (Exists _ u) (Exists _ w) = unify u w
+unify (Forall _ u) (Forall _ w) = unify u w
+unify One          One          = return One
+unify Top          Top          = return Top
+unify Zero         Zero         = return Zero
+unify Bot          Bot          = return Bot
+unify t            v            = throwError $ CannotUnify t v
 
 
 

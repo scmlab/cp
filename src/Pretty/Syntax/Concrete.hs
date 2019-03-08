@@ -65,10 +65,10 @@ instance Pretty (Process ann) where
 instance Pretty (Type ann) where
   pretty (Var i _)        = "$" <> pretty i
   pretty (Dual a _)       = "^" <> pretty a
-  pretty (Times a b _)    = pretty a <> "⊗" <> pretty b
-  pretty (Par a b _)      = pretty a <> "⅋" <> pretty b
-  pretty (Plus a b _)     = pretty a <> "⊕" <> pretty b
-  pretty (With a b _)     = pretty a <> "&" <> pretty b
+  pretty (Times a b _)    = pretty a <> " ⊗ " <> pretty b
+  pretty (Par a b _)      = pretty a <> " ⅋ " <> pretty b
+  pretty (Plus a b _)     = pretty a <> " ⊕ " <> pretty b
+  pretty (With a b _)     = pretty a <> " & " <> pretty b
   pretty (Acc a _)        = "!" <> pretty a
   pretty (Req a _)        = "?" <> pretty a
   pretty (Exists x a _)   = "∃ " <> pretty x <> " . " <> pretty a

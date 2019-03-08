@@ -53,7 +53,7 @@ putTermDefns (Program declarations _) = modify $ \ st -> st { stTermDefns = Map.
 --------------------------------------------------------------------------------
 -- |
 
--- checkAll :: Program Loc -> TCM [(Either InferError a, EnvState)]
+checkAll :: Program Loc -> TCM [Session]
 checkAll program = do
   -- checking the definitions
   checkDuplications program

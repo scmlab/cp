@@ -81,6 +81,7 @@ data Type
     deriving (Eq, Show)
 
 instance HasDual Type where
+    dual (Var a)        = Var (dual a)
     dual (Dual a)       = a
     dual (Times a b)    = Par (dual a) (dual b)
     dual (Par a b)      = Times (dual a) (dual b)

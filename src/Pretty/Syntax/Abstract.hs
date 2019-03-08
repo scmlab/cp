@@ -56,15 +56,15 @@ instance Pretty Process where
 instance Pretty Type where
   pretty (Var i)        = "$" <> pretty i
   pretty (Dual a)       = "^" <> pretty a
-  pretty (Times a b)    = pretty a <> "⊗" <> pretty b
-  pretty (Par a b)      = pretty a <> "⅋" <> pretty b
-  pretty (Plus a b)     = pretty a <> "⊕" <> pretty b
-  pretty (With a b)     = pretty a <> "&" <> pretty b
+  pretty (Times a b)    = pretty a <> " ⊗ " <> pretty b
+  pretty (Par a b)      = pretty a <> " ⅋ " <> pretty b
+  pretty (Plus a b)     = pretty a <> " ⊕ " <> pretty b
+  pretty (With a b)     = pretty a <> " & " <> pretty b
   pretty (Acc a)        = "!" <> pretty a
   pretty (Req a)        = "?" <> pretty a
   pretty (Exists x a)   = "∃ " <> pretty x <> " . " <> pretty a
   pretty (Forall x a)   = "∀ " <> pretty x <> " . " <> pretty a
-  pretty (One)          = "𝟙"
+  pretty (One)          = "1"
   pretty (Bot)          = "⊥"
-  pretty (Zero)         = "𝟘"
+  pretty (Zero)         = "0"
   pretty (Top)          = "⊤"

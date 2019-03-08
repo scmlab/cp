@@ -8,7 +8,7 @@ import Pretty.Syntax.Concrete ()
 
 import qualified Data.Map as Map
 import Data.Monoid ((<>))
-import Data.Text.Prettyprint.Doc hiding (line)
+import Data.Text.Prettyprint.Doc
 
 --------------------------------------------------------------------------------
 -- |

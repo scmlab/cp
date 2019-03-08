@@ -13,7 +13,10 @@ instance HasDual TypeVar where
   dual (Neg i) = Pos i
 
 instance Eq TypeVar where
-  (==) = (==) `on` dual
+  x == y = case (dual x, dual y) of
+    (Pos i , Pos j) -> i == j
+    (Neg i , Neg j) -> i == j
+    _ -> False
 
 --------------------------------------------------------------------------------
 -- | Duality
