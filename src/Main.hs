@@ -176,6 +176,8 @@ prettyInferError (ChannelsNotInContext term chan context) =
         <> (annotate (colorDull Blue) (pretty chan))
         <> " are not in the context"
         <> line
+        <> pretty context
+        <> line
         <> "when checking the following term"
     ] [locOf term]
 prettyInferError (ShouldBeTypeVar v) = prettyError "Channel type should be some variable" (Just $ pack $ show v) []

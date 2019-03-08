@@ -103,6 +103,7 @@ inferM term = do
 
 infer :: Term -> CrudeSession -> InferM Session
 infer term@(C.Compose x _ p q _) (Crude pairs var) = do
+
   -- instantiate a new type variable, ignore the annotated type for the moment
   t <- freshType
   -- generate fresh context variables
@@ -111,35 +112,44 @@ infer term@(C.Compose x _ p q _) (Crude pairs var) = do
   -- refine the target
   refineTargetCtx var (Session Map.empty $ Set.fromList [varP, varQ])
 
-  _ <- infer p (Crude (Map.insert x (Var t)        pairs) varP)
+  infer p (Crude (Map.insert x (Var t)        pairs) varP)
+
   _ <- infer q (Crude (Map.insert x (Var (dual t)) pairs) varQ)
 
   return $ Session pairs (Set.fromList [varP, varQ])
 
 
 
-infer term@(C.Output x y p q _) (Crude pairs var) = do
-  t <- getChannelTypeVar term x pairs
+infer term@(C.Output x y p q _) (Crude context others) = do
+  t <- getChannelTypeVar term x context
   -- instantiate some new type variables
   u <- freshType
   v <- freshType
   let newType = Times (Var u) (Var v)
+
+
+
   -- replace t with (Times u v)
   refineTargetType t newType
   -- generate fresh context variables
   varP <- freshCtx
   varQ <- freshCtx
   -- split the context
-  refineTargetCtx var (Session Map.empty $ Set.fromList [varP, varQ])
+  refineTargetCtx others (Session Map.empty $ Set.fromList [varP, varQ])
+
+  let context' = Map.delete x context
 
 
-  _ <- infer p (Crude (Map.insert y (Var u) pairs) varP)
-  _ <- infer q (Crude (Map.insert x (Var v) pairs) varQ)
 
-  return $ Session (Map.insert x newType pairs) (Set.fromList [varP, varQ])
+  _ <- infer p (Crude (Map.insert y (Var u) context') varP)
+  _ <- infer q (Crude (Map.insert x (Var v) context') varQ)
+
+  return $ Session (Map.insert x newType context') (Set.fromList [varP, varQ])
 
 infer term@(C.Input x y p _) (Crude context others) = do
   t <- getChannelTypeVar term x context
+  let context' = Map.delete x context
+
   -- instantiate some new type variables
   u <- freshType
   v <- freshType
@@ -147,9 +157,10 @@ infer term@(C.Input x y p _) (Crude context others) = do
   let newType = Par (Var u) (Var v)
   refineTargetType t newType
 
-  _ <- infer p (Crude (Map.insert y (Var u) $ Map.insert x (Var t) context) others)
+  infer p (Crude (Map.insert y (Var u) $ Map.insert x (Var t) context') others)
 
-  return $ Session (Map.insert x newType context) (Set.fromList [others])
+
+  return $ Session (Map.insert x newType context') (Set.fromList [others])
 
 infer term@(C.EmptyOutput x _) (Crude context others) = do
   checkChannelsInContext term (Set.singleton x) context
@@ -192,7 +203,8 @@ refineTargetCtx var (Session pairs' vars') = do
 
 -- substitute some type variable with some type
 refineTargetType :: TypeVar -> Type -> InferM ()
-refineTargetType var t = modifyPairs (Map.map (substitute var t))
+refineTargetType var t = do
+  modifyPairs (Map.map (substitute var t))
 
 -- replace a type variable in some type with another type
 substitute :: TypeVar -> Type -> Type -> Type
@@ -210,6 +222,7 @@ substitute var new (Req t) = Req (substitute var new t)
 substitute var new (Exists t u) = Exists t (substitute var new u)
 substitute var new (Forall t u) = Forall t (substitute var new u)
 substitute _ _ others = others
+
 
 -- unify :: Type -> Type -> InferM ()
 -- unify (Var i)  t        = modifyPairs (Map.map (substitute i t))
