@@ -13,7 +13,7 @@ import Data.Text.Prettyprint.Doc hiding (line)
 --------------------------------------------------------------------------------
 -- |
 
-instance Pretty Context where
+instance Pretty Session where
   pretty pairs = vsep $ map (\(k, v) -> pretty k <> " : " <> pretty v) $ Map.toList pairs
 
 -- instance Pretty Session where

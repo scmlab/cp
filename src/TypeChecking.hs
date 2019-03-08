@@ -36,10 +36,6 @@ data TypeError = TypeSigDuplicated (TermName Loc) (TermName Loc)
 
 type TCM = ExceptT TypeError (State TCState)
 
-runInferM :: InferM a -> (Either InferError a, InferState)
-runInferM program = runState (runExceptT program) initInferState
-
-
 putTypeSigs :: Program Loc -> TCM ()
 putTypeSigs (Program declarations _) = modify $ \ st -> st { stTypeSigs = Map.fromList (mapMaybe toPair declarations) }
   where
@@ -81,10 +77,9 @@ checkAll program = do
   -- inference
   termDefns <- Map.toList <$> gets stTermDefns
   forM termDefns $ \ (_, term) -> do
-    let (result, s) = runInferM $ inferM term
-    case result of
+    case infer term of
       Left e -> throwError $ InferError e
-      Right t -> return (t, s)
+      Right session -> return session
 
 -- there should be only at most one type signature or term definition
 checkDuplications :: Program Loc -> TCM ()
