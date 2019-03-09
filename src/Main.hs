@@ -170,6 +170,9 @@ prettyTypeError (InferError a) =
 prettyTypeError (Others msg) =
   prettyError "Other unformatted type errors" (Just msg) []
 
+highlight :: Pretty a => a -> Doc AnsiStyle
+highlight = annotate (colorDull Blue) . pretty
+
 prettyInferError :: InferError -> M (Doc AnsiStyle)
 prettyInferError (General msg) = prettyError "Other unformatted inference errors" (Just msg) []
 -- prettyInferError (ChannelsNotInContext term chan context) = prettyError "Channel not in context" (Just $ pack $ show chan ++ "\n" ++ show context) [locOf term]
@@ -191,6 +194,14 @@ prettyInferError (General msg) = prettyError "Other unformatted inference errors
 --         <> line
 --         <> "when checking the following term"
 --     ] [locOf term]
+prettyInferError (CannotAppearInside term chan) =
+  prettyError' "Channel not allowed"
+    [ "channel "
+        <> highlight chan <> " is not allowed"
+        <> line
+        <> "to appear in the following term"
+    ] [locOf term]
+
 prettyInferError (CannotUnify term a b a' b') =
   prettyError' "Cannot unify types"
     [ highlight a' <> " in " <> highlight a
@@ -202,5 +213,4 @@ prettyInferError (CannotUnify term a b a' b') =
         <> "when checking the following term"
     ] [locOf term]
 
-  where highlight = annotate (colorDull Blue) . pretty
 prettyInferError e = prettyError "" (Just $ pack $ show $ e) []

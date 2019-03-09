@@ -92,8 +92,8 @@ data InferError
   -- | ChannelsNotInContext Term (Set Chan) Session
   -- | ShouldBeTypeVar Term Type
   | CannotUnify Term Type Type Type Type
-  | ToManyContextVariablesToStartWith Term (Set CtxVar)
-  | NoContextVariableToStartWith Term
+  | ContextShouldBeAllRequesting Term Session
+  | CannotAppearInside Term Chan
   -- | NoContextVariableForRefining Term
   -- | CannotAlignChannel Term Chan (Set CtxVar) (Set CtxVar)
   | ChannelNotComsumed Term Session
@@ -160,6 +160,8 @@ infer term session = case term of
 
   C.Input x y p _ -> do
 
+    traceShow session $ return ()
+
     (a, session') <- infer p session >>= extractChannel y
     (b, session'') <- extractChannel x session'
 
@@ -167,6 +169,12 @@ infer term session = case term of
     return
       $ Map.insert x t
       $ session''
+
+  C.Accept x y p _ -> do
+
+    (a, session') <- infer p session >>= extractChannel y
+    error $ show (a, session')
+    -- checkContextWhenAccept term session'
 
   C.EmptyOutput x _ -> do
 
@@ -185,9 +193,11 @@ infer term session = case term of
 
     session''' <- infer p session''
 
-    return
-      $ Map.insert x t'
-      $ session'''
+    if Map.member x session'''
+      then throwError $ CannotAppearInside p x
+      else return
+            $ Map.insert x t'
+            $ session'''
 
 
   _ -> undefined
@@ -270,7 +280,17 @@ unify a b = runState (runExceptT (run a b)) []
     run Bot          Bot          = return Bot
     run t            v            = throwError (t, v)
 
+-- all channels should be requesting something
+checkContextWhenAccept :: Term -> Session -> InferM ()
+checkContextWhenAccept term session = do
+  let result = List.all requesting $ Map.toList session
+  unless result $
+    throwError $ ContextShouldBeAllRequesting term session
 
+  where
+    requesting :: (Chan, Type) -> Bool
+    requesting (_, Acc _) = True
+    requesting (_,     _) = False
 
 --
 -- -- keep running until the frontier stack is empty
