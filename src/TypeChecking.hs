@@ -77,7 +77,7 @@ checkAll program = do
   -- inference
   termDefns <- Map.toList <$> gets stTermDefns
   forM termDefns $ \ (_, term) -> do
-    case infer term of
+    case inferTerm term of
       Left e -> throwError $ InferError e
       Right session -> return session
 
