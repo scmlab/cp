@@ -13,4 +13,8 @@
 
 -- link = \ x : 1 . (x <-> w | x[].end)
 
--- acc = !x(y) . x() . y[] . end
+-- acc = !x(y) . y[] . end
+
+-- req = ?y[z] . z[] .end
+
+cut = \ x : 1 . (!x(y) . y[] . end | ?x[y] . y() . z[]. end)

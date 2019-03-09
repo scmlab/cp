@@ -213,4 +213,17 @@ prettyInferError (CannotUnify term a b a' b') =
         <> "when checking the following term"
     ] [locOf term]
 
+prettyInferError (ContextShouldBeAllRequesting term session) =
+  prettyError' "Channels should all be requesting"
+    [ "there are some channels"
+        <> line
+        <> "that are not requesting anything"
+        <> line
+        <> line
+        <> indent 2 (pretty session)
+        <> line
+        <> line
+        <> "when checking the following term"
+    ] [locOf term]
+
 prettyInferError e = prettyError "" (Just $ pack $ show $ e) []

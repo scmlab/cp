@@ -173,8 +173,25 @@ infer term session = case term of
   C.Accept x y p _ -> do
 
     (a, session') <- infer p session >>= extractChannel y
-    error $ show (a, session')
-    -- checkContextWhenAccept term session'
+    checkContextWhenAccept term session'
+
+    if Map.member x session'
+      then throwError $ CannotAppearInside p x
+      else return
+            $ Map.insert x (Acc a)
+            $ session'
+
+  C.Request x y p _ -> do
+
+    (a, session') <- infer p session >>= extractChannel y
+
+    if Map.member x session'
+      then throwError $ CannotAppearInside p x
+      else return
+            $ Map.insert x (Req a)
+            $ session'
+
+    -- error $ show (a, session')
 
   C.EmptyOutput x _ -> do
 
