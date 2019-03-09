@@ -9,6 +9,7 @@ import Prelude hiding (lookup)
 import Control.Monad.State
 import Control.Monad.Except
 
+import Data.Bifunctor
 import qualified Data.List as List
 import Data.Loc (Loc, locOf)
 -- import Data.IntMap (IntMap)
@@ -30,7 +31,9 @@ type Term = C.Process Loc
 
 type CtxVar = Int
 
-type Session = Map Chan Type
+data Alignment = Aligned | Undecided (Set CtxVar)
+  deriving (Show)
+type Session = Map Chan (Alignment, Type)
 data Judgement = Judgement Term Session (Set CtxVar)
   deriving (Show)
 
@@ -97,6 +100,7 @@ data InferError
   | ToManyContextVariablesToStartWith Term (Set CtxVar)
   | NoContextVariableToStartWith Term
   | NoContextVariableForRefining Term
+  | CannotAlignChannel Term Chan (Set CtxVar) (Set CtxVar)
   -- | CannotUnifyContext Context Context
 --   | VarNotFresh Var (Maybe Term)
   deriving (Show)
@@ -131,48 +135,71 @@ run = do
 step :: Judgement -> InferM [Judgement]
 step judgement@(Judgement term session ctxs) = case term of
 
+  C.Link x y _ -> do
+
+    (varX, session', ctx) <- extractChannel judgement x
+    let judgement' = Judgement term (Map.insert x (Aligned, varX) session') (Set.singleton ctx)
+    (varY, session'', ctx') <- extractChannel judgement' y
+
+    traceShow session'' $ return ()
+
+    _ <- unify varX (dual varY)
+    -- mark context variables empty
+    refineContext ctx' Map.empty Set.empty
+    return []
+
+
+
   C.Compose x _ p q _ -> do
 
     t <- freshType
 
     ctx <- extractCtxVar term ctxs
+
+
+    -- split context
     ctxP <- freshCtx
     ctxQ <- freshCtx
-    refineContext ctx Map.empty (Set.fromList [ctxP, ctxQ])
+    let ctx' = Set.fromList [ctxP, ctxQ]
+    refineContext ctx Map.empty ctx'
+    let sessionP = markAllUndecided ctx' session
+    let sessionQ = markAllUndecided ctx' session
+
 
     return
-      [ Judgement q (Map.insert x (dual (Var t)) session) (Set.singleton ctxQ)
-      , Judgement p (Map.insert x (      Var t ) session) (Set.singleton ctxP)
+      [ Judgement q (Map.insert x (Aligned, dual (Var t)) sessionP) (Set.singleton ctxQ)
+      , Judgement p (Map.insert x (Aligned,       Var t ) sessionQ) (Set.singleton ctxP)
       ]
-
-
 
 
   C.Output x y p q _ -> do
 
-    (var, ctx) <- extractChannel judgement x
+    (var, session', ctx) <- extractChannel judgement x
+
 
     -- form new type
     a <- freshType
     b <- freshType
     let t = Times (Var a) (Var b)
-    -- refine "var" with "a ⊗ b"
-    t' <- unify var t
+    _ <- unify var t
 
-    -- instantiate new context variables
+    -- split context
     ctxP <- freshCtx
     ctxQ <- freshCtx
-    -- replace "ctx" with the new stuff
-    refineContext ctx (Map.fromList [(x, t')]) (Set.fromList [ctxP, ctxQ])
+    let ctx' = Set.fromList [ctxP, ctxQ]
+    refineContext ctx Map.empty ctx'
+    let sessionP = markAllUndecided ctx' session'
+    let sessionQ = markAllUndecided ctx' session'
+
 
     return
-      [ Judgement q (Map.insert x (Var b) session) (Set.singleton ctxQ)
-      , Judgement p (Map.insert y (Var a) session) (Set.singleton ctxP)
+      [ Judgement q (Map.insert x (Aligned, Var b) sessionP) (Set.singleton ctxQ)
+      , Judgement p (Map.insert y (Aligned, Var a) sessionQ) (Set.singleton ctxP)
       ]
 
   C.Input x y p _ -> do
 
-    (var, ctx) <- extractChannel judgement x
+    (var, session', ctx) <- extractChannel judgement x
 
 
     -- form new type
@@ -183,33 +210,33 @@ step judgement@(Judgement term session ctxs) = case term of
     -- refine
     _ <- unify var t
 
+    let session'' = Map.insert y (Aligned, Var a)
+                    $ Map.insert x (Aligned, Var b) session'
     return
-      [ Judgement p (Map.insert y (Var a) $ Map.insert x (Var b) session) (Set.singleton ctx)
+      [ Judgement p session'' (Set.singleton ctx)
       ]
 
   C.EmptyOutput x _ -> do
 
-
-    (var, ctx) <- extractChannel judgement x
-    unify var One
+    (var, _, ctx) <- extractChannel judgement x
+    _ <- unify var One
+    -- mark context variables empty
     refineContext ctx Map.empty Set.empty
     return []
 
   C.EmptyInput x p _ -> do
 
-
-    (var, ctx) <- extractChannel judgement x
-
-    unify var Bot
+    (var, session', ctx) <- extractChannel judgement x
+    _ <- unify var Bot
 
     return
-      [ Judgement p session (Set.singleton ctx)
+      [ Judgement p session' (Set.singleton ctx)
       ]
 
 
   _ -> undefined
 
-extractChannel :: Judgement -> Chan -> InferM (Type, CtxVar)
+extractChannel :: Judgement -> Chan -> InferM (Type, Session, CtxVar)
 extractChannel (Judgement term session ctxs) x = do
   case Map.lookup x session of
     -- "x" occured free
@@ -219,15 +246,45 @@ extractChannel (Judgement term session ctxs) x = do
       var <- freshType
       ctx' <- freshCtx
       -- replace "ctx" with "var" + "ctx'"
-      refineContext ctx (Map.fromList [(x, Var var)]) (Set.singleton ctx')
+      refineContext ctx (Map.fromList [(x, (Aligned, Var var))]) (Set.singleton ctx')
 
-      return (Var var, ctx')
+      return (Var var, session, ctx')
 
-    -- "x" found, return its type
-    Just t -> do
+    -- "x" found, aligned
+    Just (Aligned, t) -> do
       ctx <- extractCtxVar term ctxs
-      return (t, ctx)
+      let session' = Map.delete x session
+      return (t, session', ctx)
 
+    -- "x" found, alignment undecided
+    Just (Undecided factions, t) -> do
+      ctx <- extractCtxVar term ctxs
+      if Set.member ctx factions
+        then do
+          refineAlignment x factions ctx
+          let session' = Map.delete x session
+          return (t, session', ctx)
+        else throwError $ CannotAlignChannel term x factions ctxs
+
+refineAlignment :: Chan -> Set CtxVar -> CtxVar -> InferM ()
+refineAlignment chan ctxs ctx = do
+  let refine (Judgement term ss cs) =
+        if cs == ctxs
+          then Judgement term (markAligned chan ss) cs
+          else Judgement term ss cs
+  -- refine the result session
+  modifyResult refine
+  -- refine the frontier stack
+  modifyFrontier (map refine)
+
+markAligned :: Chan -> Session -> Session
+markAligned = Map.adjust (\(_,t) -> (Aligned, t))
+
+markAllUndecided :: Set CtxVar -> Session -> Session
+markAllUndecided ctxs = Map.map mark
+  where
+    mark (Undecided a, t) = (Undecided a, t)
+    mark (Aligned, t) = (Undecided ctxs, t)
 
     -- do
     --   when (t /= One) $ throwError $ CannotUnify t One
@@ -263,12 +320,12 @@ refineContext var session ctxs = do
 
 refineType :: TypeVar -> Type -> InferM ()
 refineType var t = do
+  let refine (Judgement term ss cs) =
+        Judgement term (Map.map (second (substitute var t)) ss) cs
   -- refine the result session
-  modifyResult $ \ (Judgement term ss cs) ->
-    Judgement term (Map.map (substitute var t) ss) cs
+  modifyResult refine
   -- refine the frontier stack
-  modifyFrontier $ map $ \ (Judgement term ss cs) ->
-    Judgement term (Map.map (substitute var t) ss) cs
+  modifyFrontier (map refine)
 
 -- replace a type variable in some type with another type
 substitute :: TypeVar -> Type -> Type -> Type
