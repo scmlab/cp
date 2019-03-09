@@ -89,13 +89,13 @@ freshCtx = do
 
 data InferError
   = General Text
-  | ChannelsNotInContext Term (Set Chan) Session
-  | ShouldBeTypeVar Term Type
+  -- | ChannelsNotInContext Term (Set Chan) Session
+  -- | ShouldBeTypeVar Term Type
   | CannotUnify Term Type Type Type Type
   | ToManyContextVariablesToStartWith Term (Set CtxVar)
   | NoContextVariableToStartWith Term
-  | NoContextVariableForRefining Term
-  | CannotAlignChannel Term Chan (Set CtxVar) (Set CtxVar)
+  -- | NoContextVariableForRefining Term
+  -- | CannotAlignChannel Term Chan (Set CtxVar) (Set CtxVar)
   | ChannelNotComsumed Term Session
   deriving (Show)
 
@@ -133,30 +133,26 @@ infer term session = case term of
 
   C.Compose x _ p q _ -> do
 
-    sessionP <- infer p session
-    (t, sessionP') <- extractChannel x sessionP
+    (t, sessionP) <- infer p session >>= extractChannel x
 
-    let session' = Map.difference session sessionP'
-    sessionQ <- infer q session'
-    (u, sessionQ') <- extractChannel x sessionQ
+    -- splitting the context
+    let session' = Map.difference session sessionP
+    (u, sessionQ) <- infer q session' >>= extractChannel x
 
 
-    let session'' = Map.union sessionP'  sessionQ'
-
+    let session'' = Map.union sessionP sessionQ
     (v, session''') <- unifyAndSubstitute term t (dual u) session''
 
     return session'''
 
   C.Output x y p q _ -> do
 
-    sessionP <- infer p session
-    (a, sessionP') <- extractChannel y sessionP
+    (a, sessionP) <- infer p session >>= extractChannel y
 
-    let session' = Map.difference session sessionP'
-    sessionQ <- infer q session'
-    (b, sessionQ') <- extractChannel x sessionQ
+    let session' = Map.difference session sessionP
+    (b, sessionQ) <- infer q session' >>= extractChannel x
 
-    let session'' = Map.union sessionP' sessionQ'
+    let session'' = Map.union sessionP sessionQ
     let t = Times a b
     return
       $ Map.insert x t

@@ -173,24 +173,24 @@ prettyTypeError (Others msg) =
 prettyInferError :: InferError -> M (Doc AnsiStyle)
 prettyInferError (General msg) = prettyError "Other unformatted inference errors" (Just msg) []
 -- prettyInferError (ChannelsNotInContext term chan context) = prettyError "Channel not in context" (Just $ pack $ show chan ++ "\n" ++ show context) [locOf term]
-prettyInferError (ChannelsNotInContext term chan context) =
-  prettyError' "Channel not in context"
-    [ "these channels "
-        <> (annotate (colorDull Blue) (pretty chan))
-        <> " are not in the context"
-        <> line
-        <> pretty context
-        <> line
-        <> "when checking the following term"
-    ] [locOf term]
-prettyInferError (ShouldBeTypeVar term t) =
-  prettyError' "Channel type should be some variable"
-    [ "the type"
-        <> (annotate (colorDull Blue) (pretty t))
-        <> " should be some type variable"
-        <> line
-        <> "when checking the following term"
-    ] [locOf term]
+-- prettyInferError (ChannelsNotInContext term chan context) =
+--   prettyError' "Channel not in context"
+--     [ "these channels "
+--         <> (annotate (colorDull Blue) (pretty chan))
+--         <> " are not in the context"
+--         <> line
+--         <> pretty context
+--         <> line
+--         <> "when checking the following term"
+--     ] [locOf term]
+-- prettyInferError (ShouldBeTypeVar term t) =
+--   prettyError' "Channel type should be some variable"
+--     [ "the type"
+--         <> (annotate (colorDull Blue) (pretty t))
+--         <> " should be some type variable"
+--         <> line
+--         <> "when checking the following term"
+--     ] [locOf term]
 prettyInferError (CannotUnify term a b a' b') =
   prettyError' "Cannot unify types"
     [ highlight a' <> " in " <> highlight a
@@ -203,3 +203,4 @@ prettyInferError (CannotUnify term a b a' b') =
     ] [locOf term]
 
   where highlight = annotate (colorDull Blue) . pretty
+prettyInferError e = prettyError "" (Just $ pack $ show $ e) []
