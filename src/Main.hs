@@ -191,4 +191,15 @@ prettyInferError (ShouldBeTypeVar term t) =
         <> line
         <> "when checking the following term"
     ] [locOf term]
-prettyInferError (CannotUnify a b) = prettyError "Cannot unify" (Just $ pack $ show a ++ "\n" ++ show b) []
+prettyInferError (CannotUnify term a b a' b') =
+  prettyError' "Cannot unify types"
+    [ highlight a' <> " in " <> highlight a
+        <> line
+        <> "doesn't match with "
+        <> line
+        <> highlight b' <> " in " <> highlight b
+        <> line
+        <> "when checking the following term"
+    ] [locOf term]
+
+  where highlight = annotate (colorDull Blue) . pretty

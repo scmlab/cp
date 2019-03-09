@@ -91,7 +91,7 @@ data InferError
   = General Text
   | ChannelsNotInContext Term (Set Chan) Session
   | ShouldBeTypeVar Term Type
-  | CannotUnify Type Type
+  | CannotUnify Term Type Type Type Type
   | ToManyContextVariablesToStartWith Term (Set CtxVar)
   | NoContextVariableToStartWith Term
   | NoContextVariableForRefining Term
@@ -124,7 +124,7 @@ infer term session = case term of
       throwError $ ChannelNotComsumed term session''
 
 
-    (t, session''') <- unifyAndSubstitute a (dual b) session''
+    (t, session''') <- unifyAndSubstitute term a (dual b) session''
 
     return
       $ Map.insert x t
@@ -143,11 +143,34 @@ infer term session = case term of
 
     let session'' = Map.union sessionP'  sessionQ'
 
-    (v, session''') <- unifyAndSubstitute t (dual u) session''
+    (v, session''') <- unifyAndSubstitute term t (dual u) session''
 
+    return session'''
+
+  C.Output x y p q _ -> do
+
+    sessionP <- infer p session
+    (a, sessionP') <- extractChannel y sessionP
+
+    let session' = Map.difference session sessionP'
+    sessionQ <- infer q session'
+    (b, sessionQ') <- extractChannel x sessionQ
+
+    let session'' = Map.union sessionP' sessionQ'
+    let t = Times a b
     return
-      $ Map.insert x v
-      $ session'''
+      $ Map.insert x t
+      $ session''
+
+  C.Input x y p _ -> do
+
+    (a, session') <- infer p session >>= extractChannel y
+    (b, session'') <- extractChannel x session'
+
+    let t = Par a b
+    return
+      $ Map.insert x t
+      $ session''
 
   C.EmptyOutput x _ -> do
 
@@ -158,6 +181,18 @@ infer term session = case term of
     return $ Map.fromList
       [ (x, One)
       ]
+
+  C.EmptyInput x p _ -> do
+
+    (t, session') <- extractChannel x session
+    (t', session'') <- unifyAndSubstitute term t Bot session'
+
+    session''' <- infer p session''
+
+    return
+      $ Map.insert x t'
+      $ session'''
+
 
   _ -> undefined
 
@@ -171,12 +206,19 @@ extractChannel chan session = do
       let session' = Map.delete chan session
       return (t, session')
 
-unifyAndSubstitute :: Type -> Type -> Session -> InferM (Type, Session)
-unifyAndSubstitute a b session = do
-    (t, subst) <- unify a (dual b)
-    let session' = execSubstituton session subst
-    return (t, session')
+unifyAndSubstitute :: Term -> Type -> Type -> Session -> InferM (Type, Session)
+unifyAndSubstitute term a b session = do
+    let (result, subst) = unify a b
+    case result of
+      Left (t, u) -> throwError $ CannotUnify term a b t u
+      Right t -> do
+        let session' = execSubstituton session subst
+        return (t, session')
 
+-- let (result, state) = runState (runExceptT (run a b)) []
+-- case result of
+--   Left (t, u) -> throwError $ CannotUnify t u
+--   Right t -> return (t, state)
     where
       execSubstituton :: Session -> [Substitution] -> Session
       execSubstituton = foldr $ \ (Substitute var t) -> Map.map (substitute var t)
@@ -206,12 +248,8 @@ data Substitution = Substitute TypeVar Type
 type UniError = (Type, Type)
 type UniM = ExceptT UniError (State [Substitution])
 
-unify :: Type -> Type -> InferM (Type, [Substitution])
-unify a b = do
-  let (result, state) = runState (runExceptT (run a b)) []
-  case result of
-    Left (t, u) -> throwError $ CannotUnify t u
-    Right t -> return (t, state)
+unify :: Type -> Type -> (Either (Type, Type) Type, [Substitution])
+unify a b = runState (runExceptT (run a b)) []
   where
     run :: Type -> Type -> UniM Type
     run (Var    i  ) v            = do

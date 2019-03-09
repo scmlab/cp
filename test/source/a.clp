@@ -9,6 +9,6 @@
 -- run = x[].end
 
 
--- run = \ x: 1 . (x[y] . (y[].end | x[].end) | x(w).x().w[].end)
+run = \ x: 1 . (x[y] . (y[].end | x[].end) | x(w).x().w[].end)
 
-link = \ x : 1 . (x <-> w | x[].end)
+-- link = \ x : 1 . (x <-> w | x[].end)
