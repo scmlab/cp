@@ -268,6 +268,7 @@ instance ToAbstract (Type ann) A.Type where
         A.Exists
             x
             (toAbstract t)
+            Nothing
     toAbstract (Forall x t _) =
         A.Forall
             x

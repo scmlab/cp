@@ -67,12 +67,13 @@ data Type
     | Acc Type
     -- why not?
     | Req Type
-    -- existential
-    | Exists TypeVar Type
-    -- | Exists TypeVar -- X: the type variable to be substituted
-    --     Type    -- A: the type to be substituted with
-    --     TypeVar -- B: the type variable representing the type before substitution
-    --     Type    -- C: the resulting type after substitution
+    -- existential:   snd = B {fst / X}
+    | Exists
+        TypeVar   -- X: the type variable to be substituted
+        Type      -- B: the type (variable) representing the type before substitution
+        (Maybe (Type, Type)) -- extra information, useful when composing with Forall
+           -- fst: the type to be substituted with
+           -- snd: the resulting type after substitution
     -- universal
     | Forall TypeVar Type
     -- 1: unit for Times ⊗
@@ -94,8 +95,8 @@ instance HasDual Type where
   dual (With a b)       = Plus (dual a) (dual b)
   dual (Acc a)          = Req (dual a)
   dual (Req a)          = Acc (dual a)
-  dual (Exists x a)     = Forall x (dual a)
-  dual (Forall x a)     = Exists x (dual a)
+  dual (Exists x a _)   = Forall x (dual a)
+  dual (Forall x a)     = Exists x (dual a) Nothing
   dual One              = Bot
   dual Bot              = One
   dual Zero             = Top

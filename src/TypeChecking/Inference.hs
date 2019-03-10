@@ -193,8 +193,9 @@ infer term session = case term of
   C.OutputT x t p _ -> do
 
     (u, session') <- infer p session >>= extractChannel x
+    v <- freshType
     return
-      $ Map.insert x (Exists Unknown u)
+      $ Map.insert x (Exists Unknown (Var v) (Just (C.toAbstract t, u)))
       $ session'
 
   C.InputT x t p _ -> do
@@ -270,7 +271,7 @@ unifyAndSubstitute term a b session = do
       substitute var new (With t u)     = With (substitute var new t) (substitute var new u)
       substitute var new (Acc t)        = Acc (substitute var new t)
       substitute var new (Req t)        = Req (substitute var new t)
-      substitute var new (Exists t u)   = Exists t (substitute var new u)
+      substitute var new (Exists t u _)   = Exists t (substitute var new u) Nothing
       substitute var new (Forall t u)   = Forall t (substitute var new u)
       substitute _   _   others         = others
 
@@ -301,7 +302,7 @@ unify a b = runState (runExceptT (run a b)) []
     run (With     t u)  (With     v w)  = With   <$> run t v <*> run u w
     run (Acc      t  )  (Acc      v  )  = run t v
     run (Req      t  )  (Req      v  )  = run t v
-    run (Exists   _ u)  (Exists   _ w)  = run u w
+    run (Exists   _ u _)  (Exists   _ w _)  = run u w
     run (Forall   _ u)  (Forall   _ w)  = run u w
     run One             One             = return One
     run Top             Top             = return Top

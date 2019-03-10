@@ -62,7 +62,8 @@ instance Pretty Type where
   pretty (With a b)     = pretty a <> " & " <> pretty b
   pretty (Acc a)        = "!" <> pretty a
   pretty (Req a)        = "?" <> pretty a
-  pretty (Exists x a)   = "∃ " <> pretty x <> " . " <> pretty a
+  pretty (Exists x a Nothing)   = "∃ " <> pretty x <> " . " <> pretty a
+  pretty (Exists x a (Just (b, c)))   = pretty a <> " { " <> pretty b <> " / " <> pretty x <>  " } = " <> pretty c
   pretty (Forall x a)   = "∀ " <> pretty x <> " . " <> pretty a
   pretty (One)          = "1"
   pretty (Bot)          = "⊥"
