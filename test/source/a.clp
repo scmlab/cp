@@ -19,6 +19,7 @@
 
 -- acc_req_cut = \ x : 1 . (!x(y) . y[] . end | ?x[y] . y() . z[]. end)
 
--- zero = x(X) . x(s) . x(z) . z <-> x
+-- ex = x[1] . x[].end
 
-ex = x[1] . x[].end
+zero = x($1) . x(s) . x(z) . z <-> x
+ping = x[1] . x[s] . (!s(f).f(a).a().?y[u].u().f[].end | x[z].(z[].end | x().w[]. end))

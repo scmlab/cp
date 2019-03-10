@@ -160,8 +160,6 @@ infer term session = case term of
 
   C.Input x y p _ -> do
 
-    traceShow session $ return ()
-
     (a, session') <- infer p session >>= extractChannel y
     (b, session'') <- extractChannel x session'
 
@@ -195,22 +193,25 @@ infer term session = case term of
   C.OutputT x t p _ -> do
 
     (u, session') <- infer p session >>= extractChannel x
-    error $ show (u, session')
-    --
-    -- if Map.member x session'
-    --   then throwError $ CannotAppearInside p x
-    --   else return
-    --         $ Map.insert x (Req a)
-    --         $ session'
+    return
+      $ Map.insert x (Exists Unknown u)
+      $ session'
+
+  C.InputT x t p _ -> do
+
+    (u, session') <- infer p session >>= extractChannel x
+    return
+      $ Map.insert x (Forall t u)
+      $ session'
+
   C.EmptyOutput x _ -> do
 
     (_, leftover) <- extractChannel x session
     unless (Map.null leftover) $
       throwError $ ChannelNotComsumed term leftover
 
-    return $ Map.fromList
-      [ (x, One)
-      ]
+    return
+      $ Map.fromList [(x, One)]
 
   C.EmptyInput x p _ -> do
 
@@ -317,7 +318,7 @@ checkContextWhenAccept term session = do
 
   where
     requesting :: (Chan, Type) -> Bool
-    requesting (_, Acc _) = True
+    requesting (_, Req _) = True
     requesting (_,     _) = False
 
 --

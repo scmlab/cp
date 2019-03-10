@@ -39,7 +39,7 @@ data Process
     -- output type: x[Y].P
     | OutputT TermName Type Process
     -- input type: x(Y).P
-    | InputT TermName TypeName Process
+    | InputT TermName TypeVar Process
     -- empty output: x[].0
     | EmptyOutput TermName
     -- empty input: x().P

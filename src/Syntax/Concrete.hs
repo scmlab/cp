@@ -36,7 +36,7 @@ data Process  ann = Link      (TermName ann) (TermName ann)                 ann
                   | Accept    (TermName ann) (TermName ann) (Process ann)   ann
                   | Request   (TermName ann) (TermName ann) (Process ann)   ann
                   | OutputT   (TermName ann) (Type     ann) (Process ann)   ann
-                  | InputT    (TermName ann) (TypeName ann) (Process ann)   ann
+                  | InputT    (TermName ann) TypeVar        (Process ann)   ann
                   | EmptyOutput              (TermName ann)                 ann
                   | EmptyInput               (TermName ann) (Process ann)   ann
                   | EmptyChoice              (TermName ann)                 ann
@@ -224,7 +224,7 @@ instance ToAbstract (Process ann) A.Process where
     toAbstract (InputT name typ proc _) =
         A.InputT
             (toAbstract name)
-            (toAbstract typ)
+            typ
             (toAbstract proc)
     toAbstract (EmptyOutput name _) =
         A.EmptyOutput

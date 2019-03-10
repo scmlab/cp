@@ -24,10 +24,10 @@ import Data.Text (Text)
 %token
         termName        { TokenTermName $$          }
         typeName        { TokenTypeName $$          }
+        typeVar         { TokenInt $$           }
         '='             { TokenDefn             }
         ':'             { TokenHasType          }
         '$'             { TokenVarPrefix        }
-        typeVar         { TokenInt $$           }
         '^'             { TokenDual             }
         '*'             { TokenTimes            }
         '%'             { TokenPar              }
@@ -88,8 +88,8 @@ Process :: {Process Loc}
     | s TermName '.' 'case' '(' Process ',' Process ')'           {% locate' $1 $ Choice $2 $6 $8 }
     | s '!' TermName '(' TermName ')' '.' Process {% locate' $1 $ Accept $3 $5 $8 }
     | s '?' TermName '[' TermName ']' '.' Process {% locate' $1 $ Request $3 $5 $8 }
-    | s TermName '[' Type ']' '.' Process     {% locate' $1 $ OutputT $2 $4 $7 }
-    | s TermName '(' TypeName ')' '.' Process     {% locate' $1 $ InputT $2 $4 $7 }
+    | s TermName '[' Type ']' '.' Process         {% locate' $1 $ OutputT $2 $4 $7 }
+    | s TermName '(' TypeVar ')' '.' Process      {% locate' $1 $ InputT $2 $4 $7 }
     | s TermName '[]' '.' 'end'                   {% locate' $1 $ EmptyOutput $2 }
     | s TermName '()' '.' Process                 {% locate' $1 $ EmptyInput $2 $5 }
     | s TermName '.' 'case()'                     {% locate' $1 $ EmptyChoice $2 }
@@ -126,6 +126,8 @@ Type4 :: {Type Loc}
 
 TypeVar :: {TypeVar}
     : '$' typeVar                               {% return (Pos $2) }
+    | '$' '0'                                   {% return (Pos 0) }
+    | '$' '1'                                   {% return (Pos 1) }
 
 TermName :: {TermName Loc}
     : termName                                {% locate $ TermName $1 }
