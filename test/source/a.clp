@@ -17,4 +17,8 @@
 
 -- req = ?y[z] . z[] .end
 
-cut = \ x : 1 . (!x(y) . y[] . end | ?x[y] . y() . z[]. end)
+-- acc_req_cut = \ x : 1 . (!x(y) . y[] . end | ?x[y] . y() . z[]. end)
+
+-- zero = x(X) . x(s) . x(z) . z <-> x
+
+ex = x[1] . x[].end

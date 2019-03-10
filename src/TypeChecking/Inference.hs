@@ -9,16 +9,16 @@ import Prelude hiding (lookup)
 import Control.Monad.State
 import Control.Monad.Except
 
-import Data.Bifunctor
+-- import Data.Bifunctor
 import qualified Data.List as List
-import Data.Loc (Loc, locOf)
+import Data.Loc (Loc)
 -- import Data.IntMap (IntMap)
 -- import qualified Data.IntMap as IntMap
 import Data.Map (Map)
 import qualified Data.Map as Map
-import qualified Data.Map.Merge.Lazy as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
+-- import qualified Data.Map.Merge.Lazy as Map
+-- import Data.Set (Set)
+-- import qualified Data.Set as Set
 import Data.Text (Text)
 
 import Debug.Trace
@@ -141,7 +141,7 @@ infer term session = case term of
 
 
     let session'' = Map.union sessionP sessionQ
-    (v, session''') <- unifyAndSubstitute term t (dual u) session''
+    (_, session''') <- unifyAndSubstitute term t (dual u) session''
 
     return session'''
 
@@ -190,12 +190,21 @@ infer term session = case term of
       else return
             $ Map.insert x (Req a)
             $ session'
-
     -- error $ show (a, session')
 
+  C.OutputT x t p _ -> do
+
+    (u, session') <- infer p session >>= extractChannel x
+    error $ show (u, session')
+    --
+    -- if Map.member x session'
+    --   then throwError $ CannotAppearInside p x
+    --   else return
+    --         $ Map.insert x (Req a)
+    --         $ session'
   C.EmptyOutput x _ -> do
 
-    (a, leftover) <- extractChannel x session
+    (_, leftover) <- extractChannel x session
     unless (Map.null leftover) $
       throwError $ ChannelNotComsumed term leftover
 
@@ -252,16 +261,17 @@ unifyAndSubstitute term a b session = do
         | var ==      var' = new
         | var == dual var' = dual new
         | otherwise        = Var var'
-      substitute var new (Dual t)     = Dual (substitute var new t)
-      substitute var new (Times t u)  = Times (substitute var new t) (substitute var new u)
-      substitute var new (Par t u)    = Par (substitute var new t) (substitute var new u)
-      substitute var new (Plus t u)   = Plus (substitute var new t) (substitute var new u)
-      substitute var new (With t u)   = With (substitute var new t) (substitute var new u)
-      substitute var new (Acc t)      = Acc (substitute var new t)
-      substitute var new (Req t)      = Req (substitute var new t)
-      substitute var new (Exists t u) = Exists t (substitute var new u)
-      substitute var new (Forall t u) = Forall t (substitute var new u)
-      substitute _   _   others       = others
+      -- substitute var new (Subst t x u)  = Subst (substitute var new t) x (substitute var new u)
+      substitute var new (Dual t)       = Dual (substitute var new t)
+      substitute var new (Times t u)    = Times (substitute var new t) (substitute var new u)
+      substitute var new (Par t u)      = Par (substitute var new t) (substitute var new u)
+      substitute var new (Plus t u)     = Plus (substitute var new t) (substitute var new u)
+      substitute var new (With t u)     = With (substitute var new t) (substitute var new u)
+      substitute var new (Acc t)        = Acc (substitute var new t)
+      substitute var new (Req t)        = Req (substitute var new t)
+      substitute var new (Exists t u)   = Exists t (substitute var new u)
+      substitute var new (Forall t u)   = Forall t (substitute var new u)
+      substitute _   _   others         = others
 
 --------------------------------------------------------------------------------
 -- | Unification
@@ -275,27 +285,28 @@ unify :: Type -> Type -> (Either (Type, Type) Type, [Substitution])
 unify a b = runState (runExceptT (run a b)) []
   where
     run :: Type -> Type -> UniM Type
-    run (Var    i  ) v            = do
+    run (Var        i)  v               = do
       modify ((:) (Substitute i v))
       return v
-    run t            (Var    j  ) = do
+    run t               (Var        j)  = do
       modify ((:) (Substitute j t))
       return t
-    run (Dual   t  ) v            = run t        (dual v)
-    run t            (Dual   v  ) = run (dual t) v
-    run (Times  t u) (Times  v w) = Times  <$> run t v <*> run u w
-    run (Par    t u) (Par    v w) = Par    <$> run t v <*> run u w
-    run (Plus   t u) (Plus   v w) = Plus   <$> run t v <*> run u w
-    run (With   t u) (With   v w) = With   <$> run t v <*> run u w
-    run (Acc    t  ) (Acc    v  ) = run t v
-    run (Req    t  ) (Req    v  ) = run t v
-    run (Exists _ u) (Exists _ w) = run u w
-    run (Forall _ u) (Forall _ w) = run u w
-    run One          One          = return One
-    run Top          Top          = return Top
-    run Zero         Zero         = return Zero
-    run Bot          Bot          = return Bot
-    run t            v            = throwError (t, v)
+    -- run (Subst  t x u)  (Subst  v y w)  = Subst  <$> run t v <*> (modify ((:) (Substitute x (Var y))) >> return y) <*> run u w
+    run (Dual     t  )  v               = run t        (dual v)
+    run t               (Dual     v  )  = run (dual t) v
+    run (Times    t u)  (Times    v w)  = Times  <$> run t v <*> run u w
+    run (Par      t u)  (Par      v w)  = Par    <$> run t v <*> run u w
+    run (Plus     t u)  (Plus     v w)  = Plus   <$> run t v <*> run u w
+    run (With     t u)  (With     v w)  = With   <$> run t v <*> run u w
+    run (Acc      t  )  (Acc      v  )  = run t v
+    run (Req      t  )  (Req      v  )  = run t v
+    run (Exists   _ u)  (Exists   _ w)  = run u w
+    run (Forall   _ u)  (Forall   _ w)  = run u w
+    run One             One             = return One
+    run Top             Top             = return Top
+    run Zero            Zero            = return Zero
+    run Bot             Bot             = return Bot
+    run t               v               = throwError (t, v)
 
 -- all channels should be requesting something
 checkContextWhenAccept :: Term -> Session -> InferM ()

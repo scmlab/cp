@@ -6,7 +6,6 @@ import TypeChecking.Inference
 import Pretty.Syntax.Abstract ()
 import Pretty.Syntax.Concrete ()
 
-import qualified Data.Set as Set
 import qualified Data.Map as Map
 import Data.Monoid ((<>))
 import Data.Text.Prettyprint.Doc

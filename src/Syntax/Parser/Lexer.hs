@@ -23,6 +23,7 @@ tokenRE
   =   TokenDefn         <$ "="
   <|> TokenHasType      <$ ":"
   -- type
+  <|> TokenVarPrefix    <$ "$"
   <|> TokenDual         <$ "^"
   <|> TokenTimes        <$ "*"
   <|> TokenPar          <$ "%"
@@ -56,6 +57,7 @@ tokenRE
   <|> TokenEmptyChoice  <$ "case()"
   <|> TokenTypeName     <$> typeName
   <|> TokenTermName     <$> termName
+  <|> TokenInt          <$> intRe
 
 (+++) :: RE Char String -> RE Char String -> RE Char String
 (+++) = liftA2 (++)
@@ -86,9 +88,9 @@ labelRE = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isUpper c || is
 --     -- a backslash followed with any character but a newline
 --     secondPart1 :: RE Char String
 --     secondPart1 = string "\\" +++ msym (\c -> if c == '\n' then Nothing else Just [c])
---
--- intRE :: RE Char Int
--- intRE = read <$> some (psym isDigit)
+
+intRe :: RE Char Int
+intRe = read <$> some (psym isDigit)
 
 whitespaceRE :: RE Char Token
 whitespaceRE = matchWhen isSpace TokenWhitespace

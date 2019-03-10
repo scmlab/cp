@@ -37,7 +37,7 @@ data Process
     -- client request: ?x[y].P
     | Request TermName TermName Process
     -- output type: x[Y].P
-    | OutputT TermName TypeName Process
+    | OutputT TermName Type Process
     -- input type: x(Y).P
     | InputT TermName TypeName Process
     -- empty output: x[].0
@@ -53,6 +53,7 @@ data Process
 
 data Type
     = Var TypeVar
+    -- Subst B X A: B { A / X }
     | Dual Type
     -- A ⊗ B: output A then behave as B
     | Times Type Type
@@ -67,9 +68,13 @@ data Type
     -- why not?
     | Req Type
     -- existential
-    | Exists TermName Type
+    | Exists TypeVar Type
+    -- | Exists TypeVar -- X: the type variable to be substituted
+    --     Type    -- A: the type to be substituted with
+    --     TypeVar -- B: the type variable representing the type before substitution
+    --     Type    -- C: the resulting type after substitution
     -- universal
-    | Forall TermName Type
+    | Forall TypeVar Type
     -- 1: unit for Times ⊗
     | One
     -- ⊥: unit for Par ⅋
@@ -81,17 +86,17 @@ data Type
     deriving (Eq, Show)
 
 instance HasDual Type where
-    dual (Var a)        = Var (dual a)
-    dual (Dual a)       = a
-    dual (Times a b)    = Par (dual a) (dual b)
-    dual (Par a b)      = Times (dual a) (dual b)
-    dual (Plus a b)     = With (dual a) (dual b)
-    dual (With a b)     = Plus (dual a) (dual b)
-    dual (Acc a)        = Req (dual a)
-    dual (Req a)        = Acc (dual a)
-    dual (Exists x a)   = Forall x (dual a)
-    dual (Forall x a)   = Exists x (dual a)
-    dual One            = Bot
-    dual Bot            = One
-    dual Zero           = Top
-    dual Top            = Zero
+  dual (Var a)          = Var (dual a)
+  dual (Dual a)         = a
+  dual (Times a b)      = Par (dual a) (dual b)
+  dual (Par a b)        = Times (dual a) (dual b)
+  dual (Plus a b)       = With (dual a) (dual b)
+  dual (With a b)       = Plus (dual a) (dual b)
+  dual (Acc a)          = Req (dual a)
+  dual (Req a)          = Acc (dual a)
+  dual (Exists x a)     = Forall x (dual a)
+  dual (Forall x a)     = Exists x (dual a)
+  dual One              = Bot
+  dual Bot              = One
+  dual Zero             = Top
+  dual Top              = Zero

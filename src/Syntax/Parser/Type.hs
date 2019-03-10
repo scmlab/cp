@@ -17,7 +17,10 @@ data Token
   --
   | TokenTermName Text -- for terms and variables
   | TokenTypeName Text -- for types
+  -- Literals
+  | TokenInt Int
   -- Types
+  | TokenVarPrefix
   | TokenDual
   | TokenTimes
   | TokenPar

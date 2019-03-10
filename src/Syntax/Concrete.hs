@@ -35,7 +35,7 @@ data Process  ann = Link      (TermName ann) (TermName ann)                 ann
                   | Choice    (TermName ann) (Process  ann) (Process ann)   ann
                   | Accept    (TermName ann) (TermName ann) (Process ann)   ann
                   | Request   (TermName ann) (TermName ann) (Process ann)   ann
-                  | OutputT   (TermName ann) (TypeName ann) (Process ann)   ann
+                  | OutputT   (TermName ann) (Type     ann) (Process ann)   ann
                   | InputT    (TermName ann) (TypeName ann) (Process ann)   ann
                   | EmptyOutput              (TermName ann)                 ann
                   | EmptyInput               (TermName ann) (Process ann)   ann
@@ -50,8 +50,8 @@ data Type ann = Var     TypeVar                     ann
               | With    (Type ann)      (Type ann)  ann
               | Acc     (Type ann)                  ann
               | Req     (Type ann)                  ann
-              | Exists  (TypeName ann)  (Type ann)  ann
-              | Forall  (TypeName ann)  (Type ann)  ann
+              | Exists  TypeVar         (Type ann)  ann
+              | Forall  TypeVar         (Type ann)  ann
               | One                                 ann
               | Bot                                 ann
               | Zero                                ann
@@ -266,11 +266,11 @@ instance ToAbstract (Type ann) A.Type where
             (toAbstract t)
     toAbstract (Exists x t _) =
         A.Exists
-            (toAbstract x)
+            x
             (toAbstract t)
     toAbstract (Forall x t _) =
         A.Forall
-            (toAbstract x)
+            x
             (toAbstract t)
     toAbstract (One _) = A.One
     toAbstract (Bot _) = A.Bot

@@ -2,9 +2,9 @@
 
 module Pretty where
 
-import Pretty.Syntax.Base
-import Pretty.Syntax.Concrete
-import Pretty.TypeChecking
+import Pretty.Syntax.Base ()
+import Pretty.Syntax.Concrete ()
+import Pretty.TypeChecking ()
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy.Char8 as BS
