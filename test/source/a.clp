@@ -19,7 +19,11 @@
 
 -- acc_req_cut = \ x : 1 . (!x(y) . y[] . end | ?x[y] . y() . z[]. end)
 
--- ex = x[1] . x[].end
 
 -- zero = x($1) . x(s) . x(z) . z <-> x
-ping = x[1] . x[s] . (!s(f).f(a).a().?y[u].u().f[].end | x[z].(z[].end | x().w[]. end))
+-- ping = x[1] . x[s] . (!s(f).f(a).a().?y[u].u().f[].end | x[z].(z[].end | x().w[]. end))
+
+-- ex1 = x[1] . x[].end
+-- forallBot = x($1) . x() . y[] .end
+
+test = \ x : 1 . (x[1] . x[].end | x($1) . x() . y[] .end)
