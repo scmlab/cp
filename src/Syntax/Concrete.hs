@@ -59,7 +59,7 @@ data Type ann = Var     TypeVar                     ann
               deriving (Show, Functor, Ord)
 
 instance HasDual (Type ann) where
-  dual (Var i l)        = Var (dual i) l
+  dual (Var i l)        = Dual (Var i l) l
   dual (Dual a _)       = a
   dual (Times a b l)    = Par (dual a) (dual b) l
   dual (Par a b l)      = Times (dual a) (dual b) l

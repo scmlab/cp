@@ -12,6 +12,6 @@ import Data.Text.Prettyprint.Doc.Render.Terminal
 -- |
 
 instance Pretty TypeVar where
-  pretty (Pos i)        = pretty i
-  pretty (Neg i)        = "^" <> pretty i
+  pretty (Nameless i)   = "$" <> pretty i
+  pretty (Named i)      = pretty i
   pretty Unknown        = "$_"

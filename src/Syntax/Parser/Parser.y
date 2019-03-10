@@ -125,9 +125,9 @@ Type4 :: {Type Loc}
     | 'Top'                                     {% locate $ Top }
 
 TypeVar :: {TypeVar}
-    : '$' typeVar                               {% return (Pos $2) }
-    | '$' '0'                                   {% return (Pos 0) }
-    | '$' '1'                                   {% return (Pos 1) }
+    : '$' typeVar                               {% return (Nameless $2) }
+    | '$' '0'                                   {% return (Nameless 0) }
+    | '$' '1'                                   {% return (Nameless 1) }
 
 TermName :: {TermName Loc}
     : termName                                {% locate $ TermName $1 }

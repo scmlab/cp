@@ -32,4 +32,5 @@
 
 
 x(s) . x(z) . z <-> x
+
 x[s] . (!s(f).f(a).a().?y[u].u().f[].end | x[z].(z[].end | x().w[]. end))

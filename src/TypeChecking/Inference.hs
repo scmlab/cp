@@ -36,7 +36,7 @@ freshType :: InferM TypeVar
 freshType = do
   i <- gets stTypeCount
   modify $ \ st -> st { stTypeCount = i + 1 }
-  return $ Pos i
+  return $ Nameless i
 
 --------------------------------------------------------------------------------
 -- | Error
@@ -249,7 +249,7 @@ unify a b = runState (runExceptT (run a b)) []
       -- substitute the ghost of ∃ with the body of ∀
       modify ((:) (Substitute ghost body))
       -- unify the substituted ghost with the substituted body
-      run (substitute var witness body) substituted 
+      run (substitute var witness body) substituted
     run (Forall   _ u)  (Forall   _ w)  = run u w
     run One             One             = return One
     run Top             Top             = return Top
@@ -261,7 +261,6 @@ unify a b = runState (runExceptT (run a b)) []
 substitute :: TypeVar -> Type -> Type -> Type
 substitute var new (Var var')
   | var ==      var' = new
-  | var == dual var' = dual new
   | otherwise        = Var var'
 substitute var new (Dual t)       = Dual (substitute var new t)
 substitute var new (Times t u)    = Times (substitute var new t) (substitute var new u)
