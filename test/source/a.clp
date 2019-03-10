@@ -29,3 +29,9 @@
 -- forallBot = x(A) . x() . y[] .end
 
 -- test = \ x : 1 . (x[1] . x[].end | x($1) . x() . y[] .end)
+
+-- right = x[inr].x[].end
+
+-- choose = \ x : 1 . (x[inr].x().y[].end | x.case( x[].end , x[].end ))
+
+empty_choose = \ x : 1 . (x[inr].x().y[].end | x.case())

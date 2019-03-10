@@ -15,7 +15,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
 
-import Debug.Trace
+-- import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- | State
@@ -46,6 +46,7 @@ data InferError
   | CannotUnify Term Type Type Type Type
   | ContextShouldBeAllRequesting Term Session
   | CannotAppearInside Term Chan
+  | ContextShouldBeTheSame Term Session
   | ChannelNotComsumed Term Session
   deriving (Show)
 
@@ -118,6 +119,31 @@ infer term session = case term of
       $ Map.insert x t
       $ session''
 
+  C.SelectL x p _ -> do
+    (a, session') <- infer p session >>= extractChannel x
+    b <- freshType
+    let t = Plus a (Var b)
+    return
+      $ Map.insert x t
+      $ session'
+
+  C.SelectR x p _ -> do
+    (b, session') <- infer p session >>= extractChannel x
+    a <- freshType
+    let t = Plus (Var a) b
+    return
+      $ Map.insert x t
+      $ session'
+
+  C.Choice x p q _ -> do
+    (a, sessionP) <- infer p session >>= extractChannel x
+    (b, sessionQ) <- infer q session >>= extractChannel x
+    checkContextShouldBeTheSame term sessionP sessionQ
+    let t = With a b
+    return
+      $ Map.insert x t
+      $ sessionP
+
   C.Accept x y p _ -> do
 
     (a, session') <- infer p session >>= extractChannel y
@@ -177,8 +203,14 @@ infer term session = case term of
             $ Map.insert x t'
             $ session'''
 
+  C.EmptyChoice x _ -> do
+    (t, session') <- extractChannel x session
+    (t', session'') <- unifyAndSubstitute term t Top session'
 
-  _ -> undefined
+    return
+      $ Map.insert x t'
+      $ session''
+
 
 extractChannel :: Chan -> Session -> InferM (Type, Session)
 extractChannel chan session = do
@@ -284,3 +316,11 @@ checkContextWhenAccept term session = do
     requesting :: (Chan, Type) -> Bool
     requesting (_, Req _) = True
     requesting (_,     _) = False
+
+checkContextShouldBeTheSame :: Term -> Session -> Session -> InferM ()
+checkContextShouldBeTheSame term a b = do
+  unless (a == b) $
+    throwError $ ContextShouldBeTheSame term $
+      Map.union
+        (Map.difference a b)
+        (Map.difference b a)
