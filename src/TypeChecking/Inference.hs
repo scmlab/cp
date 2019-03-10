@@ -1,7 +1,7 @@
 module TypeChecking.Inference where
 
 import qualified Syntax.Concrete as C
-import Syntax.Abstract (Type(..))
+import Syntax.Abstract (Type(..), TypeVar(..))
 import Syntax.Base
 
 import Prelude hiding (lookup)
@@ -152,7 +152,7 @@ infer term session = case term of
 
     (u, session') <- infer p session >>= extractChannel x
     return
-      $ Map.insert x (Forall t u)
+      $ Map.insert x (Forall (C.toAbstract t) u)
       $ session'
 
   C.EmptyOutput x _ -> do

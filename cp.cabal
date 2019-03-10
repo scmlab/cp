@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: ac540d1b933f999bf17315c007c8feacb9de4b69f9bbe9282b8f066174966dad
+-- hash: d7028e94ed05a5ef4fde9ae04bc0f7c49c04b39ae4c28ae7c6349ccffc6a1a11
 
 name:           cp
 version:        0.1.0.0
@@ -24,7 +24,6 @@ executable cp
   other-modules:
       Pretty
       Pretty.Syntax.Abstract
-      Pretty.Syntax.Base
       Pretty.Syntax.Concrete
       Pretty.TypeChecking
       Syntax.Abstract

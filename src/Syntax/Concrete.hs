@@ -14,6 +14,9 @@ import Prelude hiding (LT, EQ, GT)
 --------------------------------------------------------------------------------
 -- | Concrete Syntax Tree
 
+data TypeVar      ann = Named Text ann
+                      deriving (Show, Ord, Eq, Functor)
+
 data TermName     ann = TermName Text ann
                       deriving (Show, Functor)
 data TypeName     ann = TypeName Text ann
@@ -36,13 +39,13 @@ data Process  ann = Link      (TermName ann) (TermName ann)                 ann
                   | Accept    (TermName ann) (TermName ann) (Process ann)   ann
                   | Request   (TermName ann) (TermName ann) (Process ann)   ann
                   | OutputT   (TermName ann) (Type     ann) (Process ann)   ann
-                  | InputT    (TermName ann) TypeVar        (Process ann)   ann
+                  | InputT    (TermName ann) (TypeVar  ann) (Process ann)   ann
                   | EmptyOutput              (TermName ann)                 ann
                   | EmptyInput               (TermName ann) (Process ann)   ann
                   | EmptyChoice              (TermName ann)                 ann
                   deriving (Show, Functor)
 
-data Type ann = Var     TypeVar                     ann
+data Type ann = Var     (TypeVar  ann)              ann
               | Dual    (Type ann)                  ann
               | Times   (Type ann)      (Type ann)  ann
               | Par     (Type ann)      (Type ann)  ann
@@ -50,8 +53,8 @@ data Type ann = Var     TypeVar                     ann
               | With    (Type ann)      (Type ann)  ann
               | Acc     (Type ann)                  ann
               | Req     (Type ann)                  ann
-              | Exists  TypeVar         (Type ann)  ann
-              | Forall  TypeVar         (Type ann)  ann
+              | Exists  (TypeVar  ann)  (Type ann)  ann
+              | Forall  (TypeVar  ann)  (Type ann)  ann
               | One                                 ann
               | Bot                                 ann
               | Zero                                ann
@@ -156,7 +159,7 @@ class ToAbstract a b | a -> b where
     toAbstract :: a -> b
 
 instance ToAbstract (Program ann) A.Program where
-    toAbstract (Program  declarations _) =
+    toAbstract (Program declarations _) =
         A.Program (map toAbstract declarations)
 
 instance ToAbstract (Declaration ann) A.Declaration where
@@ -164,6 +167,10 @@ instance ToAbstract (Declaration ann) A.Declaration where
         A.TypeSig (toAbstract name) (toAbstract typ)
     toAbstract (TermDefn name process _) =
         A.TermDefn (toAbstract name) (toAbstract process)
+
+instance ToAbstract (TypeVar ann) A.TypeVar where
+    toAbstract (Named var _) =
+        A.Named var
 
 instance ToAbstract (TypeName ann) A.TypeName where
     toAbstract (TypeName name    _) = name
@@ -224,7 +231,7 @@ instance ToAbstract (Process ann) A.Process where
     toAbstract (InputT name typ proc _) =
         A.InputT
             (toAbstract name)
-            typ
+            (toAbstract typ)
             (toAbstract proc)
     toAbstract (EmptyOutput name _) =
         A.EmptyOutput
@@ -238,7 +245,9 @@ instance ToAbstract (Process ann) A.Process where
             (toAbstract name)
 
 instance ToAbstract (Type ann) A.Type where
-    toAbstract (Var i _) = A.Var i
+    toAbstract (Var i _) =
+        A.Var
+            (toAbstract i)
     toAbstract (Dual t _) =
         A.Dual
             (toAbstract t)
@@ -266,12 +275,12 @@ instance ToAbstract (Type ann) A.Type where
             (toAbstract t)
     toAbstract (Exists x t _) =
         A.Exists
-            x
+            (toAbstract x)
             (toAbstract t)
             Nothing
     toAbstract (Forall x t _) =
         A.Forall
-            x
+            (toAbstract x)
             (toAbstract t)
     toAbstract (One _) = A.One
     toAbstract (Bot _) = A.Bot

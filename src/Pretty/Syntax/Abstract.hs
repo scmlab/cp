@@ -3,13 +3,17 @@
 module Pretty.Syntax.Abstract where
 
 import Syntax.Abstract
-import Pretty.Syntax.Base ()
 
 import Data.Monoid ((<>))
 import Data.Text.Prettyprint.Doc hiding (line)
 
 --------------------------------------------------------------------------------
 -- |
+
+instance Pretty TypeVar where
+  pretty (Nameless i)   = "$" <> pretty i
+  pretty (Named i)      = pretty i
+  pretty Unknown        = "$_"
 
 instance Pretty Process where
   pretty (Link x y) = pretty x <> " ↔ " <> pretty y

@@ -71,8 +71,8 @@ typeName :: RE Char Text
 typeName = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
 
 -- all uppercase alphabets
-labelRE :: RE Char Text
-labelRE = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isUpper c || isDigit c || c == '_' || c == '\''))
+-- labelRE :: RE Char Text
+-- labelRE = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isUpper c || isDigit c || c == '_' || c == '\''))
 
 -- stringRE :: RE Char Text
 -- stringRE = fmap pack $ string "\"" +++ firstPart +++ secondPart +++ string "\""
@@ -89,8 +89,8 @@ labelRE = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isUpper c || is
 --     secondPart1 :: RE Char String
 --     secondPart1 = string "\\" +++ msym (\c -> if c == '\n' then Nothing else Just [c])
 
-intRE :: RE Char Int
-intRE = read <$> some (psym isDigit)
+-- intRE :: RE Char Int
+-- intRE = read <$> some (psym isDigit)
 
 whitespaceRE :: RE Char Token
 whitespaceRE = matchWhen isSpace TokenWhitespace

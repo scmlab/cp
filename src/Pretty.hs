@@ -2,7 +2,6 @@
 
 module Pretty where
 
-import Pretty.Syntax.Base ()
 import Pretty.Syntax.Concrete ()
 import Pretty.TypeChecking ()
 

@@ -129,7 +129,7 @@ TermName :: {TermName Loc}
 TypeName :: {TypeName Loc}
     : typeName                                  {% locate $ TypeName $1 }
 
-TypeVar :: {TypeVar}
-    : typeName                                  {% return $ Named $1 }
+TypeVar :: {TypeVar Loc}
+    : typeName                                  {% locate $ Named $1 }
 
 {}

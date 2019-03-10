@@ -6,6 +6,12 @@ import Syntax.Base
 import Data.Text (Text)
 
 --------------------------------------------------------------------------------
+-- | Type Variable
+
+data TypeVar = Nameless Int | Named Text | Unknown
+    deriving (Show, Ord, Eq)
+
+--------------------------------------------------------------------------------
 -- | Term level
 
 type TypeName = Text

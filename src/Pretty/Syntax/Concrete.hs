@@ -3,16 +3,15 @@
 module Pretty.Syntax.Concrete where
 
 import Syntax.Concrete
-import Pretty.Syntax.Base ()
 
-
--- import Data.ByteString.Lazy (ByteString)
--- import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Monoid ((<>))
 import Data.Text.Prettyprint.Doc hiding (line)
 
 --------------------------------------------------------------------------------
 -- |
+
+instance Pretty (TypeVar ann) where
+  pretty (Named i _)      = pretty i
 
 instance Pretty (TermName ann) where
   pretty (TermName name _) = pretty name
