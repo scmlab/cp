@@ -211,24 +211,6 @@ unifyAndSubstitute term a b session = do
       execSubstituton :: Session -> [Substitution] -> Session
       execSubstituton = foldr $ \ (Substitute var t) -> Map.map (substitute var t)
 
-      -- replace a type variable in some type with another type
-      substitute :: TypeVar -> Type -> Type -> Type
-      substitute var new (Var var')
-        | var ==      var' = new
-        | var == dual var' = dual new
-        | otherwise        = Var var'
-      -- substitute var new (Subst t x u)  = Subst (substitute var new t) x (substitute var new u)
-      substitute var new (Dual t)       = Dual (substitute var new t)
-      substitute var new (Times t u)    = Times (substitute var new t) (substitute var new u)
-      substitute var new (Par t u)      = Par (substitute var new t) (substitute var new u)
-      substitute var new (Plus t u)     = Plus (substitute var new t) (substitute var new u)
-      substitute var new (With t u)     = With (substitute var new t) (substitute var new u)
-      substitute var new (Acc t)        = Acc (substitute var new t)
-      substitute var new (Req t)        = Req (substitute var new t)
-      substitute var new (Exists t u _)   = Exists t (substitute var new u) Nothing
-      substitute var new (Forall t u)   = Forall t (substitute var new u)
-      substitute _   _   others         = others
-
 --------------------------------------------------------------------------------
 -- | Unification
 
@@ -238,7 +220,7 @@ type UniError = (Type, Type)
 type UniM = ExceptT UniError (State [Substitution])
 
 unify :: Type -> Type -> (Either (Type, Type) Type, [Substitution])
-unify a b = traceShow (a, b) $ runState (runExceptT (run a b)) []
+unify a b = runState (runExceptT (run a b)) []
   where
     run :: Type -> Type -> UniM Type
     run (Var        i)  v               = do
@@ -256,13 +238,41 @@ unify a b = traceShow (a, b) $ runState (runExceptT (run a b)) []
     run (With     t u)  (With     v w)  = With   <$> run t v <*> run u w
     run (Acc      t  )  (Acc      v  )  = run t v
     run (Req      t  )  (Req      v  )  = run t v
-    run (Exists   _ u _) (Exists   _ w _)  = run u w
+    run (Exists   _ u Nothing) (Exists   _ w Nothing)  = run u w
+    -- happens when we are composing ∃ with ∀
+    run (Exists   _ (Var ghost) (Just (witness, substituted))) (Exists var body Nothing) = do
+      -- substitute the ghost of ∃ with the body of ∀
+      modify ((:) (Substitute ghost body))
+      -- unify the substituted ghost with the substituted body
+      run substituted (substitute var witness body)
+    run (Exists var body Nothing)  (Exists   _ (Var ghost) (Just (witness, substituted))) = do
+      -- substitute the ghost of ∃ with the body of ∀
+      modify ((:) (Substitute ghost body))
+      -- unify the substituted ghost with the substituted body
+      run (substitute var witness body) substituted 
     run (Forall   _ u)  (Forall   _ w)  = run u w
     run One             One             = return One
     run Top             Top             = return Top
     run Zero            Zero            = return Zero
     run Bot             Bot             = return Bot
     run t               v               = throwError (t, v)
+
+-- replace a type variable in some type with another type
+substitute :: TypeVar -> Type -> Type -> Type
+substitute var new (Var var')
+  | var ==      var' = new
+  | var == dual var' = dual new
+  | otherwise        = Var var'
+substitute var new (Dual t)       = Dual (substitute var new t)
+substitute var new (Times t u)    = Times (substitute var new t) (substitute var new u)
+substitute var new (Par t u)      = Par (substitute var new t) (substitute var new u)
+substitute var new (Plus t u)     = Plus (substitute var new t) (substitute var new u)
+substitute var new (With t u)     = With (substitute var new t) (substitute var new u)
+substitute var new (Acc t)        = Acc (substitute var new t)
+substitute var new (Req t)        = Req (substitute var new t)
+substitute var new (Exists t u _) = Exists t (substitute var new u) Nothing
+substitute var new (Forall t u)   = Forall t (substitute var new u)
+substitute _   _   others         = others
 
 -- all channels should be requesting something
 checkContextWhenAccept :: Term -> Session -> InferM ()
