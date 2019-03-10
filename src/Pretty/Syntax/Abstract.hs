@@ -54,7 +54,7 @@ instance Pretty Process where
     <> ".case()"
 
 instance Pretty Type where
-  pretty (Var i)        = "$" <> pretty i
+  pretty (Var i)        = pretty i
   pretty (Dual a)       = "^" <> pretty a
   pretty (Times a b)    = pretty a <> " ⊗ " <> pretty b
   pretty (Par a b)      = pretty a <> " ⅋ " <> pretty b

@@ -23,7 +23,7 @@ tokenRE
   =   TokenDefn         <$ "="
   <|> TokenHasType      <$ ":"
   -- type
-  <|> TokenVarPrefix    <$ "$"
+  -- <|> TokenVarPrefix    <$ "$"
   <|> TokenDual         <$ "^"
   <|> TokenTimes        <$ "*"
   <|> TokenPar          <$ "%"
@@ -57,7 +57,7 @@ tokenRE
   <|> TokenEmptyChoice  <$ "case()"
   <|> TokenTypeName     <$> typeName
   <|> TokenTermName     <$> termName
-  <|> TokenInt          <$> intRE
+  -- <|> TokenInt          <$> intRE
 
 (+++) :: RE Char String -> RE Char String -> RE Char String
 (+++) = liftA2 (++)

@@ -24,10 +24,8 @@ import Data.Text (Text)
 %token
         termName        { TokenTermName $$          }
         typeName        { TokenTypeName $$          }
-        typeVar         { TokenInt $$           }
         '='             { TokenDefn             }
         ':'             { TokenHasType          }
-        '$'             { TokenVarPrefix        }
         '^'             { TokenDual             }
         '*'             { TokenTimes            }
         '%'             { TokenPar              }
@@ -89,14 +87,14 @@ Process :: {Process Loc}
     | s '!' TermName '(' TermName ')' '.' Process {% locate' $1 $ Accept $3 $5 $8 }
     | s '?' TermName '[' TermName ']' '.' Process {% locate' $1 $ Request $3 $5 $8 }
     | s TermName '[' Type ']' '.' Process         {% locate' $1 $ OutputT $2 $4 $7 }
-    | s TermName '(' TypeVar ')' '.' Process      {% locate' $1 $ InputT $2 $4 $7 }
+    | s TermName '(' TypeVar ')' '.' Process     {% locate' $1 $ InputT $2 $4 $7 }
     | s TermName '[]' '.' 'end'                   {% locate' $1 $ EmptyOutput $2 }
     | s TermName '()' '.' Process                 {% locate' $1 $ EmptyInput $2 $5 }
     | s TermName '.' 'case()'                     {% locate' $1 $ EmptyChoice $2 }
 
 Type :: {Type Loc}
     : s Type1                                   { $2 }
-    | s 'exists' TypeVar Type1                 {% locate' $1 $ Exists $3 $4 }
+    | s 'exists' TypeVar Type1                     {% locate' $1 $ Exists $3 $4 }
     | s 'forall' TypeVar Type1                 {% locate' $1 $ Forall $3 $4 }
 
 -- right associative
@@ -124,15 +122,13 @@ Type4 :: {Type Loc}
     | '0'                                       {% locate $ Zero }
     | 'Top'                                     {% locate $ Top }
 
-TypeVar :: {TypeVar}
-    : '$' typeVar                               {% return (Nameless $2) }
-    | '$' '0'                                   {% return (Nameless 0) }
-    | '$' '1'                                   {% return (Nameless 1) }
-
 TermName :: {TermName Loc}
-    : termName                                {% locate $ TermName $1 }
+    : termName                                  {% locate $ TermName $1 }
 
 TypeName :: {TypeName Loc}
-    : typeName                                {% locate $ TypeName $1 }
+    : typeName                                  {% locate $ TypeName $1 }
+
+TypeVar :: {TypeVar}
+    : typeName                                  {% return $ Named $1 }
 
 {}
