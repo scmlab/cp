@@ -65,7 +65,8 @@ s :: { Loc }
     : {- empty -}                               {% getLoc }
 
 Program :: {Program Loc}
-    : Declarations                          {% locate $ Program (reverse $1) }
+    : {- empty -}                           {% locate $ Program [] }
+    | Declarations                          {% locate $ Program (reverse $1) }
 
 -- left recursive
 Declarations :: {[Declaration Loc]}
