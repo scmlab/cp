@@ -69,18 +69,18 @@ inferTerm :: Term -> Either InferError Session
 inferTerm term = runInferM (infer term Map.empty)
 
 typeCheck :: Name -> Session -> Term -> Either InferError ()
-typeCheck name manifested term = runInferM $ do
+typeCheck name annotated term = runInferM $ do
   inferred <- infer term Map.empty
-  let notInferred = Map.difference manifested inferred
-  let notManifested = Map.difference inferred manifested
-  let difference = Map.union notInferred notManifested
+  let notInferred = Map.difference annotated inferred
+  let notAnnotated = Map.difference inferred annotated
+  let difference = Map.union notInferred notAnnotated
 
   -- see if the keys of two Maps look the same
   unless (Map.null difference) $
-    throwError $ SessionMismatch name notInferred notManifested
+    throwError $ SessionMismatch name notInferred notAnnotated
 
   -- look into the types and see if they are also the same
-  forM_ (Map.intersectionWith (,) manifested inferred) (uncurry (checkIfEqual term))
+  forM_ (Map.intersectionWith (,) annotated inferred) (uncurry (checkIfEqual term))
 
 
 infer :: Term -> Session -> InferM Session
@@ -119,15 +119,16 @@ infer term session = case term of
 
     (t', sessionP) <- infer p session >>= extractChannel x
 
-    checkIfEqual term (toAbstract t) t'
-
     -- splitting the context
     let session' = Map.difference session sessionP
     (u, sessionQ) <- infer q session' >>= extractChannel x
 
 
     let session'' = Map.union sessionP sessionQ
-    (_, session''') <- unifyOppositeAndSubstitute term t' u session''
+    (v, session''') <- unifyOppositeAndSubstitute term t' u session''
+
+    -- see if the inferred type is the same as the annotated type
+    checkIfEqual term (toAbstract t) v
 
     return session'''
 

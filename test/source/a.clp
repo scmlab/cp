@@ -10,10 +10,10 @@
 -- run = x[].end
 
 
-a = \ x . (x[y] . (y[].end | x[].end) | x(w).x().w[].end)
+-- a = \ x . (x[y] . (y[].end | x[].end) | x(w).x().w[].end)
 -- a = \ x: 1 * 1 . (x[y] . (y[].end | x[].end) | x(w).x().w[].end)
 
--- link = \ x : 1 . (x <-> w | x[].end)
+link = \ x : 1 . (x <-> w | x[].end)
 
 -- acc = !x(y) . y[] . end
 
