@@ -54,6 +54,8 @@ data Process
     | EmptyInput TermName Process
     -- empty choice: x.case()
     | EmptyChoice TermName
+
+    | End 
     deriving (Eq, Show)
 
 --------------------------------------------------------------------------------

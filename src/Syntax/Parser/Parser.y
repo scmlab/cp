@@ -95,6 +95,7 @@ Process :: {Process Loc}
     | s TermName '[]' '.' 'end'                   {% locate' $1 $ EmptyOutput $2 }
     | s TermName '()' '.' Process                 {% locate' $1 $ EmptyInput $2 $5 }
     | s TermName '.' 'case()'                     {% locate' $1 $ EmptyChoice $2 }
+    | s 'end'                                     {% locate' $1 $ End }
 
 Session :: {Session Loc}
     : s TermName ':' Type                         {% locate' $1 $ singletonSession $2 $4 }

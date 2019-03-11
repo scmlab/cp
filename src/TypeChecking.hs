@@ -355,6 +355,12 @@ infer term session = case term of
       $ Map.insert (toAbstract x) t'
       $ session''
 
+  End _ -> do
+    unless (Map.null session) $
+      throwError $ InferError $ ChannelNotComsumed term session
+
+    return Map.empty
+
 
 extractChannel :: Chan -> Session -> TCM (Type, Session)
 extractChannel chan session = do

@@ -1,40 +1,15 @@
--- a = x[putName] . ( putName[].end | x[putName] . (putName[].end | x(getReceipt) . x().getReceipt[].end))
--- b = \ chan : 1 . ( chan[x].( x[].end | chan[].end ) | chan(x) . x(). x[].end )
--- c = \ chan : 1 . ( chan(a) . chan(b) . a <-> b | chan[a] . ( a[] . end | chan[b] . (b[] . end | a <-> b ) ) )
+putName = u[] . end
+putCredit = v[] . end
+getReceipt = w() . end
+compute = u() . v() . w[] . end
 
--- output = x[y] . (y[].end| x[].end)
+buy = x[u] . (putName | x[v] . (putCredit | x(w) . x() . getReceipt))
+sell = x(u) . x(v) . x[w] . (compute | x[] . end)
 
--- input = x(y) . x() . y() . y[].end
+buySell = \ x . (buy | sell)
 
-link = \ x : 1 . (x <-> w | run)
+getPrice = v() . end
+lookup = u() . v[] . end
 
-run : x : 1
-run = x[].end
-
-
--- a = \ x . (x[y] . (y[].end | x[].end) | x(w).x().w[].end)
--- a = \ x: 1 * 1 . (x[y] . (y[].end | x[].end) | x(w).x().w[].end)
-
-
--- acc = !x(y) . y[] . end
-
--- req = ?y[z] . z[] .end
-
--- acc_req_cut = \ x : 1 . (!x(y) . y[] . end | ?x[y] . y() . z[]. end)
-
-
--- zero = x($1) . x(s) . x(z) . z <-> x
--- ping = x[1] . x[s] . (!s(f).f(a).a().?y[u].u().f[].end | x[z].(z[].end | x().w[]. end))
-
--- zero_ping = \ x : 1 . (x($1) . x(s) . x(z) . z <-> x | x[1] . x[s] . (!s(f).f(a).a().?y[u].u().f[].end | x[z].(z[].end | x().w[]. end)))
-
--- ex1 = x[1] . x[].end
--- forallBot = x(A) . x() . y[] .end
-
--- test = \ x : 1 . (x[1] . x[].end | x($1) . x() . y[] .end)
-
--- right = x[inr].x[].end
-
--- choose = \ x : 1 . (x[inr].x().y[].end | x.case( x[].end , x[].end ))
-
--- empty_choose = \ x : 1 . (x[inr].x().y[].end | x.case())
+shop = x[u] . (putName | x(v) . getPrice)
+quote = x(u) . x[v] . (lookup | x[] . end)

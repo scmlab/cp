@@ -219,4 +219,10 @@ prettyInferError (SessionShouldBeAllRequesting term session) =
         <> "when checking the following term"
     ] [locOf term]
 
+prettyInferError (DefnNotFound term name) =
+  prettyError' "Definition not found"
+    [ highlight name <> " is not in scope"
+        <> "when checking the following term"
+    ] [locOf term]
+
 prettyInferError e = prettyError "" (Just $ pack $ show $ e) []
