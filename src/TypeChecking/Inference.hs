@@ -84,6 +84,12 @@ typeCheck name annotated term = runInferM $ do
 
 infer :: Term -> Session -> InferM Session
 infer term session = case term of
+
+  C.Call x _ -> do
+
+    error $ show x
+
+
   C.Link x y _ -> do
 
     (a, session') <- extractChannel x session

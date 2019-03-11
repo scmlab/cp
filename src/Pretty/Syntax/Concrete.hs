@@ -20,6 +20,7 @@ instance Pretty (TypeName ann) where
   pretty (TypeName name _) = pretty name
 
 instance Pretty (Process ann) where
+  pretty (Call x _) = pretty x
   pretty (Link x y _) = pretty x <> " ↔ " <> pretty y
   pretty (Compose x t p q _) = pretty x
     <> " : " <> pretty t

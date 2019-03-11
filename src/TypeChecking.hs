@@ -7,8 +7,6 @@ import Syntax.Concrete
 import Data.Loc (Loc)
 
 import qualified Data.List as List
-import Data.Set (Set)
-import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe)
@@ -121,28 +119,29 @@ checkTypeTermPairing (Program declarations _) = do
 
   return ()
 
-freeVariable :: Process Loc -> Set (TermName Loc)
-freeVariable (Link x y _) = Set.fromList [x, y]
-freeVariable (Compose x _ p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)
-freeVariable (Output x y p q _) = Set.insert x $ Set.delete y $ Set.union (freeVariable p) (freeVariable q)
-freeVariable (Input x y p _) = Set.insert x $ Set.delete y (freeVariable p)
-freeVariable (SelectL x p _) = Set.insert x $ freeVariable p
-freeVariable (SelectR x p _) = Set.insert x $ freeVariable p
-freeVariable (Choice x p q _) = Set.insert x $ Set.union (freeVariable p) (freeVariable q)
-freeVariable (Accept x y p _) = Set.insert x $ Set.delete y (freeVariable p)
-freeVariable (Request x y p _) = Set.insert x $ Set.delete y (freeVariable p)
-freeVariable (OutputT x _ p _) = Set.insert x (freeVariable p)
-freeVariable (InputT x _ p _) = Set.insert x (freeVariable p)
-freeVariable (EmptyOutput x _) = Set.singleton x
-freeVariable (EmptyInput x p _) = Set.insert x $ freeVariable p
-freeVariable (EmptyChoice x _) = Set.singleton x
-
--- --------------------------------------------------------------------------------
--- -- | Type checking
+-- freeVariable :: Process Loc -> Set (TermName Loc)
+-- freeVariable (Var x _) = Set.fromList [x, y]
+-- freeVariable (Link x y _) = Set.fromList [x, y]
+-- freeVariable (Compose x _ p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)
+-- freeVariable (Output x y p q _) = Set.insert x $ Set.delete y $ Set.union (freeVariable p) (freeVariable q)
+-- freeVariable (Input x y p _) = Set.insert x $ Set.delete y (freeVariable p)
+-- freeVariable (SelectL x p _) = Set.insert x $ freeVariable p
+-- freeVariable (SelectR x p _) = Set.insert x $ freeVariable p
+-- freeVariable (Choice x p q _) = Set.insert x $ Set.union (freeVariable p) (freeVariable q)
+-- freeVariable (Accept x y p _) = Set.insert x $ Set.delete y (freeVariable p)
+-- freeVariable (Request x y p _) = Set.insert x $ Set.delete y (freeVariable p)
+-- freeVariable (OutputT x _ p _) = Set.insert x (freeVariable p)
+-- freeVariable (InputT x _ p _) = Set.insert x (freeVariable p)
+-- freeVariable (EmptyOutput x _) = Set.singleton x
+-- freeVariable (EmptyInput x p _) = Set.insert x $ freeVariable p
+-- freeVariable (EmptyChoice x _) = Set.singleton x
 --
--- typeCheck :: Term -> Type Loc -> TCM ()
--- typeCheck (Link ) t =
---
--- -- typeCheck (Dual t l) term = throwError $ ExpectButGot t (Dual t l) term
--- -- typeCheck (Times t l) (Output ) = throwError $ ExpectButGot t (Dual t l) term
--- typeCheck _ _ = undefined
+-- -- --------------------------------------------------------------------------------
+-- -- -- | Type checking
+-- --
+-- -- typeCheck :: Term -> Type Loc -> TCM ()
+-- -- typeCheck (Link ) t =
+-- --
+-- -- -- typeCheck (Dual t l) term = throwError $ ExpectButGot t (Dual t l) term
+-- -- -- typeCheck (Times t l) (Output ) = throwError $ ExpectButGot t (Dual t l) term
+-- -- typeCheck _ _ = undefined

@@ -79,7 +79,8 @@ Declaration :: {Declaration Loc}
     | s TermName '=' Process                      {% locate' $1 $ TermDefn $2 $4 }
 
 Process :: {Process Loc}
-    : s TermName '<->' TermName                   {% locate' $1 $ Link $2 $4  }
+    : s TermName                                  {% locate' $1 $ Call $2  }
+    | s TermName '<->' TermName                   {% locate' $1 $ Link $2 $4  }
     | s 'nu' TermName ':' Type '.' '(' Process '|' Process ')'    {% locate' $1 $ Compose $3 (Just $5) $8 $10 }
     | s 'nu' TermName          '.' '(' Process '|' Process ')'    {% locate' $1 $ Compose $3 Nothing $6 $8 }
     | s TermName '[' TermName ']' '.' '(' Process '|' Process ')' {% locate' $1 $ Output $2 $4 $8 $10 }

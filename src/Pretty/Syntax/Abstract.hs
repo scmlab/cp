@@ -18,6 +18,7 @@ instance Pretty TypeVar where
   pretty Unknown        = "$_"
 
 instance Pretty Process where
+  pretty (Call x) = pretty x
   pretty (Link x y) = pretty x <> " ↔ " <> pretty y
   pretty (Compose x t p q) = pretty x
     <> " : " <> pretty t

@@ -31,7 +31,8 @@ data Declaration  ann = TypeSig   (TermName ann)  (Session ann)             ann
                       | TermDefn  (TermName ann)  (Process ann)             ann
                       deriving (Show, Functor)
 
-data Process  ann = Link      (TermName ann) (TermName ann)                 ann
+data Process  ann = Call      (TermName ann)                                ann
+                  | Link      (TermName ann) (TermName ann)                 ann
                   | Compose   (TermName ann) (Maybe (Type ann)) (Process  ann) (Process ann)   ann
                   | Output    (TermName ann) (TermName ann) (Process ann) (Process ann) ann
                   | Input     (TermName ann) (TermName ann) (Process ann)   ann
@@ -135,6 +136,7 @@ instance Located (Declaration Loc) where
   locOf (TermDefn _ _ loc) = loc
 
 instance Located (Process Loc) where
+  locOf (Call _ loc) = loc
   locOf (Link _ _ loc) = loc
   locOf (Compose _ _ _ _ loc) = loc
   locOf (Output _ _ _ _ loc) = loc
@@ -194,6 +196,9 @@ instance ToAbstract (TermName ann) A.TermName where
     toAbstract (TermName name    _) = name
 
 instance ToAbstract (Process ann) A.Process where
+    toAbstract (Call name _) =
+        A.Call
+            (toAbstract name)
     toAbstract (Link nameA nameB _) =
         A.Link
             (toAbstract nameA)
