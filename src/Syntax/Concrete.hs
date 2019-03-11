@@ -30,7 +30,7 @@ data Declaration  ann = TypeSig   (TermName ann)  (Type ann)                ann
                       deriving (Show, Functor)
 
 data Process  ann = Link      (TermName ann) (TermName ann)                 ann
-                  | Compose   (TermName ann) (Type     ann) (Process  ann) (Process ann)   ann
+                  | Compose   (TermName ann) (Maybe (Type ann)) (Process  ann) (Process ann)   ann
                   | Output    (TermName ann) (TermName ann) (Process ann) (Process ann) ann
                   | Input     (TermName ann) (TermName ann) (Process ann)   ann
                   | SelectL   (TermName ann) (Process  ann)                 ann
@@ -183,10 +183,16 @@ instance ToAbstract (Process ann) A.Process where
         A.Link
             (toAbstract nameA)
             (toAbstract nameB)
-    toAbstract (Compose name typ procA procB _) =
+    toAbstract (Compose name Nothing procA procB _) =
         A.Compose
             (toAbstract name)
-            (toAbstract typ)
+            Nothing
+            (toAbstract procA)
+            (toAbstract procB)
+    toAbstract (Compose name (Just t) procA procB _) =
+        A.Compose
+            (toAbstract name)
+            (Just (toAbstract t))
             (toAbstract procA)
             (toAbstract procB)
     toAbstract (Output nameA nameB procA procB _) =

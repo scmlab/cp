@@ -202,16 +202,23 @@ prettyInferError (CannotAppearInside term chan) =
         <> "to appear in the following term"
     ] [locOf term]
 
-prettyInferError (CannotUnify term a b a' b') =
-  prettyError' "Cannot unify types"
-    [ highlight a' <> " in " <> highlight a
-        <> line
-        <> "doesn't match with "
-        <> line
-        <> highlight b' <> " in " <> highlight b
-        <> line
-        <> "when checking the following term"
-    ] [locOf term]
+prettyInferError (TypeMismatch term expectedWhole givenWhole expected given) =
+  prettyError' "Type mismatched"
+    (message ++
+    [   "when checking the following term"
+    ]) [locOf term]
+    where message = if expectedWhole == expected && givenWhole == given
+            then
+              [      "expected: " <> highlight expected <> line
+                  <> "     got: " <> highlight given
+              ]
+            else
+              [      "expected: " <> highlight expected <> line
+                  <> "     got: " <> highlight given    <> line
+                  <> line
+                  <> "      in: " <> highlight expectedWhole <> line
+                  <> "     and: " <> highlight givenWhole
+              ]
 
 prettyInferError (ContextShouldBeAllRequesting term session) =
   prettyError' "Channels should all be requesting"

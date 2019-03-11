@@ -43,7 +43,7 @@ freshType = do
 
 data InferError
   = General Text
-  | CannotUnify Term Type Type Type Type
+  | TypeMismatch Term Type Type Type Type
   | ContextShouldBeAllRequesting Term Session
   | CannotAppearInside Term Chan
   | ContextShouldBeTheSame Term Session
@@ -82,7 +82,7 @@ infer term session = case term of
       $ Map.insert y (dual t)
       $ session'''
 
-  C.Compose x _ p q _ -> do
+  C.Compose x Nothing p q _ -> do
 
     (t, sessionP) <- infer p session >>= extractChannel x
 
@@ -93,6 +93,22 @@ infer term session = case term of
 
     let session'' = Map.union sessionP sessionQ
     (_, session''') <- unifyOppositeAndSubstitute term t u session''
+
+    return session'''
+
+  C.Compose x (Just t) p q _ -> do
+
+    (t', sessionP) <- infer p session >>= extractChannel x
+
+    checkIfEqual term (C.toAbstract t) t'
+
+    -- splitting the context
+    let session' = Map.difference session sessionP
+    (u, sessionQ) <- infer q session' >>= extractChannel x
+
+
+    let session'' = Map.union sessionP sessionQ
+    (_, session''') <- unifyOppositeAndSubstitute term t' u session''
 
     return session'''
 
@@ -193,7 +209,7 @@ infer term session = case term of
   C.EmptyInput x p _ -> do
 
     (t, session') <- extractChannel x session
-    (t', session'') <- unifyAndSubstitute term t Bot session'
+    (t', session'') <- unifyAndSubstitute term Bot t session'
 
     session''' <- infer p session''
 
@@ -205,7 +221,7 @@ infer term session = case term of
 
   C.EmptyChoice x _ -> do
     (t, session') <- extractChannel x session
-    (t', session'') <- unifyAndSubstitute term t Top session'
+    (t', session'') <- unifyAndSubstitute term Top t session'
 
     return
       $ Map.insert x t'
@@ -229,12 +245,14 @@ unifyOppositeAndSubstitute term a@(Exists _ _ _) b@(Forall _ _) = unifyAndSubsti
 unifyOppositeAndSubstitute term a@(Forall _ _) b@(Exists _ _ _) = unifyAndSubstitute term (dual a) b
 unifyOppositeAndSubstitute term a b                             = unifyAndSubstitute term a (dual b)
 
--- unify the two given types, and update the give session
+-- unify the two given types, and update the give session.
+-- for better error message, make the former type be the expecting type
+-- and the latter be the given type
 unifyAndSubstitute :: Term -> Type -> Type -> Session -> InferM (Type, Session)
-unifyAndSubstitute term a b session = do
-    let (result, subst) = unify a b
+unifyAndSubstitute term expected given session = do
+    let (result, subst) = unify expected given
     case result of
-      Left (t, u) -> throwError $ CannotUnify term a b t u
+      Left (t, u) -> throwError $ TypeMismatch term expected given t u
       Right t -> do
         let session' = execSubstituton session subst
         return (t, session')
@@ -242,6 +260,14 @@ unifyAndSubstitute term a b session = do
     where
       execSubstituton :: Session -> [Substitution] -> Session
       execSubstituton = foldr $ \ (Substitute var t) -> Map.map (substitute var t)
+
+checkIfEqual :: Term -> Type -> Type -> InferM ()
+checkIfEqual term expected given = do
+    let (result, subst) = unify expected given
+    case result of
+      Left (a, b) -> throwError $ TypeMismatch term expected given a b
+      Right t -> return ()
+
 
 --------------------------------------------------------------------------------
 -- | Unification

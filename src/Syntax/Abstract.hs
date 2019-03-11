@@ -27,7 +27,7 @@ data Process
     -- link: x ↔ y
     = Link TermName TermName
     -- parallelcomposition: νx:(P|Q)
-    | Compose TermName Type Process Process
+    | Compose TermName (Maybe Type) Process Process
     -- output: x[y].(P|Q)
     | Output TermName TermName Process Process
     -- input: x(y).P
