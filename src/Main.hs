@@ -164,12 +164,12 @@ prettyTypeError (TypeSigDuplicated a b) =
 prettyTypeError (TermDefnDuplicated a b) =
   prettyError "Duplicating term definition" Nothing
     [locOf a, locOf b]
-prettyTypeError (TypeSigNotFound a) =
-  prettyError "Missing type signature" (Just "the following term has no type signature")
-    [locOf a]
-prettyTypeError (TermDefnNotFound a) =
-  prettyError "Missing term definition" (Just "the following type has no term definition")
-    [locOf a]
+-- prettyTypeError (TypeSigNotFound a) =
+--   prettyError "Missing type signature" (Just "the following term has no type signature")
+--     [locOf a]
+-- prettyTypeError (TermDefnNotFound a) =
+--   prettyError "Missing term definition" (Just "the following type has no term definition")
+--     [locOf a]
 prettyTypeError (InferError a) =
    prettyInferError a
 prettyTypeError (Others msg) =

@@ -59,13 +59,13 @@ data InferError
   | SessionShouldBeTheSame Term Session
   | SessionShouldBeDisjoint Term Session
   | ChannelNotComsumed Term Session
+  | DefnNotFound Term Name
   deriving (Show)
 
 data TypeError
   = TypeSigDuplicated Name Name
   | TermDefnDuplicated Name Name
-  | TypeSigNotFound Name
-  | TermDefnNotFound Name
+  -- | TypeSigNotFound Name
   | InferError InferError
   | Others Text
   deriving (Show)
@@ -141,22 +141,6 @@ checkDuplications (Program declarations _) = do
       in if null dup then Nothing else Just (head dup !! 0, head dup !! 1)
 
 
--- check if a type signature is paired with a term definition,
--- a temporary measure before the type inference algorithm is implelemented
-checkTypeTermPairing :: Program Loc -> TCM ()
-checkTypeTermPairing (Program declarations _) = do
-  let typeSigNames = mapMaybe typeSigName declarations
-  let termDefnNames = mapMaybe termDefnName declarations
-  let lonelyTypeSigNames = (List.\\) typeSigNames termDefnNames
-  let lonelyTermDefnNames = (List.\\) termDefnNames typeSigNames
-
-  unless (null lonelyTypeSigNames) $
-    throwError $ TermDefnNotFound (head lonelyTypeSigNames)
-
-  unless (null lonelyTermDefnNames) $
-    throwError $ TypeSigNotFound (head lonelyTermDefnNames)
-
-  return ()
 
 -- freeVariable :: Process Loc -> Set (TermName Loc)
 -- freeVariable (Var x _) = Set.fromList [x, y]
@@ -198,8 +182,12 @@ infer :: Term -> Session -> TCM Session
 infer term session = case term of
 
   Call x _ -> do
+    definition <- gets stDefinitions
 
-    error $ show x
+    case Map.lookup x definition of
+      Nothing -> throwError $ InferError $ DefnNotFound term x
+      Just (Annotated _ t) -> return (toAbstract t)
+      Just (Unannotated p) -> infer p session
 
 
   Link x y _ -> do
