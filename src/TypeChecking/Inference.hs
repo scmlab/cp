@@ -21,7 +21,8 @@ import Data.Text (Text)
 --------------------------------------------------------------------------------
 -- | State
 
-type Chan = C.TermName Loc
+type Name = C.TermName Loc
+type Chan = Name
 type Term = C.Process Loc
 
 type CtxVar = Int
@@ -43,6 +44,7 @@ freshType = do
 data InferError
   = General Text
   | TypeMismatch Term Type Type Type Type
+  | SessionMismatch Name Session Session
   | ContextShouldBeAllRequesting Term Session
   | CannotAppearInside Term Chan
   | ContextShouldBeTheSame Term Session
@@ -58,10 +60,28 @@ type InferM = ExceptT InferError (State InferState)
 -- |
 --
 
-inferTerm :: Term -> Either InferError Session
-inferTerm term = evalState (runExceptT (infer term Map.empty)) initState
+runInferM :: InferM a -> Either InferError a
+runInferM program = evalState (runExceptT program) initState
   where
     initState = InferState 0
+
+inferTerm :: Term -> Either InferError Session
+inferTerm term = runInferM (infer term Map.empty)
+
+typeCheck :: Name -> Session -> Term -> Either InferError ()
+typeCheck name manifested term = runInferM $ do
+  inferred <- infer term Map.empty
+  let notInferred = Map.difference manifested inferred
+  let notManifested = Map.difference inferred manifested
+  let difference = Map.union notInferred notManifested
+
+  -- see if the keys of two Maps look the same
+  unless (Map.null difference) $
+    throwError $ SessionMismatch name notInferred notManifested
+
+  -- look into the types and see if they are also the same
+  forM_ (Map.intersectionWith (,) manifested inferred) (uncurry (checkIfEqual term))
+
 
 infer :: Term -> Session -> InferM Session
 infer term session = case term of
@@ -266,6 +286,7 @@ checkIfEqual term expected given = do
     case result of
       Left (a, b) -> throwError $ TypeMismatch term expected given a b
       Right t -> return ()
+
 
 
 --------------------------------------------------------------------------------

@@ -6,11 +6,12 @@
 
 -- input = x(y) . x() . y() . y[].end
 
-run : x : 1
-run = x[].end
+-- run : x : Bot
+-- run = x[].end
 
 
--- run = \ x: 1 . (x[y] . (y[].end | x[].end) | x(w).x().w[].end)
+a = \ x . (x[y] . (y[].end | x[].end) | x(w).x().w[].end)
+-- a = \ x: 1 * 1 . (x[y] . (y[].end | x[].end) | x(w).x().w[].end)
 
 -- link = \ x : 1 . (x <-> w | x[].end)
 

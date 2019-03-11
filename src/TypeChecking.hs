@@ -54,33 +54,35 @@ putTermDefns (Program declarations _) = modify $ \ st -> st { stTermDefns = Map.
 --------------------------------------------------------------------------------
 -- |
 
-checkAll :: Program Loc -> TCM [A.Session]
+checkAll :: Program Loc -> TCM (Map (TermName Loc) A.Session)
 checkAll program = do
   -- checking the definitions
   checkDuplications program
-  -- checkTypeTermPairing program
   -- store the definitions
   putTypeSigs program
   putTermDefns program
 
+  -- typecheck all programs with types annotated
+  _ <- getAllTermsWithTypes >>= Map.traverseWithKey (\ name (session, term) ->
+    case typeCheck name (toAbstract session) term of
+        Left e -> throwError $ InferError e
+        Right _ -> return ())
 
-  -- -- get TypeSig - TermDefn pairs
-  -- pairs <- do
-  --   typeSigs <- gets stTypeSigs
-  --   termDefns <- gets stTermDefns
-  --   return $ catMaybes $ map (\(k, v) -> fmap (\t -> (v, t)) $ Map.lookup k termDefns) $ Map.toList typeSigs
-  --
-  -- -- type check the pairs
-  -- forM pairs $ \ (typ, term) -> do
-  --   return ()
-
-
-  -- inference
-  termDefns <- Map.toList <$> gets stTermDefns
-  forM termDefns $ \ (_, term) -> do
+  -- infer types for all those programs without
+  inferred <- getAllTermsWithoutTypes >>= Map.traverseWithKey (\ _ term ->
     case inferTerm term of
       Left e -> throwError $ InferError e
-      Right session -> return session
+      Right session -> return session)
+
+  return inferred
+
+getAllTermsWithTypes :: TCM (Map (TermName Loc) (Session Loc, Process Loc))
+getAllTermsWithTypes = Map.intersectionWith (,) <$> gets stTypeSigs <*> gets stTermDefns
+
+getAllTermsWithoutTypes :: TCM (Map (TermName Loc) (Process Loc))
+getAllTermsWithoutTypes = Map.difference <$> gets stTermDefns <*> gets stTypeSigs
+
+
 
 -- there should be only at most one type signature or term definition
 checkDuplications :: Program Loc -> TCM ()
@@ -100,6 +102,7 @@ checkDuplications (Program declarations _) = do
     getDuplicatedPair names =
       let dup = filter ((> 1) . length) $ List.group $ List.sort names
       in if null dup then Nothing else Just (head dup !! 0, head dup !! 1)
+
 
 -- check if a type signature is paired with a term definition,
 -- a temporary measure before the type inference algorithm is implelemented

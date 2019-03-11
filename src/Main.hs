@@ -14,6 +14,7 @@ import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import Data.Loc (Loc(..), locOf)
 import qualified Data.Loc as Loc
+import qualified Data.Map as Map
 import Data.Text (Text, pack)
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
@@ -93,10 +94,15 @@ main = void $ runM $ handleError $ do
     let filePath = "test/source/a.clp"
     program <- readSource filePath >>= parseSource filePath
 
-    (tc, _) <- runTCM (checkAll program)
+    (inferred, _) <- runTCM (checkAll program)
 
-    forM_ tc $ liftIO . putStrLn . show . pretty
-    -- liftIO $ putStrLn $ show $ pretty tc
+    _ <- Map.traverseWithKey (\name session -> do
+      liftIO $ putStrLn $ show $ pretty name
+      liftIO $ putStrLn $ show $ pretty session) inferred
+      -- liftIO $ putStrLn $ pretty vsep $ Map.map pretty session
+
+    -- forM_ tc $ liftIO . putStrLn . show . pretty
+    --
     -- liftIO $ putStrLn $ pretty vsep $ map pretty tc
     return ()
 
@@ -210,11 +216,11 @@ prettyInferError (TypeMismatch term expectedWhole givenWhole expected given) =
     where message = if expectedWhole == expected && givenWhole == given
             then
               [      "expected: " <> highlight expected <> line
-                  <> "     got: " <> highlight given
+                  <> "  actual: " <> highlight given
               ]
             else
               [      "expected: " <> highlight expected <> line
-                  <> "     got: " <> highlight given    <> line
+                  <> "  actual: " <> highlight given    <> line
                   <> line
                   <> "      in: " <> highlight expectedWhole <> line
                   <> "     and: " <> highlight givenWhole
