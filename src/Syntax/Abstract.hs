@@ -55,7 +55,10 @@ data Process
     -- empty choice: x.case()
     | EmptyChoice TermName
 
-    | End 
+    | End
+    -- mix: P | Q
+    | Mix Process Process
+
     deriving (Eq, Show)
 
 --------------------------------------------------------------------------------

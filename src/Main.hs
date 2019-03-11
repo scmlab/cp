@@ -225,4 +225,14 @@ prettyInferError (DefnNotFound term name) =
         <> "when checking the following term"
     ] [locOf term]
 
+prettyInferError (SessionShouldBeDisjoint term session) =
+  prettyError' "Sessions not disjoint"
+    [ "these channels appear in both sides of the session" <> line
+        <> line
+        <> indent 2 (pretty session)
+        <> line
+        <> line
+        <> "when checking the following term"
+    ] [locOf term]
+
 prettyInferError e = prettyError "" (Just $ pack $ show $ e) []

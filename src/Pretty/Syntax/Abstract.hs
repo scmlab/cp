@@ -59,6 +59,8 @@ instance Pretty Process where
     <> "() . " <> pretty p
   pretty (EmptyChoice x) = pretty x
     <> ".case()"
+  pretty End = "end"
+  pretty (Mix p q) = pretty p <> " | " <> pretty q
 
 instance Pretty Session where
   pretty pairs = vsep $ map p $ Map.toList pairs

@@ -62,6 +62,7 @@ instance Pretty (Process ann) where
   pretty (EmptyChoice x _) = pretty x
     <> ".case()"
   pretty (End _) = "end"
+  pretty (Mix p q _) = pretty p <> " | " <> pretty q
 
 instance Pretty (Type ann) where
   pretty (Var i _)        = "$" <> pretty i

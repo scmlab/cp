@@ -76,7 +76,12 @@ Declarations :: {[Declaration Loc]}
 
 Declaration :: {Declaration Loc}
     : s TermName ':' Session                      {% locate' $1 $ TypeSig $2 $4 }
-    | s TermName '=' Process                      {% locate' $1 $ TermDefn $2 $4 }
+    | s TermName '=' ProcessMix                   {% locate' $1 $ TermDefn $2 $4 }
+
+-- left recursive
+ProcessMix :: {Process Loc}
+    : ProcessMix '|' Process                      {% locate $ Mix $1 $3 }
+    | Process                                     { $1 }
 
 Process :: {Process Loc}
     : s TermName                                  {% locate' $1 $ Call $2  }
@@ -96,6 +101,7 @@ Process :: {Process Loc}
     | s TermName '()' '.' Process                 {% locate' $1 $ EmptyInput $2 $5 }
     | s TermName '.' 'case()'                     {% locate' $1 $ EmptyChoice $2 }
     | s 'end'                                     {% locate' $1 $ End }
+    | s '(' ProcessMix ')'                        { $3 }
 
 Session :: {Session Loc}
     : s TermName ':' Type                         {% locate' $1 $ singletonSession $2 $4 }

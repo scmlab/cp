@@ -367,6 +367,18 @@ infer term session = case term of
 
     return Map.empty
 
+  Mix p q _ -> do
+
+    sessionP <- infer p session
+    -- splitting the context
+    let session' = Map.difference session sessionP
+    sessionQ <- infer q session'
+
+    checkSessionShouldBeDisjoint term sessionP sessionQ
+
+    return
+      $ Map.union sessionP sessionQ
+
 -- weaken everything that has not been weakened
 weaken :: Session -> Session
 weaken = Map.map (\t -> if weakened t then t else Req t)

@@ -47,6 +47,7 @@ data Process  ann = Call      (TermName ann)                                ann
                   | EmptyInput               (TermName ann) (Process ann)   ann
                   | EmptyChoice              (TermName ann)                 ann
                   | End                                                     ann
+                  | Mix       (Process ann)   (Process ann)                 ann
                   deriving (Show, Functor)
 
 data Session ann = Session (Map (TermName ann) (Type ann)) ann
@@ -153,6 +154,7 @@ instance Located (Process Loc) where
   locOf (EmptyInput _ _ loc) = loc
   locOf (EmptyChoice _ loc) = loc
   locOf (End loc) = loc
+  locOf (Mix _ _ loc) = loc
 
 instance Located (Type Loc) where
   locOf (Var _ loc) = loc
@@ -273,6 +275,10 @@ instance ToAbstract (Process ann) A.Process where
             (toAbstract name)
     toAbstract (End _) =
         A.End
+    toAbstract (Mix p q _) =
+        A.Mix
+            (toAbstract p)
+            (toAbstract q)
 
 instance ToAbstract (Session ann) A.Session where
     toAbstract (Session pairs _) = Map.mapKeys toAbstract $ Map.map toAbstract $ pairs
