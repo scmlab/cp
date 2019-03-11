@@ -181,25 +181,6 @@ highlight = annotate (colorDull Blue) . pretty
 
 prettyInferError :: InferError -> M (Doc AnsiStyle)
 prettyInferError (General msg) = prettyError "Other unformatted inference errors" (Just msg) []
--- prettyInferError (ChannelsNotInContext term chan context) = prettyError "Channel not in context" (Just $ pack $ show chan ++ "\n" ++ show context) [locOf term]
--- prettyInferError (ChannelsNotInContext term chan context) =
---   prettyError' "Channel not in context"
---     [ "these channels "
---         <> (annotate (colorDull Blue) (pretty chan))
---         <> " are not in the context"
---         <> line
---         <> pretty context
---         <> line
---         <> "when checking the following term"
---     ] [locOf term]
--- prettyInferError (ShouldBeTypeVar term t) =
---   prettyError' "Channel type should be some variable"
---     [ "the type"
---         <> (annotate (colorDull Blue) (pretty t))
---         <> " should be some type variable"
---         <> line
---         <> "when checking the following term"
---     ] [locOf term]
 prettyInferError (CannotAppearInside term chan) =
   prettyError' "Channel not allowed"
     [ "channel "
@@ -226,7 +207,7 @@ prettyInferError (TypeMismatch term expectedWhole givenWhole expected given) =
                   <> "     and: " <> highlight givenWhole
               ]
 
-prettyInferError (ContextShouldBeAllRequesting term session) =
+prettyInferError (SessionShouldBeAllRequesting term session) =
   prettyError' "Channels should all be requesting"
     [ "there are some channels"
         <> line

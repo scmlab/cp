@@ -12,10 +12,8 @@ import Control.Monad.Except
 
 import qualified Data.List as List
 import Data.Loc (Loc)
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
-
 -- import Debug.Trace
 
 --------------------------------------------------------------------------------
@@ -45,9 +43,10 @@ data InferError
   = General Text
   | TypeMismatch Term Type Type Type Type
   | SessionMismatch Name Session Session
-  | ContextShouldBeAllRequesting Term Session
+  | SessionShouldBeAllRequesting Term Session
   | CannotAppearInside Term Chan
-  | ContextShouldBeTheSame Term Session
+  | SessionShouldBeTheSame Term Session
+  | SessionShouldBeDisjoint Term Session
   | ChannelNotComsumed Term Session
   deriving (Show)
 
@@ -109,6 +108,7 @@ infer term session = case term of
     let session' = Map.difference session sessionP
     (u, sessionQ) <- infer q session' >>= extractChannel x
 
+    checkSessionShouldBeDisjoint term sessionP sessionQ
 
     let session'' = Map.union sessionP sessionQ
     (_, session''') <- unifyOppositeAndSubstitute term t u session''
@@ -123,6 +123,7 @@ infer term session = case term of
     let session' = Map.difference session sessionP
     (u, sessionQ) <- infer q session' >>= extractChannel x
 
+    checkSessionShouldBeDisjoint term sessionP sessionQ
 
     let session'' = Map.union sessionP sessionQ
     (v, session''') <- unifyOppositeAndSubstitute term t' u session''
@@ -138,6 +139,8 @@ infer term session = case term of
 
     let session' = Map.difference session sessionP
     (b, sessionQ) <- infer q session' >>= extractChannel x
+
+    checkSessionShouldBeDisjoint term sessionP sessionQ
 
     let session'' = Map.union sessionP sessionQ
     let t = Times a b
@@ -174,7 +177,7 @@ infer term session = case term of
   C.Choice x p q _ -> do
     (a, sessionP) <- infer p session >>= extractChannel x
     (b, sessionQ) <- infer q session >>= extractChannel x
-    checkContextShouldBeTheSame term sessionP sessionQ
+    checkSessionShouldBeTheSame term sessionP sessionQ
     let t = With a b
     return
       $ Map.insert (toAbstract x) t
@@ -183,24 +186,23 @@ infer term session = case term of
   C.Accept x y p _ -> do
 
     (a, session') <- infer p session >>= extractChannel y
-    checkContextWhenAccept term session'
+    checkSessionWhenAccept term session'
 
-    if Map.member (toAbstract x) session'
-      then throwError $ CannotAppearInside p x
-      else return
-            $ Map.insert (toAbstract x) (Acc a)
-            $ session'
+    checkCannotAppearInside term x session'
+
+    return
+      $ Map.insert (toAbstract x) (Acc a)
+      $ session'
 
   C.Request x y p _ -> do
 
     (a, session') <- infer p session >>= extractChannel y
 
-    if Map.member (toAbstract x) session'
-      then throwError $ CannotAppearInside p x
-      else return
-            $ Map.insert (toAbstract x) (Req a)
-            $ session'
-    -- error $ show (a, session')
+    checkCannotAppearInside term x session'
+
+    return
+      $ Map.insert (toAbstract x) (Req a)
+      $ session'
 
   C.OutputT x t p _ -> do
 
@@ -233,11 +235,11 @@ infer term session = case term of
 
     session''' <- infer p session''
 
-    if Map.member (toAbstract x) session'''
-      then throwError $ CannotAppearInside p x
-      else return
-            $ Map.insert (toAbstract x) t'
-            $ session'''
+    checkCannotAppearInside term x session'''
+
+    return
+      $ Map.insert (toAbstract x) t'
+      $ session'''
 
   C.EmptyChoice x _ -> do
     (t, session') <- extractChannel x session
@@ -283,12 +285,42 @@ unifyAndSubstitute term expected given session = do
 
 checkIfEqual :: Term -> Type -> Type -> InferM ()
 checkIfEqual term expected given = do
-    let (result, subst) = unify expected given
+    let (result, _) = unify expected given
     case result of
       Left (a, b) -> throwError $ TypeMismatch term expected given a b
-      Right t -> return ()
+      Right _ -> return ()
 
 
+-- all channels should be requesting something
+checkSessionWhenAccept :: Term -> Session -> InferM ()
+checkSessionWhenAccept term session = do
+  let result = List.all requesting $ Map.toList session
+  unless result $
+    throwError $ SessionShouldBeAllRequesting term session
+
+  where
+    requesting :: (Text, Type) -> Bool
+    requesting (_, Req _) = True
+    requesting (_,     _) = False
+
+checkSessionShouldBeTheSame :: Term -> Session -> Session -> InferM ()
+checkSessionShouldBeTheSame term a b = do
+  unless (a == b) $
+    throwError $ SessionShouldBeTheSame term $
+      Map.union
+        (Map.difference a b)
+        (Map.difference b a)
+
+checkSessionShouldBeDisjoint :: Term -> Session -> Session -> InferM ()
+checkSessionShouldBeDisjoint term a b = do
+  let intersection = Map.intersection a b
+  unless (Map.null intersection) $
+    throwError $ SessionShouldBeDisjoint term intersection
+
+checkCannotAppearInside :: Term -> Chan -> Session -> InferM ()
+checkCannotAppearInside term chan session = do
+  when (Map.member (toAbstract chan) session) $
+    throwError $ CannotAppearInside term chan
 
 --------------------------------------------------------------------------------
 -- | Unification
@@ -351,23 +383,3 @@ substitute var new (Req t)        = Req (substitute var new t)
 substitute var new (Exists t u _) = Exists t (substitute var new u) Nothing
 substitute var new (Forall t u)   = Forall t (substitute var new u)
 substitute _   _   others         = others
-
--- all channels should be requesting something
-checkContextWhenAccept :: Term -> Session -> InferM ()
-checkContextWhenAccept term session = do
-  let result = List.all requesting $ Map.toList session
-  unless result $
-    throwError $ ContextShouldBeAllRequesting term session
-
-  where
-    requesting :: (Text, Type) -> Bool
-    requesting (_, Req _) = True
-    requesting (_,     _) = False
-
-checkContextShouldBeTheSame :: Term -> Session -> Session -> InferM ()
-checkContextShouldBeTheSame term a b = do
-  unless (a == b) $
-    throwError $ ContextShouldBeTheSame term $
-      Map.union
-        (Map.difference a b)
-        (Map.difference b a)
