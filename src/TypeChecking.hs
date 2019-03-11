@@ -17,17 +17,16 @@ import Control.Monad.State
 import Control.Monad.Except
 
 data TCState = TCState
-  { stTypeSigs  :: Map (TermName Loc) (Session Loc)
-  , stTermDefns :: Map (TermName Loc) (Process Loc)
+  { stDefinitions :: Map Name Definition
   } deriving (Show)
 
 initialTCState :: TCState
-initialTCState = TCState Map.empty Map.empty
+initialTCState = TCState Map.empty
 
-data TypeError = TypeSigDuplicated (TermName Loc) (TermName Loc)
-               | TermDefnDuplicated (TermName Loc) (TermName Loc)
-               | TypeSigNotFound (TermName Loc)
-               | TermDefnNotFound (TermName Loc)
+data TypeError = TypeSigDuplicated Name Name
+               | TermDefnDuplicated Name Name
+               | TypeSigNotFound Name
+               | TermDefnNotFound Name
                | InferError InferError
                -- | ExpectButGot (Type Loc) (Type Loc) Term
                | Others Text
@@ -35,19 +34,24 @@ data TypeError = TypeSigDuplicated (TermName Loc) (TermName Loc)
 
 type TCM = ExceptT TypeError (State TCState)
 
-putTypeSigs :: Program Loc -> TCM ()
-putTypeSigs (Program declarations _) = modify $ \ st -> st { stTypeSigs = Map.fromList (mapMaybe toPair declarations) }
+putDefiniotions :: Program Loc -> TCM ()
+putDefiniotions (Program declarations _) =
+  modify $ \ st -> st { stDefinitions = Map.union termsWithTypes termsWithoutTypes }
   where
-    toPair (TypeSig n t _) = Just (n, t)
-    toPair _               = Nothing
+    toTypeSigPair (TypeSig n t _) = Just (n, t)
+    toTypeSigPair _               = Nothing
 
-putTermDefns :: Program Loc -> TCM ()
-putTermDefns (Program declarations _) = modify $ \ st -> st { stTermDefns = Map.fromList (mapMaybe toPair declarations) }
-  where
-    toPair (TermDefn n t _) = Just (n, t)
-    toPair _                = Nothing
+    toTermDefnPair (TermDefn n t _) = Just (n, t)
+    toTermDefnPair _                = Nothing
 
+    typeSigs  = Map.fromList $ mapMaybe toTypeSigPair declarations
+    termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
 
+    termsWithTypes :: Map Name Definition
+    termsWithTypes = fmap (uncurry Annotated) $ Map.intersectionWith (,) termDefns typeSigs
+
+    termsWithoutTypes :: Map Name Definition
+    termsWithoutTypes =  fmap Unannotated $ Map.difference termDefns typeSigs
 
 --------------------------------------------------------------------------------
 -- |
@@ -57,30 +61,21 @@ checkAll program = do
   -- checking the definitions
   checkDuplications program
   -- store the definitions
-  putTypeSigs program
-  putTermDefns program
+  putDefiniotions program
 
-  -- typecheck all programs with types annotated
-  _ <- getAllTermsWithTypes >>= Map.traverseWithKey (\ name (session, term) ->
-    case typeCheck name (toAbstract session) term of
-        Left e -> throwError $ InferError e
-        Right _ -> return ())
+  -- return the inferred sessions of unannotated definitions
+  definitions <- gets stDefinitions
+  Map.traverseMaybeWithKey typeCheckOrInfer definitions
 
-  -- infer types for all those programs without
-  inferred <- getAllTermsWithoutTypes >>= Map.traverseWithKey (\ _ term ->
-    case inferTerm term of
-      Left e -> throwError $ InferError e
-      Right session -> return session)
-
-  return inferred
-
-getAllTermsWithTypes :: TCM (Map (TermName Loc) (Session Loc, Process Loc))
-getAllTermsWithTypes = Map.intersectionWith (,) <$> gets stTypeSigs <*> gets stTermDefns
-
-getAllTermsWithoutTypes :: TCM (Map (TermName Loc) (Process Loc))
-getAllTermsWithoutTypes = Map.difference <$> gets stTermDefns <*> gets stTypeSigs
-
-
+typeCheckOrInfer :: Name -> Definition -> TCM (Maybe A.Session)
+typeCheckOrInfer name (Annotated   term session) =
+  case typeCheck name (toAbstract session) term of
+    Left e -> throwError $ InferError e
+    Right _ -> return Nothing
+typeCheckOrInfer _ (Unannotated term) =
+  case inferTerm term of
+    Left e -> throwError $ InferError e
+    Right session -> return (Just session)
 
 -- there should be only at most one type signature or term definition
 checkDuplications :: Program Loc -> TCM ()

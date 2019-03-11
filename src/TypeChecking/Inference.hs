@@ -23,6 +23,14 @@ type Name = C.TermName Loc
 type Chan = Name
 type Term = C.Process Loc
 
+data Definition = Annotated   Term (C.Session Loc)
+                | Unannotated Term
+                deriving (Show)
+
+isAnnotated :: Definition -> Bool
+isAnnotated (Annotated _ _) = True
+isAnnotated _               = False
+
 type CtxVar = Int
 
 data InferState = InferState
