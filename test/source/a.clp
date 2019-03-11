@@ -6,7 +6,8 @@
 
 -- input = x(y) . x() . y() . y[].end
 
--- run = x[].end
+run : x : 1
+run = x[].end
 
 
 -- run = \ x: 1 . (x[y] . (y[].end | x[].end) | x(w).x().w[].end)
@@ -34,4 +35,4 @@
 
 -- choose = \ x : 1 . (x[inr].x().y[].end | x.case( x[].end , x[].end ))
 
-empty_choose = \ x : 1 . (x[inr].x().y[].end | x.case())
+-- empty_choose = \ x : 1 . (x[inr].x().y[].end | x.case())

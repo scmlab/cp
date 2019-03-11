@@ -7,6 +7,7 @@ import Syntax.Parser.Lexer
 import Syntax.Parser.Type
 import Syntax.Concrete
 import Syntax.Base
+import qualified Data.Map as Map
 import Data.Loc hiding (Pos)
 import Prelude hiding (GT, LT, EQ)
 
@@ -74,7 +75,7 @@ Declarations :: {[Declaration Loc]}
     | Declarations Declaration              { $2:$1 }
 
 Declaration :: {Declaration Loc}
-    : s TermName ':' Type                         {% locate' $1 $ TypeSig $2 $4 }
+    : s TermName ':' Session                      {% locate' $1 $ TypeSig $2 $4 }
     | s TermName '=' Process                      {% locate' $1 $ TermDefn $2 $4 }
 
 Process :: {Process Loc}
@@ -89,10 +90,14 @@ Process :: {Process Loc}
     | s '!' TermName '(' TermName ')' '.' Process {% locate' $1 $ Accept $3 $5 $8 }
     | s '?' TermName '[' TermName ']' '.' Process {% locate' $1 $ Request $3 $5 $8 }
     | s TermName '[' Type ']' '.' Process         {% locate' $1 $ OutputT $2 $4 $7 }
-    | s TermName '(' TypeVar ')' '.' Process     {% locate' $1 $ InputT $2 $4 $7 }
+    | s TermName '(' TypeVar ')' '.' Process      {% locate' $1 $ InputT $2 $4 $7 }
     | s TermName '[]' '.' 'end'                   {% locate' $1 $ EmptyOutput $2 }
     | s TermName '()' '.' Process                 {% locate' $1 $ EmptyInput $2 $5 }
     | s TermName '.' 'case()'                     {% locate' $1 $ EmptyChoice $2 }
+
+Session :: {Session Loc}
+    : s TermName ':' Type                         {% locate' $1 $ singletonSession $2 $4 }
+    | Session ',' TermName ':' Type               { insertSession $3 $5 $1 }
 
 Type :: {Type Loc}
     : s Type1                                   { $2 }

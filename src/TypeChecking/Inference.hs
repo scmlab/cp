@@ -1,7 +1,8 @@
 module TypeChecking.Inference where
 
 import qualified Syntax.Concrete as C
-import Syntax.Abstract (Type(..), TypeVar(..))
+import Syntax.Concrete (toAbstract)
+import Syntax.Abstract (Session, Type(..), TypeVar(..))
 import Syntax.Base
 
 import Prelude hiding (lookup)
@@ -24,8 +25,6 @@ type Chan = C.TermName Loc
 type Term = C.Process Loc
 
 type CtxVar = Int
-
-type Session = Map Chan Type
 
 data InferState = InferState
   {
@@ -78,8 +77,8 @@ infer term session = case term of
     (t, session''') <- unifyOppositeAndSubstitute term a b session''
 
     return
-      $ Map.insert x t
-      $ Map.insert y (dual t)
+      $ Map.insert (toAbstract x) t
+      $ Map.insert (toAbstract y) (dual t)
       $ session'''
 
   C.Compose x Nothing p q _ -> do
@@ -100,7 +99,7 @@ infer term session = case term of
 
     (t', sessionP) <- infer p session >>= extractChannel x
 
-    checkIfEqual term (C.toAbstract t) t'
+    checkIfEqual term (toAbstract t) t'
 
     -- splitting the context
     let session' = Map.difference session sessionP
@@ -122,7 +121,7 @@ infer term session = case term of
     let session'' = Map.union sessionP sessionQ
     let t = Times a b
     return
-      $ Map.insert x t
+      $ Map.insert (toAbstract x) t
       $ session''
 
   C.Input x y p _ -> do
@@ -132,7 +131,7 @@ infer term session = case term of
 
     let t = Par a b
     return
-      $ Map.insert x t
+      $ Map.insert (toAbstract x) t
       $ session''
 
   C.SelectL x p _ -> do
@@ -140,7 +139,7 @@ infer term session = case term of
     b <- freshType
     let t = Plus a (Var b)
     return
-      $ Map.insert x t
+      $ Map.insert (toAbstract x) t
       $ session'
 
   C.SelectR x p _ -> do
@@ -148,7 +147,7 @@ infer term session = case term of
     a <- freshType
     let t = Plus (Var a) b
     return
-      $ Map.insert x t
+      $ Map.insert (toAbstract x) t
       $ session'
 
   C.Choice x p q _ -> do
@@ -157,7 +156,7 @@ infer term session = case term of
     checkContextShouldBeTheSame term sessionP sessionQ
     let t = With a b
     return
-      $ Map.insert x t
+      $ Map.insert (toAbstract x) t
       $ sessionP
 
   C.Accept x y p _ -> do
@@ -165,20 +164,20 @@ infer term session = case term of
     (a, session') <- infer p session >>= extractChannel y
     checkContextWhenAccept term session'
 
-    if Map.member x session'
+    if Map.member (toAbstract x) session'
       then throwError $ CannotAppearInside p x
       else return
-            $ Map.insert x (Acc a)
+            $ Map.insert (toAbstract x) (Acc a)
             $ session'
 
   C.Request x y p _ -> do
 
     (a, session') <- infer p session >>= extractChannel y
 
-    if Map.member x session'
+    if Map.member (toAbstract x) session'
       then throwError $ CannotAppearInside p x
       else return
-            $ Map.insert x (Req a)
+            $ Map.insert (toAbstract x) (Req a)
             $ session'
     -- error $ show (a, session')
 
@@ -187,14 +186,14 @@ infer term session = case term of
     (u, session') <- infer p session >>= extractChannel x
     v <- freshType
     return
-      $ Map.insert x (Exists Unknown (Var v) (Just (C.toAbstract t, u)))
+      $ Map.insert (toAbstract x) (Exists Unknown (Var v) (Just (toAbstract t, u)))
       $ session'
 
   C.InputT x t p _ -> do
 
     (u, session') <- infer p session >>= extractChannel x
     return
-      $ Map.insert x (Forall (C.toAbstract t) u)
+      $ Map.insert (toAbstract x) (Forall (toAbstract t) u)
       $ session'
 
   C.EmptyOutput x _ -> do
@@ -204,7 +203,7 @@ infer term session = case term of
       throwError $ ChannelNotComsumed term leftover
 
     return
-      $ Map.fromList [(x, One)]
+      $ Map.fromList [(toAbstract x, One)]
 
   C.EmptyInput x p _ -> do
 
@@ -213,10 +212,10 @@ infer term session = case term of
 
     session''' <- infer p session''
 
-    if Map.member x session'''
+    if Map.member (toAbstract x) session'''
       then throwError $ CannotAppearInside p x
       else return
-            $ Map.insert x t'
+            $ Map.insert (toAbstract x) t'
             $ session'''
 
   C.EmptyChoice x _ -> do
@@ -224,18 +223,18 @@ infer term session = case term of
     (t', session'') <- unifyAndSubstitute term Top t session'
 
     return
-      $ Map.insert x t'
+      $ Map.insert (toAbstract x) t'
       $ session''
 
 
 extractChannel :: Chan -> Session -> InferM (Type, Session)
 extractChannel chan session = do
-  case Map.lookup chan session of
+  case Map.lookup (toAbstract chan) session of
     Nothing -> do
       t <- freshType
       return (Var t, session)
     Just t -> do
-      let session' = Map.delete chan session
+      let session' = Map.delete (toAbstract chan) session
       return (t, session')
 
 -- taking extra care when unifying two opposite types
@@ -339,7 +338,7 @@ checkContextWhenAccept term session = do
     throwError $ ContextShouldBeAllRequesting term session
 
   where
-    requesting :: (Chan, Type) -> Bool
+    requesting :: (Text, Type) -> Bool
     requesting (_, Req _) = True
     requesting (_,     _) = False
 

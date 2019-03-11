@@ -1,8 +1,10 @@
-{-# LANGUAGE OverloadedStrings                  #-}
+{-# LANGUAGE OverloadedStrings, TypeSynonymInstances, FlexibleInstances #-}
 
 module Pretty.Syntax.Abstract where
 
 import Syntax.Abstract
+
+import qualified Data.Map as Map
 
 import Data.Monoid ((<>))
 import Data.Text.Prettyprint.Doc hiding (line)
@@ -56,6 +58,11 @@ instance Pretty Process where
     <> "() . " <> pretty p
   pretty (EmptyChoice x) = pretty x
     <> ".case()"
+
+instance Pretty Session where
+  pretty pairs = vsep $ map p $ Map.toList pairs
+    where
+      p (k, v) = pretty k <> " : " <> pretty v
 
 instance Pretty Type where
   pretty (Var i)        = pretty i

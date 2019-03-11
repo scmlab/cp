@@ -9,6 +9,8 @@ import qualified Syntax.Abstract as A
 
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Prelude hiding (LT, EQ, GT)
 
 --------------------------------------------------------------------------------
@@ -25,7 +27,7 @@ data TypeName     ann = TypeName Text ann
 data Program      ann = Program     [Declaration ann]                       ann
                       deriving (Show, Functor)
 
-data Declaration  ann = TypeSig   (TermName ann)  (Type ann)                ann
+data Declaration  ann = TypeSig   (TermName ann)  (Session ann)             ann
                       | TermDefn  (TermName ann)  (Process ann)             ann
                       deriving (Show, Functor)
 
@@ -44,6 +46,19 @@ data Process  ann = Link      (TermName ann) (TermName ann)                 ann
                   | EmptyInput               (TermName ann) (Process ann)   ann
                   | EmptyChoice              (TermName ann)                 ann
                   deriving (Show, Functor)
+
+data Session ann = Session (Map (TermName ann) (Type ann)) ann
+              deriving (Show)
+
+instance Functor Session where
+  fmap f (Session p x) = Session (Map.mapKeys (fmap f) $ Map.map (fmap f) p) (f x)
+
+insertSession :: TermName ann -> Type ann -> Session ann -> Session ann
+insertSession x t (Session pairs m) =
+    Session (Map.insert x t pairs) m
+
+singletonSession :: TermName ann -> Type ann -> ann -> Session ann
+singletonSession x t l = Session (Map.insert x t Map.empty) l
 
 data Type ann = Var     (TypeVar  ann)              ann
               | Dual    (Type ann)                  ann
@@ -163,8 +178,8 @@ instance ToAbstract (Program ann) A.Program where
         A.Program (map toAbstract declarations)
 
 instance ToAbstract (Declaration ann) A.Declaration where
-    toAbstract (TypeSig name typ _) =
-        A.TypeSig (toAbstract name) (toAbstract typ)
+    toAbstract (TypeSig name session _) =
+        A.TypeSig (toAbstract name) (toAbstract session)
     toAbstract (TermDefn name process _) =
         A.TermDefn (toAbstract name) (toAbstract process)
 
@@ -249,6 +264,9 @@ instance ToAbstract (Process ann) A.Process where
     toAbstract (EmptyChoice name _) =
         A.EmptyChoice
             (toAbstract name)
+
+instance ToAbstract (Session ann) A.Session where
+    toAbstract (Session pairs _) = Map.mapKeys toAbstract $ Map.map toAbstract $ pairs
 
 instance ToAbstract (Type ann) A.Type where
     toAbstract (Var i _) =

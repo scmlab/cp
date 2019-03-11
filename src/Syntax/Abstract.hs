@@ -4,6 +4,7 @@ module Syntax.Abstract where
 import Syntax.Base
 
 import Data.Text (Text)
+import Data.Map (Map)
 
 --------------------------------------------------------------------------------
 -- | Type Variable
@@ -20,7 +21,7 @@ type TermName = Text
 data Program = Program [Declaration]
     deriving (Show)
 data Declaration
-    = TypeSig  TermName Type
+    = TypeSig  TermName Session
     | TermDefn TermName Process
     deriving (Show)
 data Process
@@ -57,6 +58,7 @@ data Process
 --------------------------------------------------------------------------------
 -- | Type level
 
+type Session = Map TermName Type
 data Type
     = Var TypeVar
     -- Subst B X A: B { A / X }

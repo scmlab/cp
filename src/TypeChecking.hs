@@ -2,6 +2,7 @@ module TypeChecking where
 
 
 import TypeChecking.Inference
+import qualified Syntax.Abstract as A
 import Syntax.Concrete
 import Data.Loc (Loc)
 
@@ -18,7 +19,7 @@ import Control.Monad.State
 import Control.Monad.Except
 
 data TCState = TCState
-  { stTypeSigs  :: Map (TermName Loc) (Type Loc)
+  { stTypeSigs  :: Map (TermName Loc) (Session Loc)
   , stTermDefns :: Map (TermName Loc) (Process Loc)
   } deriving (Show)
 
@@ -53,7 +54,7 @@ putTermDefns (Program declarations _) = modify $ \ st -> st { stTermDefns = Map.
 --------------------------------------------------------------------------------
 -- |
 
-checkAll :: Program Loc -> TCM [Session]
+checkAll :: Program Loc -> TCM [A.Session]
 checkAll program = do
   -- checking the definitions
   checkDuplications program
