@@ -291,14 +291,20 @@ infer term session = case term of
 
   Accept x y p _ -> do
 
-    (a, session') <- infer p session >>= extractChannel y
-    checkSessionWhenAccept term session'
 
-    checkCannotAppearInside term x session'
+    (a, session') <- infer p session >>= extractChannel y
+
+    -- weaken anything in the session that has not been weakened
+    let session'' = weaken session'
+
+    -- TODO: remove this useless checking
+    checkSessionWhenAccept term session''
+
+    checkCannotAppearInside term x session''
 
     return
       $ Map.insert (toAbstract x) (Acc a)
-      $ session'
+      $ session''
 
   Request x y p _ -> do
 
@@ -361,6 +367,13 @@ infer term session = case term of
 
     return Map.empty
 
+-- weaken everything that has not been weakened
+weaken :: Session -> Session
+weaken = Map.map (\t -> if weakened t then t else Req t)
+  where
+    weakened :: Type -> Bool
+    weakened (Req _) = True
+    weakened _       = False
 
 extractChannel :: Chan -> Session -> TCM (Type, Session)
 extractChannel chan session = do

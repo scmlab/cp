@@ -13,3 +13,14 @@ lookup = u() . v[] . end
 
 shop = x[u] . (putName | x(v) . getPrice)
 quote = x(u) . x[v] . (lookup | x[] . end)
+
+selectBuy = x[inl] . buy
+selectShop = x[inr] . shop
+choice = x.case(sell, quote)
+
+runBuy = \ x . (selectBuy | choice)
+runShop = \ x . (selectShop | choice)
+
+-- client = ?x[y] . selectBuy
+
+server = !a(y) . choice
