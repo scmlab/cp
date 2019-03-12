@@ -63,9 +63,11 @@ instance Pretty Process where
   pretty (Mix p q) = pretty p <> " | " <> pretty q
 
 instance Pretty Session where
-  pretty pairs = vsep $ map p $ Map.toList pairs
-    where
-      p (k, v) = pretty k <> " : " <> pretty v
+  pretty pairs
+    | Map.null pairs = "[empty session]"
+    | otherwise = vsep $ map p $ Map.toList pairs
+      where
+        p (k, v) = pretty k <> " : " <> pretty v
 
 instance Pretty Type where
   pretty (Var i)        = pretty i

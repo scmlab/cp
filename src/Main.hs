@@ -6,6 +6,7 @@ import qualified Syntax.Concrete as C
 import Syntax.Parser
 import TypeChecking
 import Pretty
+import Runtime
 
 import Data.Monoid (mempty, (<>))
 
@@ -95,14 +96,17 @@ main = void $ runM $ handleError $ do
 
     (inferred, _) <- runTCM (checkAll program)
 
+    -- error $ show inferred
+
+    -- printing inferred sessions
     _ <- Map.traverseWithKey (\name session -> do
       liftIO $ putStrLn $ show $ pretty name
       liftIO $ putStrLn $ show $ pretty session) inferred
-      -- liftIO $ putStrLn $ pretty vsep $ Map.map pretty session
 
-    -- forM_ tc $ liftIO . putStrLn . show . pretty
-    --
-    -- liftIO $ putStrLn $ pretty vsep $ map pretty tc
+
+
+
+
     return ()
 
 --------------------------------------------------------------------------------
@@ -187,24 +191,51 @@ prettyInferError (CannotAppearInside term chan) =
         <> line
         <> "to appear in the following term"
     ] [locOf term]
-
-prettyInferError (TypeMismatch term expectedWhole givenWhole expected given) =
+prettyInferError (ChannelNotComsumed term session) =
+  prettyError' "Channel not consumed"
+    [ "these channels should be comsumed"
+        <> line
+        <> line
+        <> indent 2 (pretty session)
+        <> line
+        <> line
+        <> "in the following term"
+    ] [locOf term]
+prettyInferError (TypeMismatch term expectedWhole actualWhole expected actual) =
   prettyError' "Type mismatched"
     (message ++
     [   "when checking the following term"
     ]) [locOf term]
-    where message = if expectedWhole == expected && givenWhole == given
+    where message = if expectedWhole == expected && actualWhole == actual
             then
               [      "expected: " <> highlight expected <> line
-                  <> "  actual: " <> highlight given
+                  <> "  actual: " <> highlight actual
               ]
             else
               [      "expected: " <> highlight expected <> line
-                  <> "  actual: " <> highlight given    <> line
+                  <> "  actual: " <> highlight actual    <> line
                   <> line
                   <> "      in: " <> highlight expectedWhole <> line
-                  <> "     and: " <> highlight givenWhole
+                  <> "     and: " <> highlight actualWhole
               ]
+
+prettyInferError (SessionMismatch term expected actual) =
+  prettyError' "Session mismatched"
+    [
+          "expected: "
+      <> line
+      <> line
+      <> indent 2 (pretty expected)
+      <> line
+      <> line
+      <>  "actual: "
+      <> line
+      <> line
+      <> indent 2 (pretty actual)
+      <> line
+      <> line
+      <>  "when checking the following term"
+    ] [locOf term]
 
 prettyInferError (SessionShouldBeAllRequesting term session) =
   prettyError' "Channels should all be requesting"

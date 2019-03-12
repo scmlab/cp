@@ -34,6 +34,7 @@ data Token
   | TokenBot
   | TokenZero
   | TokenTop
+  | TokenEmptySession
 
   -- Terms
 

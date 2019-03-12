@@ -21,6 +21,8 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Except
 
+import Debug.Trace
+
 --------------------------------------------------------------------------------
 -- | State
 
@@ -206,38 +208,25 @@ infer term session = case term of
       $ Map.insert (toAbstract y) (dual t)
       $ session'''
 
-  Compose x Nothing p q _ -> do
+  Compose x annotation p q _ -> do
 
-    (t, sessionP) <- infer p session >>= extractChannel x
+    a <- case annotation of
+          Nothing -> freshType >>= return . Var
+          Just t  -> return (toAbstract t)
 
-    -- splitting the context
-    let session' = Map.difference session sessionP
-    (u, sessionQ) <- infer q session' >>= extractChannel x
+    let sessionToP = Map.insert (toAbstract x) a session
+    (t, sessionFromP) <- infer p sessionToP >>= extractChannel x
+    let sessionToQ = Map.insert (toAbstract x) (Dual a)
+                    $ Map.difference session sessionFromP
+    (u, sessionFromQ) <- infer q sessionToQ >>= extractChannel x
 
-    checkSessionShouldBeDisjoint term sessionP sessionQ
+    checkSessionShouldBeDisjoint term sessionFromP sessionFromQ
 
-    let session'' = Map.union sessionP sessionQ
-    (_, session''') <- unifyOppositeAndSubstitute term t u session''
+    let sessionPQ = Map.union sessionFromP sessionFromQ
+    (v, result) <- unifyOppositeAndSubstitute term t u sessionPQ
 
-    return session'''
 
-  Compose x (Just t) p q _ -> do
-
-    (t', sessionP) <- infer p session >>= extractChannel x
-
-    -- splitting the context
-    let session' = Map.difference session sessionP
-    (u, sessionQ) <- infer q session' >>= extractChannel x
-
-    checkSessionShouldBeDisjoint term sessionP sessionQ
-
-    let session'' = Map.union sessionP sessionQ
-    (v, session''') <- unifyOppositeAndSubstitute term t' u session''
-
-    -- see if the inferred type is the same as the annotated type
-    checkIfEqual term (toAbstract t) v
-
-    return session'''
+    return result
 
   Output x y p q _ -> do
 
@@ -255,6 +244,7 @@ infer term session = case term of
       $ session''
 
   Input x y p _ -> do
+
 
     (a, session') <- infer p session >>= extractChannel y
     (b, session'') <- extractChannel x session'
@@ -342,10 +332,11 @@ infer term session = case term of
 
   EmptyInput x p _ -> do
 
-    (t, session') <- extractChannel x session
-    (t', session'') <- unifyAndSubstitute term Bot t session'
 
-    session''' <- infer p session''
+    (t, sessionToP) <- extractChannel x session
+    (t', sessionToP') <- unifyAndSubstitute term Bot t sessionToP
+
+    session''' <- infer p sessionToP'
 
     checkCannotAppearInside term x session'''
 
@@ -362,6 +353,7 @@ infer term session = case term of
       $ session''
 
   End _ -> do
+
     unless (Map.null session) $
       throwError $ InferError $ ChannelNotComsumed term session
 
@@ -478,8 +470,8 @@ unify a b = runState (runExceptT (run a b)) []
       modify ((:) (Substitute j t))
       return t
     -- run (Subst  t x u)  (Subst  v y w)  = Subst  <$> run t v <*> (modify ((:) (Substitute x (Var y))) >> return y) <*> run u w
-    run (Dual     t  )  v               = run t        (dual v)
-    run t               (Dual     v  )  = run (dual t) v
+    run (Dual     t  )  v               = dual   <$> run t        (dual v)
+    run t               (Dual     v  )  = dual   <$> run (dual t) v
     run (Times    t u)  (Times    v w)  = Times  <$> run t v <*> run u w
     run (Par      t u)  (Par      v w)  = Par    <$> run t v <*> run u w
     run (Plus     t u)  (Plus     v w)  = Plus   <$> run t v <*> run u w

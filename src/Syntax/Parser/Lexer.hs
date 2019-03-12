@@ -37,6 +37,7 @@ tokenRE
   <|> TokenBot          <$ "Bot"
   <|> TokenZero         <$ "0"
   <|> TokenTop          <$ "Top"
+  <|> TokenEmptySession <$ "{}"
 
   -- term
   <|> TokenLink         <$ "<->"
