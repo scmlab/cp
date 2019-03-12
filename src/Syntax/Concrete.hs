@@ -60,6 +60,9 @@ insertSession :: TermName ann -> Type ann -> Session ann -> Session ann
 insertSession x t (Session pairs m) =
     Session (Map.insert x t pairs) m
 
+emptySession :: ann -> Session ann
+emptySession l = Session Map.empty l
+
 singletonSession :: TermName ann -> Type ann -> ann -> Session ann
 singletonSession x t l = Session (Map.insert x t Map.empty) l
 

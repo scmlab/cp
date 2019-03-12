@@ -104,7 +104,8 @@ Process :: {Process Loc}
     | s '(' ProcessMix ')'                        { $3 }
 
 Session :: {Session Loc}
-    : s TermName ':' Type                         {% locate' $1 $ singletonSession $2 $4 }
+    : s '[]'                                      {% locate' $1 $ emptySession }
+    | s TermName ':' Type                         {% locate' $1 $ singletonSession $2 $4 }
     | Session ',' TermName ':' Type               { insertSession $3 $5 $1 }
 
 Type :: {Type Loc}
