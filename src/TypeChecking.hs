@@ -19,6 +19,7 @@ import Data.Text (Text)
 
 import Control.Monad
 import Control.Monad.State
+import Control.Monad.Reader
 import Control.Monad.Except
 
 import Debug.Trace
@@ -105,6 +106,84 @@ putDefiniotions (Program declarations _) =
 --------------------------------------------------------------------------------
 -- |
 
+type InferM = ReaderT Term (StateT Session TCM)
+
+freshType' :: InferM Type
+freshType' = lift (lift freshType) >>= return . Var
+
+execInferM :: Term -> Session -> InferM a -> TCM Session
+execInferM term session program = execStateT (runReaderT program term) session
+
+runInferM :: Term -> Session -> InferM a -> TCM (a, Session)
+runInferM term session program = runStateT (runReaderT program term) session
+
+takeOut :: Chan -> InferM Type
+takeOut chan = do
+  session <- get
+  (t, session') <- lift $ lift $ extractChannel chan session
+  put session'
+  return t
+
+sessionShouldBeEmpty :: InferM ()
+sessionShouldBeEmpty = do
+  term <- ask
+  session <- get
+  unless (Map.null session) $
+    lift $ lift $ throwError $ InferError $ ChannelNotComsumed term session
+
+
+sessionShouldBeDisjoint :: Session -> Session -> InferM ()
+sessionShouldBeDisjoint a b = do
+  term <- ask
+  lift $ lift $ checkSessionShouldBeDisjoint term a b
+
+unifyOpposite :: Type -> Type -> InferM Type
+unifyOpposite a b = do
+  term <- ask
+  (t, session') <- get >>= lift . lift . unifyOppositeAndSubstitute term a b
+  put session'
+  return t
+
+
+-- unify the two given types, and update the give session.
+-- for better error message, make the former type be the expecting type
+-- and the latter be the given type
+unifyAndSubstitute' :: Type -> Type -> InferM Type
+unifyAndSubstitute' expected given = do
+  term <- ask
+  (t, session') <- get >>= lift . lift . unifyAndSubstitute term expected given
+  put session'
+  return t
+
+
+putIn :: Chan -> Type -> InferM ()
+putIn chan t = do
+  term <- ask
+  session <- get
+
+  -- check if "chan" is already in the session
+  when (Map.member (toAbstract chan) session) $
+    lift $ lift $ throwError $ InferError $ CannotAppearInside term chan
+  modify (Map.insert (toAbstract chan) t)
+
+exclude :: Session -> InferM ()
+exclude s = modify (flip Map.difference s)
+
+sandbox :: InferM a -> InferM (a, Session)
+sandbox program = do
+  session <- get
+  result <- program
+  session' <- get
+  -- restore
+  put session
+  return (result, session')
+
+inferWithCurrentSession :: Term -> InferM ()
+inferWithCurrentSession term = do
+  session <- get
+  result <- lift $ lift $ infer term session
+  put result
+
 checkAll :: Program Loc -> TCM (Map (TermName Loc) A.Session)
 checkAll program = do
   -- checking the definitions
@@ -183,193 +262,188 @@ typeCheck name annotated term = do
 infer :: Term -> Session -> TCM Session
 infer term session = case term of
 
-  Call x _ -> do
-    definition <- gets stDefinitions
+  Call x _ -> execInferM term session $ do
+    definition <- lift $ lift $ gets stDefinitions
 
     case Map.lookup x definition of
-      Nothing -> throwError $ InferError $ DefnNotFound term x
+      Nothing -> lift $ lift $ throwError $ InferError $ DefnNotFound term x
       Just (Annotated _ t) -> return (toAbstract t)
-      Just (Unannotated p) -> infer p session
+      Just (Unannotated p) -> inferWithCurrentSession p >> get
 
+  Link x y _ -> execInferM term session $ do
+      a <- takeOut x
+      b <- takeOut y
 
-  Link x y _ -> do
+      sessionShouldBeEmpty
 
-    (a, session') <- extractChannel x session
-    (b, session'') <- extractChannel y session'
+      t <- unifyOpposite a b
 
-    unless (Map.null session'') $
-      throwError $ InferError $ ChannelNotComsumed term session''
+      putIn x t
+      putIn y (dual t)
 
+  Compose x annotation p q _ -> execInferM term session $ do
 
-    (t, session''') <- unifyOppositeAndSubstitute term a b session''
-
-    return
-      $ Map.insert (toAbstract x) t
-      $ Map.insert (toAbstract y) (dual t)
-      $ session'''
-
-  Compose x annotation p q _ -> do
-
-    a <- case annotation of
-          Nothing -> freshType >>= return . Var
+    -- get fresh type if it's not annotated
+    t <- case annotation of
+          Nothing -> freshType'
           Just t  -> return (toAbstract t)
 
-    let sessionToP = Map.insert (toAbstract x) a session
-    (t, sessionFromP) <- infer p sessionToP >>= extractChannel x
-    let sessionToQ = Map.insert (toAbstract x) (Dual a)
-                    $ Map.difference session sessionFromP
-    (u, sessionFromQ) <- infer q sessionToQ >>= extractChannel x
 
-    checkSessionShouldBeDisjoint term sessionFromP sessionFromQ
+    (a, sessionP) <- sandbox $ do
+      putIn x t
+      inferWithCurrentSession p
+      takeOut x
 
-    let sessionPQ = Map.union sessionFromP sessionFromQ
-    (v, result) <- unifyOppositeAndSubstitute term t u sessionPQ
+    exclude sessionP
 
+    (b, sessionQ) <- sandbox $ do
+      putIn x (dual t)
+      inferWithCurrentSession q
+      takeOut x
 
-    return result
+    sessionShouldBeDisjoint sessionP sessionQ
 
-  Output x y p q _ -> do
+    put (Map.union sessionP sessionQ)
 
-    (a, sessionP) <- infer p session >>= extractChannel y
+    unifyOpposite a b
 
-    let session' = Map.difference session sessionP
-    (b, sessionQ) <- infer q session' >>= extractChannel x
+  Output x y p q _ -> execInferM term session $ do
 
-    checkSessionShouldBeDisjoint term sessionP sessionQ
+    (a, sessionP) <- sandbox $ do
+      inferWithCurrentSession p
+      takeOut y
 
-    let session'' = Map.union sessionP sessionQ
-    let t = Times a b
-    return
-      $ Map.insert (toAbstract x) t
-      $ session''
+    exclude sessionP
 
-  Input x y p _ -> do
+    (b, sessionQ) <- sandbox $ do
+      inferWithCurrentSession q
+      takeOut x
 
+    sessionShouldBeDisjoint sessionP sessionQ
 
-    (a, session') <- infer p session >>= extractChannel y
-    (b, session'') <- extractChannel x session'
+    put (Map.union sessionP sessionQ)
 
-    let t = Par a b
-    return
-      $ Map.insert (toAbstract x) t
-      $ session''
-
-  SelectL x p _ -> do
-    (a, session') <- infer p session >>= extractChannel x
-    b <- freshType
-    let t = Plus a (Var b)
-    return
-      $ Map.insert (toAbstract x) t
-      $ session'
-
-  SelectR x p _ -> do
-    (b, session') <- infer p session >>= extractChannel x
-    a <- freshType
-    let t = Plus (Var a) b
-    return
-      $ Map.insert (toAbstract x) t
-      $ session'
-
-  Choice x p q _ -> do
-    (a, sessionP) <- infer p session >>= extractChannel x
-    (b, sessionQ) <- infer q session >>= extractChannel x
-    checkSessionShouldBeTheSame term sessionP sessionQ
-    let t = With a b
-    return
-      $ Map.insert (toAbstract x) t
-      $ sessionP
-
-  Accept x y p _ -> do
+    putIn x (Times a b)
 
 
-    (a, session') <- infer p session >>= extractChannel y
+  Input x y p _ -> execInferM term session $ do
+
+    inferWithCurrentSession p
+    b <- takeOut x
+    a <- takeOut y
+
+    putIn x (Par a b)
+
+  SelectL x p _ -> execInferM term session $ do
+
+    inferWithCurrentSession p
+    a <- takeOut x
+    b <- freshType'
+
+    putIn x (Plus a b)
+
+  SelectR x p _ -> execInferM term session $ do
+
+    inferWithCurrentSession p
+    b <- takeOut x
+    a <- freshType'
+
+    putIn x (Plus a b)
+
+  Choice x p q _ -> execInferM term session $ do
+
+    (a, sessionP) <- sandbox $ do
+      inferWithCurrentSession p
+      takeOut x
+
+    (b, sessionQ) <- sandbox $ do
+      inferWithCurrentSession q
+      takeOut x
+
+    lift $ lift $ checkSessionShouldBeTheSame term sessionP sessionQ
+
+    putIn x (With a b)
+
+  Accept x y p _ -> execInferM term session $ do
+
+    inferWithCurrentSession p
+    a <- takeOut y
 
     -- weaken anything in the session that has not been weakened
-    let session'' = weaken session'
+    modify weaken
 
-    -- TODO: remove this useless checking
-    checkSessionWhenAccept term session''
+    get >>= lift . lift . checkCannotAppearInside term x
 
-    checkCannotAppearInside term x session''
+    putIn x (Acc a)
 
-    return
-      $ Map.insert (toAbstract x) (Acc a)
-      $ session''
+  Request x y p _ -> execInferM term session $ do
 
-  Request x y p _ -> do
+    inferWithCurrentSession p
+    a <- takeOut y
 
-    (a, session') <- infer p session >>= extractChannel y
+    get >>= lift . lift . checkCannotAppearInside term x
 
-    checkCannotAppearInside term x session'
+    putIn x (Req a)
 
-    return
-      $ Map.insert (toAbstract x) (Req a)
-      $ session'
+  OutputT x t p _ -> execInferM term session $ do
 
-  OutputT x t p _ -> do
+    inferWithCurrentSession p
+    u <- takeOut x
+    v <- freshType'
 
-    (u, session') <- infer p session >>= extractChannel x
-    v <- freshType
-    return
-      $ Map.insert (toAbstract x) (Exists Unknown (Var v) (Just (toAbstract t, u)))
-      $ session'
-
-  InputT x t p _ -> do
-
-    (u, session') <- infer p session >>= extractChannel x
-    return
-      $ Map.insert (toAbstract x) (Forall (toAbstract t) u)
-      $ session'
-
-  EmptyOutput x _ -> do
-
-    (_, leftover) <- extractChannel x session
-    unless (Map.null leftover) $
-      throwError $ InferError $ ChannelNotComsumed term leftover
-
-    return
-      $ Map.fromList [(toAbstract x, One)]
-
-  EmptyInput x p _ -> do
+    putIn x (Exists Unknown v (Just (toAbstract t, u)))
 
 
-    (t, sessionToP) <- extractChannel x session
-    (t', sessionToP') <- unifyAndSubstitute term Bot t sessionToP
+  InputT x t p _ -> execInferM term session $ do
 
-    session''' <- infer p sessionToP'
+    inferWithCurrentSession p
+    u <- takeOut x
 
-    checkCannotAppearInside term x session'''
+    putIn x (Forall (toAbstract t) u)
 
-    return
-      $ Map.insert (toAbstract x) t'
-      $ session'''
+  EmptyOutput x _ -> execInferM term session $ do
 
-  EmptyChoice x _ -> do
-    (t, session') <- extractChannel x session
-    (t', session'') <- unifyAndSubstitute term Top t session'
+    _ <- takeOut x
+    sessionShouldBeEmpty
 
-    return
-      $ Map.insert (toAbstract x) t'
-      $ session''
+    putIn x One
 
-  End _ -> do
+  EmptyInput x p _ -> execInferM term session $ do
 
-    unless (Map.null session) $
-      throwError $ InferError $ ChannelNotComsumed term session
+    t <- takeOut x
+    t' <- unifyAndSubstitute' Bot t
 
-    return Map.empty
+    inferWithCurrentSession p
 
-  Mix p q _ -> do
+    get >>= lift . lift . checkCannotAppearInside term x
 
-    sessionP <- infer p session
-    -- splitting the context
-    let session' = Map.difference session sessionP
-    sessionQ <- infer q session'
+    putIn x t'
 
-    checkSessionShouldBeDisjoint term sessionP sessionQ
+  EmptyChoice x _ -> execInferM term session $ do
 
-    return
-      $ Map.union sessionP sessionQ
+    t <- takeOut x
+    t' <- unifyAndSubstitute' Top t
+
+    putIn x t'
+
+  End _ -> execInferM term session $ do
+
+    sessionShouldBeEmpty
+
+  Mix p q _ -> execInferM term session $ do
+
+    (_, sessionP) <- sandbox $
+      inferWithCurrentSession p
+
+    exclude sessionP
+
+    (_, sessionQ) <- sandbox $
+      inferWithCurrentSession q
+
+
+    sessionShouldBeDisjoint sessionP sessionQ
+
+    put $ Map.union sessionP sessionQ
 
 -- weaken everything that has not been weakened
 weaken :: Session -> Session
