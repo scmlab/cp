@@ -16,6 +16,9 @@ import Data.Text (Text)
 }
 
 %name programParser Program
+%name processParser ProcessMix
+%name sessionParser Session
+
 %tokentype { Token }
 %error { syntaticalError }
 

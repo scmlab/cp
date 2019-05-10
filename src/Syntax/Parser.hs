@@ -1,5 +1,7 @@
 module Syntax.Parser
   ( parseProgram
+  , parseProcess
+  , parseSession
   , parseConcreteProgram
   , ParseError(..)
   )
@@ -7,7 +9,7 @@ module Syntax.Parser
 
 import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
-import Syntax.Parser.Parser (programParser)
+import Syntax.Parser.Parser (programParser, processParser, sessionParser)
 import Syntax.Parser.Lexer (lexer)
 import Syntax.Parser.Type
 
@@ -18,11 +20,17 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Loc
 import Language.Lexer.Applicative
 
--- parseProcess :: ByteString -> Either ParseError Pi
--- parseProcess src = fromConcrete <$> runExcept (evalStateT processParser initState)
---   where filePath = ""
---         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
---         startingLoc = Loc (startPos filePath) (startPos  filePath)
+parseProcess :: ByteString -> Either ParseError (C.Process Loc)
+parseProcess src = runExcept (evalStateT processParser initState)
+  where filePath = ""
+        initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
+        startingLoc = Loc (startPos filePath) (startPos  filePath)
+
+parseSession :: ByteString -> Either ParseError A.Session
+parseSession src = C.toAbstract <$> runExcept (evalStateT sessionParser initState)
+  where filePath = ""
+        initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
+        startingLoc = Loc (startPos filePath) (startPos  filePath)
 
 parseConcreteProgram :: FilePath -> ByteString -> Either ParseError (C.Program Loc)
 parseConcreteProgram filePath src = runExcept (evalStateT programParser initState)

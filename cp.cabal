@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 68b02125f38a696b604c681415c7072f9d7161fb77be4170bb330c18d52b8320
+-- hash: 33c95a5ca016fcbe83edc101fdbcfd086f467994e54d129aae7f760255c328dc
 
 name:           cp
 version:        0.1.0.0
@@ -51,5 +51,48 @@ executable cp
     , prettyprinter-ansi-terminal
     , regex-applicative
     , srcloc
+    , text
+  default-language: Haskell2010
+
+test-suite cp-test
+  type: exitcode-stdio-1.0
+  main-is: Test.hs
+  other-modules:
+      Main
+      Test.Parser
+      Test.TypeChecking
+      Main
+      Pretty
+      Pretty.Syntax.Abstract
+      Pretty.Syntax.Concrete
+      Runtime
+      Syntax.Abstract
+      Syntax.Base
+      Syntax.Concrete
+      Syntax.Parser
+      Syntax.Parser.Lexer
+      Syntax.Parser.Parser
+      Syntax.Parser.Type
+      TypeChecking
+      Paths_cp
+  hs-source-dirs:
+      test
+      src
+  build-tools:
+      happy
+  build-depends:
+      array
+    , base >=4.7 && <5
+    , bytestring
+    , containers
+    , lexer-applicative
+    , mtl
+    , prettyprinter
+    , prettyprinter-ansi-terminal
+    , regex-applicative
+    , srcloc
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
     , text
   default-language: Haskell2010
