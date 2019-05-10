@@ -117,6 +117,9 @@ execInferM term session program = execStateT (runReaderT program term) session
 runInferM :: Term -> Session -> InferM a -> TCM (a, Session)
 runInferM term session program = runStateT (runReaderT program term) session
 
+evalInferM :: Term -> Session -> InferM a -> TCM a
+evalInferM term session program = evalStateT (runReaderT program term) session
+
 takeOut :: Chan -> InferM Type
 takeOut chan = do
   session <- get
@@ -135,7 +138,9 @@ sessionShouldBeEmpty = do
 sessionShouldBeDisjoint :: Session -> Session -> InferM ()
 sessionShouldBeDisjoint a b = do
   term <- ask
-  lift $ lift $ checkSessionShouldBeDisjoint term a b
+  let intersection = Map.intersection a b
+  unless (Map.null intersection) $
+    lift $ lift $ throwError $ InferError $ SessionShouldBeDisjoint term intersection
 
 unifyOpposite :: Type -> Type -> InferM Type
 unifyOpposite a b = do
@@ -179,10 +184,7 @@ sandbox program = do
   return (result, session')
 
 inferWithCurrentSession :: Term -> InferM ()
-inferWithCurrentSession term = do
-  session <- get
-  result <- lift $ lift $ infer term session
-  put result
+inferWithCurrentSession term = local (const term) infer
 
 checkAll :: Program Loc -> TCM (Map (TermName Loc) A.Session)
 checkAll program = do
@@ -222,6 +224,21 @@ checkDuplications (Program declarations _) = do
       in if null dup then Nothing else Just (head dup !! 0, head dup !! 1)
 
 
+checkNotInSession :: Chan -> InferM ()
+checkNotInSession chan = do
+  term <- ask
+  session <- get
+  when (Map.member (toAbstract chan) session) $
+    lift $ lift $ throwError $ InferError $ CannotAppearInside term chan
+
+checkSessionShouldBeTheSame :: Session -> Session -> InferM ()
+checkSessionShouldBeTheSame a b = do
+  term <- ask
+  unless (a == b) $
+    lift $ lift $ throwError $ InferError $ SessionShouldBeTheSame term $
+      Map.union
+        (Map.difference a b)
+        (Map.difference b a)
 
 -- freeVariable :: Process Loc -> Set (TermName Loc)
 -- freeVariable (Var x _) = Set.fromList [x, y]
@@ -242,7 +259,7 @@ checkDuplications (Program declarations _) = do
 
 
 inferTerm :: Term -> TCM Session
-inferTerm term = infer term Map.empty
+inferTerm term = infer' term Map.empty
 
 typeCheck :: Name -> Session -> Term -> TCM ()
 typeCheck name annotated term = do
@@ -258,192 +275,201 @@ typeCheck name annotated term = do
   -- look into the types and see if they are also the same
   forM_ (Map.intersectionWith (,) annotated inferred) (uncurry (checkIfEqual term))
 
+infer' :: Term -> Session -> TCM Session
+infer' term session = execInferM term session infer
 
-infer :: Term -> Session -> TCM Session
-infer term session = case term of
 
-  Call x _ -> execInferM term session $ do
-    definition <- lift $ lift $ gets stDefinitions
+infer :: InferM ()
+infer = do
+  term <- ask
+  case term of
 
-    case Map.lookup x definition of
-      Nothing -> lift $ lift $ throwError $ InferError $ DefnNotFound term x
-      Just (Annotated _ t) -> return (toAbstract t)
-      Just (Unannotated p) -> inferWithCurrentSession p >> get
+    Call x _ -> do
+      definition <- lift $ lift $ gets stDefinitions
 
-  Link x y _ -> execInferM term session $ do
+      case Map.lookup x definition of
+        Nothing -> lift $ lift $ throwError $ InferError $ DefnNotFound term x
+        Just (Annotated _ t) -> put (toAbstract t)
+        Just (Unannotated p) -> inferWithCurrentSession p
+
+      return ()
+
+    Link x y _ -> do
+        a <- takeOut x
+        b <- takeOut y
+
+        sessionShouldBeEmpty
+
+        t <- unifyOpposite a b
+
+        putIn x t
+        putIn y (dual t)
+
+    Compose x annotation p q _ -> do
+
+      -- get fresh type if it's not annotated
+      t <- case annotation of
+            Nothing -> freshType'
+            Just t  -> return (toAbstract t)
+
+
+      (a, sessionP) <- sandbox $ do
+        putIn x t
+        inferWithCurrentSession p
+        takeOut x
+
+      exclude sessionP
+
+      (b, sessionQ) <- sandbox $ do
+        putIn x (dual t)
+        inferWithCurrentSession q
+        takeOut x
+
+      sessionShouldBeDisjoint sessionP sessionQ
+
+      put (Map.union sessionP sessionQ)
+
+      _ <- unifyOpposite a b
+
+      return ()
+
+    Output x y p q _ -> do
+
+      (a, sessionP) <- sandbox $ do
+        inferWithCurrentSession p
+        takeOut y
+
+      exclude sessionP
+
+      (b, sessionQ) <- sandbox $ do
+        inferWithCurrentSession q
+        takeOut x
+
+      sessionShouldBeDisjoint sessionP sessionQ
+
+      put (Map.union sessionP sessionQ)
+
+      putIn x (Times a b)
+
+
+    Input x y p _ -> do
+
+      inferWithCurrentSession p
+      b <- takeOut x
+      a <- takeOut y
+
+      putIn x (Par a b)
+
+    SelectL x p _ -> do
+
+      inferWithCurrentSession p
       a <- takeOut x
-      b <- takeOut y
+      b <- freshType'
+
+      putIn x (Plus a b)
+
+    SelectR x p _ -> do
+
+      inferWithCurrentSession p
+      b <- takeOut x
+      a <- freshType'
+
+      putIn x (Plus a b)
+
+    Choice x p q _ -> do
+
+      (a, sessionP) <- sandbox $ do
+        inferWithCurrentSession p
+        takeOut x
+
+      (b, sessionQ) <- sandbox $ do
+        inferWithCurrentSession q
+        takeOut x
+
+      checkSessionShouldBeTheSame sessionP sessionQ
+
+      putIn x (With a b)
+
+    Accept x y p _ -> do
+
+      inferWithCurrentSession p
+      a <- takeOut y
+
+      -- weaken anything in the session that has not been weakened
+      modify weaken
+
+      checkNotInSession x
+
+      putIn x (Acc a)
+
+    Request x y p _ -> do
+
+      inferWithCurrentSession p
+      a <- takeOut y
+
+      checkNotInSession x
+
+      putIn x (Req a)
+
+    OutputT x t p _ -> do
+
+      inferWithCurrentSession p
+      u <- takeOut x
+      v <- freshType'
+
+      putIn x (Exists Unknown v (Just (toAbstract t, u)))
+
+
+    InputT x t p _ -> do
+
+      inferWithCurrentSession p
+      u <- takeOut x
+
+      putIn x (Forall (toAbstract t) u)
+
+    EmptyOutput x _ -> do
+
+      _ <- takeOut x
+      sessionShouldBeEmpty
+
+      putIn x One
+
+    EmptyInput x p _ -> do
+
+      t <- takeOut x
+      t' <- unifyAndSubstitute' Bot t
+
+      inferWithCurrentSession p
+
+      checkNotInSession x
+
+      putIn x t'
+
+    EmptyChoice x _ -> do
+
+      t <- takeOut x
+      t' <- unifyAndSubstitute' Top t
+
+      putIn x t'
+
+    End _ -> do
 
       sessionShouldBeEmpty
 
-      t <- unifyOpposite a b
+    Mix p q _ -> do
 
-      putIn x t
-      putIn y (dual t)
+      (_, sessionP) <- sandbox $
+        inferWithCurrentSession p
 
-  Compose x annotation p q _ -> execInferM term session $ do
+      exclude sessionP
 
-    -- get fresh type if it's not annotated
-    t <- case annotation of
-          Nothing -> freshType'
-          Just t  -> return (toAbstract t)
+      (_, sessionQ) <- sandbox $
+        inferWithCurrentSession q
 
 
-    (a, sessionP) <- sandbox $ do
-      putIn x t
-      inferWithCurrentSession p
-      takeOut x
+      sessionShouldBeDisjoint sessionP sessionQ
 
-    exclude sessionP
-
-    (b, sessionQ) <- sandbox $ do
-      putIn x (dual t)
-      inferWithCurrentSession q
-      takeOut x
-
-    sessionShouldBeDisjoint sessionP sessionQ
-
-    put (Map.union sessionP sessionQ)
-
-    unifyOpposite a b
-
-  Output x y p q _ -> execInferM term session $ do
-
-    (a, sessionP) <- sandbox $ do
-      inferWithCurrentSession p
-      takeOut y
-
-    exclude sessionP
-
-    (b, sessionQ) <- sandbox $ do
-      inferWithCurrentSession q
-      takeOut x
-
-    sessionShouldBeDisjoint sessionP sessionQ
-
-    put (Map.union sessionP sessionQ)
-
-    putIn x (Times a b)
-
-
-  Input x y p _ -> execInferM term session $ do
-
-    inferWithCurrentSession p
-    b <- takeOut x
-    a <- takeOut y
-
-    putIn x (Par a b)
-
-  SelectL x p _ -> execInferM term session $ do
-
-    inferWithCurrentSession p
-    a <- takeOut x
-    b <- freshType'
-
-    putIn x (Plus a b)
-
-  SelectR x p _ -> execInferM term session $ do
-
-    inferWithCurrentSession p
-    b <- takeOut x
-    a <- freshType'
-
-    putIn x (Plus a b)
-
-  Choice x p q _ -> execInferM term session $ do
-
-    (a, sessionP) <- sandbox $ do
-      inferWithCurrentSession p
-      takeOut x
-
-    (b, sessionQ) <- sandbox $ do
-      inferWithCurrentSession q
-      takeOut x
-
-    lift $ lift $ checkSessionShouldBeTheSame term sessionP sessionQ
-
-    putIn x (With a b)
-
-  Accept x y p _ -> execInferM term session $ do
-
-    inferWithCurrentSession p
-    a <- takeOut y
-
-    -- weaken anything in the session that has not been weakened
-    modify weaken
-
-    get >>= lift . lift . checkCannotAppearInside term x
-
-    putIn x (Acc a)
-
-  Request x y p _ -> execInferM term session $ do
-
-    inferWithCurrentSession p
-    a <- takeOut y
-
-    get >>= lift . lift . checkCannotAppearInside term x
-
-    putIn x (Req a)
-
-  OutputT x t p _ -> execInferM term session $ do
-
-    inferWithCurrentSession p
-    u <- takeOut x
-    v <- freshType'
-
-    putIn x (Exists Unknown v (Just (toAbstract t, u)))
-
-
-  InputT x t p _ -> execInferM term session $ do
-
-    inferWithCurrentSession p
-    u <- takeOut x
-
-    putIn x (Forall (toAbstract t) u)
-
-  EmptyOutput x _ -> execInferM term session $ do
-
-    _ <- takeOut x
-    sessionShouldBeEmpty
-
-    putIn x One
-
-  EmptyInput x p _ -> execInferM term session $ do
-
-    t <- takeOut x
-    t' <- unifyAndSubstitute' Bot t
-
-    inferWithCurrentSession p
-
-    get >>= lift . lift . checkCannotAppearInside term x
-
-    putIn x t'
-
-  EmptyChoice x _ -> execInferM term session $ do
-
-    t <- takeOut x
-    t' <- unifyAndSubstitute' Top t
-
-    putIn x t'
-
-  End _ -> execInferM term session $ do
-
-    sessionShouldBeEmpty
-
-  Mix p q _ -> execInferM term session $ do
-
-    (_, sessionP) <- sandbox $
-      inferWithCurrentSession p
-
-    exclude sessionP
-
-    (_, sessionQ) <- sandbox $
-      inferWithCurrentSession q
-
-
-    sessionShouldBeDisjoint sessionP sessionQ
-
-    put $ Map.union sessionP sessionQ
+      put $ Map.union sessionP sessionQ
 
 -- weaken everything that has not been weakened
 weaken :: Session -> Session
@@ -492,38 +518,6 @@ checkIfEqual term expected given = do
     case result of
       Left (a, b) -> throwError $ InferError $ TypeMismatch term expected given a b
       Right _ -> return ()
-
-
--- all channels should be requesting something
-checkSessionWhenAccept :: Term -> Session -> TCM ()
-checkSessionWhenAccept term session = do
-  let result = List.all requesting $ Map.toList session
-  unless result $
-    throwError $ InferError $ SessionShouldBeAllRequesting term session
-
-  where
-    requesting :: (Text, Type) -> Bool
-    requesting (_, Req _) = True
-    requesting (_,     _) = False
-
-checkSessionShouldBeTheSame :: Term -> Session -> Session -> TCM ()
-checkSessionShouldBeTheSame term a b = do
-  unless (a == b) $
-    throwError $ InferError $ SessionShouldBeTheSame term $
-      Map.union
-        (Map.difference a b)
-        (Map.difference b a)
-
-checkSessionShouldBeDisjoint :: Term -> Session -> Session -> TCM ()
-checkSessionShouldBeDisjoint term a b = do
-  let intersection = Map.intersection a b
-  unless (Map.null intersection) $
-    throwError $ InferError $ SessionShouldBeDisjoint term intersection
-
-checkCannotAppearInside :: Term -> Chan -> Session -> TCM ()
-checkCannotAppearInside term chan session = do
-  when (Map.member (toAbstract chan) session) $
-    throwError $ InferError $ CannotAppearInside term chan
 
 --------------------------------------------------------------------------------
 -- | Unification
