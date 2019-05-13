@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 33c95a5ca016fcbe83edc101fdbcfd086f467994e54d129aae7f760255c328dc
+-- hash: d9a753e8ef5223394acc34ebd0f1c92c17a337df075c7c8b0f926d94571c9d29
 
 name:           cp
 version:        0.1.0.0
@@ -58,9 +58,9 @@ test-suite cp-test
   type: exitcode-stdio-1.0
   main-is: Test.hs
   other-modules:
-      Main
       Test.Parser
       Test.TypeChecking
+      Test.Util
       Main
       Pretty
       Pretty.Syntax.Abstract
