@@ -68,48 +68,14 @@ data InferError
 data TypeError
   = TypeSigDuplicated Name Name
   | TermDefnDuplicated Name Name
-  -- | TypeSigNotFound Name
   | InferError InferError
   | Others Text
   deriving (Show)
 
 --------------------------------------------------------------------------------
--- | Monad
+-- | TCM
 
 type TCM = ExceptT TypeError (State TCState)
-
-freshType :: TCM TypeVar
-freshType = do
-  i <- gets stTypeCount
-  modify $ \ st -> st { stTypeCount = i + 1 }
-  return $ Nameless i
-
-putDefiniotions :: Program Loc -> TCM ()
-putDefiniotions (Program declarations _) =
-  modify $ \ st -> st { stDefinitions = Map.union termsWithTypes termsWithoutTypes }
-  where
-    toTypeSigPair (TypeSig n t _) = Just (n, t)
-    toTypeSigPair _               = Nothing
-
-    toTermDefnPair (TermDefn n t _) = Just (n, t)
-    toTermDefnPair _                = Nothing
-
-    typeSigs  = Map.fromList $ mapMaybe toTypeSigPair declarations
-    termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
-
-    termsWithTypes :: Map Name Definition
-    termsWithTypes = fmap (uncurry Annotated) $ Map.intersectionWith (,) termDefns typeSigs
-
-    termsWithoutTypes :: Map Name Definition
-    termsWithoutTypes =  fmap Unannotated $ Map.difference termDefns typeSigs
-
---------------------------------------------------------------------------------
--- |
-
-type InferM = ReaderT Term (StateT Session TCM)
-
-freshType' :: InferM Type
-freshType' = lift (lift freshType) >>= return . Var
 
 execInferM :: Term -> Session -> InferM a -> TCM Session
 execInferM term session program = execStateT (runReaderT program term) session
@@ -119,90 +85,6 @@ runInferM term session program = runStateT (runReaderT program term) session
 
 evalInferM :: Term -> Session -> InferM a -> TCM a
 evalInferM term session program = evalStateT (runReaderT program term) session
-
-takeOut :: Chan -> InferM Type
-takeOut chan = do
-  session <- get
-  (t, session') <- lift $ lift $ extractChannel chan session
-  put session'
-  return t
-
-sessionShouldBeEmpty :: InferM ()
-sessionShouldBeEmpty = do
-  term <- ask
-  session <- get
-  unless (Map.null session) $
-    lift $ lift $ throwError $ InferError $ ChannelNotComsumed term session
-
-
-sessionShouldBeDisjoint :: Session -> Session -> InferM ()
-sessionShouldBeDisjoint a b = do
-  term <- ask
-  let intersection = Map.intersection a b
-  unless (Map.null intersection) $
-    lift $ lift $ throwError $ InferError $ SessionShouldBeDisjoint term intersection
-
-unifyOpposite :: Type -> Type -> InferM Type
-unifyOpposite a b = do
-  term <- ask
-  (t, session') <- get >>= lift . lift . unifyOppositeAndSubstitute term a b
-  put session'
-  return t
-
-
--- unify the two given types, and update the give session.
--- for better error message, make the former type be the expecting type
--- and the latter be the given type
-unifyAndSubstitute' :: Type -> Type -> InferM Type
-unifyAndSubstitute' expected given = do
-  term <- ask
-  (t, session') <- get >>= lift . lift . unifyAndSubstitute term expected given
-  put session'
-  return t
-
-
-putIn :: Chan -> Type -> InferM ()
-putIn chan t = do
-  term <- ask
-  session <- get
-
-  -- check if "chan" is already in the session
-  when (Map.member (toAbstract chan) session) $
-    lift $ lift $ throwError $ InferError $ CannotAppearInside term chan
-  modify (Map.insert (toAbstract chan) t)
-
-exclude :: Session -> InferM ()
-exclude s = modify (flip Map.difference s)
-
-sandbox :: InferM a -> InferM (a, Session)
-sandbox program = do
-  session <- get
-  result <- program
-  session' <- get
-  -- restore
-  put session
-  return (result, session')
-
-inferWithCurrentSession :: Term -> InferM ()
-inferWithCurrentSession term = local (const term) infer
-
-checkAll :: Program Loc -> TCM (Map (TermName Loc) A.Session)
-checkAll program = do
-  -- checking the definitions
-  checkDuplications program
-  -- store the definitions
-  putDefiniotions program
-
-  -- return the inferred sessions of unannotated definitions
-  definitions <- gets stDefinitions
-  Map.traverseMaybeWithKey typeCheckOrInfer definitions
-
-typeCheckOrInfer :: Name -> Definition -> TCM (Maybe A.Session)
-typeCheckOrInfer name (Annotated   term session) = do
-  _ <- typeCheck name (toAbstract session) term
-  return Nothing
-typeCheckOrInfer _ (Unannotated term) =
-  inferTerm term >>= return . Just
 
 -- there should be only at most one type signature or term definition
 checkDuplications :: Program Loc -> TCM ()
@@ -224,39 +106,156 @@ checkDuplications (Program declarations _) = do
       in if null dup then Nothing else Just (head dup !! 0, head dup !! 1)
 
 
+checkAll :: Program Loc -> TCM (Map (TermName Loc) A.Session)
+checkAll program = do
+  -- checking the definitions
+  checkDuplications program
+  -- store the definitions
+  putDefiniotions program
+
+  -- return the inferred sessions of unannotated definitions
+  definitions <- gets stDefinitions
+  Map.traverseMaybeWithKey typeCheckOrInfer definitions
+
+typeCheckOrInfer :: Name -> Definition -> TCM (Maybe A.Session)
+typeCheckOrInfer name (Annotated   term session) = do
+  _ <- typeCheck name (toAbstract session) term
+  return Nothing
+typeCheckOrInfer _ (Unannotated term) =
+  inferTerm term >>= return . Just
+
+putDefiniotions :: Program Loc -> TCM ()
+putDefiniotions (Program declarations _) =
+  modify $ \ st -> st { stDefinitions = Map.union termsWithTypes termsWithoutTypes }
+  where
+    toTypeSigPair (TypeSig n t _) = Just (n, t)
+    toTypeSigPair _               = Nothing
+
+    toTermDefnPair (TermDefn n t _) = Just (n, t)
+    toTermDefnPair _                = Nothing
+
+    typeSigs  = Map.fromList $ mapMaybe toTypeSigPair declarations
+    termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
+
+    termsWithTypes :: Map Name Definition
+    termsWithTypes = fmap (uncurry Annotated) $ Map.intersectionWith (,) termDefns typeSigs
+
+    termsWithoutTypes :: Map Name Definition
+    termsWithoutTypes =  fmap Unannotated $ Map.difference termDefns typeSigs
+
+--------------------------------------------------------------------------------
+-- | InferM
+
+type InferM = ReaderT Term (StateT Session TCM)
+
+inferError :: InferError -> InferM a
+inferError = lift . lift . throwError . InferError
+
+freshType :: InferM Type
+freshType = do
+    i <- lift $ lift $ gets stTypeCount
+    lift $ lift $ modify $ \ st -> st { stTypeCount = i + 1 }
+    return $ Var $ Nameless i
+
+takeOut :: Chan -> InferM Type
+takeOut chan = do
+  session <- get
+  case Map.lookup (toAbstract chan) session of
+      Nothing -> freshType
+      Just t -> do
+        modify (Map.delete (toAbstract chan))
+        return t
+
+sessionShouldBeEmpty :: InferM ()
+sessionShouldBeEmpty = do
+  term <- ask
+  session <- get
+  unless (Map.null session) $
+    inferError $ ChannelNotComsumed term session
+
+
+sessionShouldBeDisjoint :: Session -> Session -> InferM ()
+sessionShouldBeDisjoint a b = do
+  term <- ask
+  let intersection = Map.intersection a b
+  unless (Map.null intersection) $
+    inferError $ SessionShouldBeDisjoint term intersection
+
+-- taking extra care when unifying two opposite types
+-- because we might will lose something when taking the dual of (Exists _ _ _)
+unifyOppositeAndSubstitute :: Type -> Type -> InferM Type
+unifyOppositeAndSubstitute a@(Exists _ _ _) b@(Forall _ _) = unifyAndSubstitute a (dual b)
+unifyOppositeAndSubstitute a@(Forall _ _) b@(Exists _ _ _) = unifyAndSubstitute (dual a) b
+unifyOppositeAndSubstitute a b                             = unifyAndSubstitute a (dual b)
+
+-- unify the two given types, and update the give session.
+-- for better error message, make the former type be the expecting type
+-- and the latter be the given type
+unifyAndSubstitute :: Type -> Type -> InferM Type
+unifyAndSubstitute expected given = do
+  term <- ask
+  session <- get
+  let (result, subst) = unify expected given
+  case result of
+    Left (t, u) -> inferError $ TypeMismatch term expected given t u
+    Right t -> do
+      modify (flip execSubstituton subst)
+      return t
+
+  where
+    execSubstituton :: Session -> [Substitution] -> Session
+    execSubstituton = foldr $ \ (Substitute var t) -> Map.map (substitute var t)
+
+--
+-- unifyAndSubstitute :: Term -> Type -> Type -> Session -> TCM (Type, Session)
+-- unifyAndSubstitute term expected given session = do
+--     let (result, subst) = unify expected given
+--     case result of
+--       Left (t, u) -> throwError $ InferError $ TypeMismatch term expected given t u
+--       Right t -> do
+--         let session' = execSubstituton session subst
+--         return (t, session')
+
+putIn :: Chan -> Type -> InferM ()
+putIn chan t = do
+  term <- ask
+  session <- get
+
+  -- check if "chan" is already in the session
+  when (Map.member (toAbstract chan) session) $
+    inferError $ CannotAppearInside term chan
+  modify (Map.insert (toAbstract chan) t)
+
+exclude :: Session -> InferM ()
+exclude s = modify (flip Map.difference s)
+
+sandbox :: InferM a -> InferM (a, Session)
+sandbox program = do
+  session <- get
+  result <- program
+  session' <- get
+  -- restore
+  put session
+  return (result, session')
+
+inferWithCurrentSession :: Term -> InferM ()
+inferWithCurrentSession term = local (const term) infer
+
 checkNotInSession :: Chan -> InferM ()
 checkNotInSession chan = do
   term <- ask
   session <- get
   when (Map.member (toAbstract chan) session) $
-    lift $ lift $ throwError $ InferError $ CannotAppearInside term chan
+    inferError $ CannotAppearInside term chan
 
 checkSessionShouldBeTheSame :: Session -> Session -> InferM ()
 checkSessionShouldBeTheSame a b = do
   term <- ask
   unless (a == b) $
-    lift $ lift $ throwError $ InferError $ SessionShouldBeTheSame term $
+    inferError $ SessionShouldBeTheSame term $
       Map.union
         (Map.difference a b)
         (Map.difference b a)
-
--- freeVariable :: Process Loc -> Set (TermName Loc)
--- freeVariable (Var x _) = Set.fromList [x, y]
--- freeVariable (Link x y _) = Set.fromList [x, y]
--- freeVariable (Compose x _ p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)
--- freeVariable (Output x y p q _) = Set.insert x $ Set.delete y $ Set.union (freeVariable p) (freeVariable q)
--- freeVariable (Input x y p _) = Set.insert x $ Set.delete y (freeVariable p)
--- freeVariable (SelectL x p _) = Set.insert x $ freeVariable p
--- freeVariable (SelectR x p _) = Set.insert x $ freeVariable p
--- freeVariable (Choice x p q _) = Set.insert x $ Set.union (freeVariable p) (freeVariable q)
--- freeVariable (Accept x y p _) = Set.insert x $ Set.delete y (freeVariable p)
--- freeVariable (Request x y p _) = Set.insert x $ Set.delete y (freeVariable p)
--- freeVariable (OutputT x _ p _) = Set.insert x (freeVariable p)
--- freeVariable (InputT x _ p _) = Set.insert x (freeVariable p)
--- freeVariable (EmptyOutput x _) = Set.singleton x
--- freeVariable (EmptyInput x p _) = Set.insert x $ freeVariable p
--- freeVariable (EmptyChoice x _) = Set.singleton x
-
 
 inferTerm :: Term -> TCM Session
 inferTerm term = infer' term Map.empty
@@ -288,11 +287,39 @@ infer = do
       definition <- lift $ lift $ gets stDefinitions
 
       case Map.lookup x definition of
-        Nothing -> lift $ lift $ throwError $ InferError $ DefnNotFound term x
+        Nothing -> inferError $ DefnNotFound term x
         Just (Annotated _ t) -> put (toAbstract t)
         Just (Unannotated p) -> inferWithCurrentSession p
 
       return ()
+
+    -- w : A
+    -- x : A'
+    -- A = ¬ A'
+    -----------------------------
+    -- x ↔ y ⊢ w : A  , x : A'
+
+    -- input  : x ↔ y
+
+    --  w  A
+
+
+    -- assume known   : x, y
+    -- show   known   : w
+    -- show unknown   : A
+
+    -- assume known   : A
+    -- show   known   : x
+    -- show unknown   : A'
+
+    -- assume known   : A'
+    -- show   known   : A = ¬ A'
+    -- show unknown   : result of A = ¬ A'
+
+    -- assume known   : result of A = ¬ A'
+    -- show   known   : w : A  , x : A'
+
+    -- output : w : A  , x : A'
 
     Link x y _ -> do
         a <- takeOut x
@@ -300,16 +327,35 @@ infer = do
 
         sessionShouldBeEmpty
 
-        t <- unifyOpposite a b
+        t <- unifyOppositeAndSubstitute a b
 
         putIn x t
         putIn y (dual t)
+
+    -- x : A
+    -- P ⊢ Γ, x :   A
+    -- Q ⊢ Δ, x : ¬ A
+    ----------------------
+    -- ν x : (P | Q) ⊢ Γ , Δ
+
+    -- input  : ν x : (P | Q)
+
+    -- assume known : x, P, Q
+    -- show   known : x
+    -- show unknown : A
+
+    -- assume known : P
+    -- show   known : P
+    -- show unknown : P ⊢ Γ, x : A
+
+    -- assume known : Γ
+    -- show   known : P
 
     Compose x annotation p q _ -> do
 
       -- get fresh type if it's not annotated
       t <- case annotation of
-            Nothing -> freshType'
+            Nothing -> freshType
             Just t  -> return (toAbstract t)
 
 
@@ -329,7 +375,7 @@ infer = do
 
       put (Map.union sessionP sessionQ)
 
-      _ <- unifyOpposite a b
+      _ <- unifyOppositeAndSubstitute a b
 
       return ()
 
@@ -364,7 +410,7 @@ infer = do
 
       inferWithCurrentSession p
       a <- takeOut x
-      b <- freshType'
+      b <- freshType
 
       putIn x (Plus a b)
 
@@ -372,7 +418,7 @@ infer = do
 
       inferWithCurrentSession p
       b <- takeOut x
-      a <- freshType'
+      a <- freshType
 
       putIn x (Plus a b)
 
@@ -415,7 +461,7 @@ infer = do
 
       inferWithCurrentSession p
       u <- takeOut x
-      v <- freshType'
+      v <- freshType
 
       putIn x (Exists Unknown v (Just (toAbstract t, u)))
 
@@ -437,7 +483,7 @@ infer = do
     EmptyInput x p _ -> do
 
       t <- takeOut x
-      t' <- unifyAndSubstitute' Bot t
+      t' <- unifyAndSubstitute Bot t
 
       inferWithCurrentSession p
 
@@ -448,7 +494,7 @@ infer = do
     EmptyChoice x _ -> do
 
       t <- takeOut x
-      t' <- unifyAndSubstitute' Top t
+      t' <- unifyAndSubstitute Top t
 
       putIn x t'
 
@@ -479,38 +525,6 @@ weaken = Map.map (\t -> if weakened t then t else Req t)
     weakened (Req _) = True
     weakened _       = False
 
-extractChannel :: Chan -> Session -> TCM (Type, Session)
-extractChannel chan session = do
-  case Map.lookup (toAbstract chan) session of
-    Nothing -> do
-      t <- freshType
-      return (Var t, session)
-    Just t -> do
-      let session' = Map.delete (toAbstract chan) session
-      return (t, session')
-
--- taking extra care when unifying two opposite types
--- because we might will lose something when taking the dual of (Exists _ _ _)
-unifyOppositeAndSubstitute :: Term -> Type -> Type -> Session -> TCM (Type, Session)
-unifyOppositeAndSubstitute term a@(Exists _ _ _) b@(Forall _ _) = unifyAndSubstitute term a (dual b)
-unifyOppositeAndSubstitute term a@(Forall _ _) b@(Exists _ _ _) = unifyAndSubstitute term (dual a) b
-unifyOppositeAndSubstitute term a b                             = unifyAndSubstitute term a (dual b)
-
--- unify the two given types, and update the give session.
--- for better error message, make the former type be the expecting type
--- and the latter be the given type
-unifyAndSubstitute :: Term -> Type -> Type -> Session -> TCM (Type, Session)
-unifyAndSubstitute term expected given session = do
-    let (result, subst) = unify expected given
-    case result of
-      Left (t, u) -> throwError $ InferError $ TypeMismatch term expected given t u
-      Right t -> do
-        let session' = execSubstituton session subst
-        return (t, session')
-
-    where
-      execSubstituton :: Session -> [Substitution] -> Session
-      execSubstituton = foldr $ \ (Substitute var t) -> Map.map (substitute var t)
 
 checkIfEqual :: Term -> Type -> Type -> TCM ()
 checkIfEqual term expected given = do
@@ -580,3 +594,20 @@ substitute var new (Req t)        = Req (substitute var new t)
 substitute var new (Exists t u _) = Exists t (substitute var new u) Nothing
 substitute var new (Forall t u)   = Forall t (substitute var new u)
 substitute _   _   others         = others
+
+-- freeVariable :: Process Loc -> Set (TermName Loc)
+-- freeVariable (Var x _) = Set.fromList [x, y]
+-- freeVariable (Link x y _) = Set.fromList [x, y]
+-- freeVariable (Compose x _ p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)
+-- freeVariable (Output x y p q _) = Set.insert x $ Set.delete y $ Set.union (freeVariable p) (freeVariable q)
+-- freeVariable (Input x y p _) = Set.insert x $ Set.delete y (freeVariable p)
+-- freeVariable (SelectL x p _) = Set.insert x $ freeVariable p
+-- freeVariable (SelectR x p _) = Set.insert x $ freeVariable p
+-- freeVariable (Choice x p q _) = Set.insert x $ Set.union (freeVariable p) (freeVariable q)
+-- freeVariable (Accept x y p _) = Set.insert x $ Set.delete y (freeVariable p)
+-- freeVariable (Request x y p _) = Set.insert x $ Set.delete y (freeVariable p)
+-- freeVariable (OutputT x _ p _) = Set.insert x (freeVariable p)
+-- freeVariable (InputT x _ p _) = Set.insert x (freeVariable p)
+-- freeVariable (EmptyOutput x _) = Set.singleton x
+-- freeVariable (EmptyInput x p _) = Set.insert x $ freeVariable p
+-- freeVariable (EmptyChoice x _) = Set.singleton x
