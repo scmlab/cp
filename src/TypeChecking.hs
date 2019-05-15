@@ -6,6 +6,8 @@ import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
 import qualified Syntax.Abstract as A
 import Syntax.Abstract (Session, Type(..), TypeVar(..))
 import Syntax.Base
+import qualified TypeChecking.Unification as U
+import TypeChecking.Unification (Substitution(..))
 --
 import Prelude hiding (lookup)
 
@@ -174,7 +176,6 @@ sessionShouldBeEmpty = do
   unless (Map.null session) $
     inferError $ ChannelNotComsumed term session
 
-
 sessionShouldBeDisjoint :: Session -> Session -> InferM ()
 sessionShouldBeDisjoint a b = do
   term <- ask
@@ -196,26 +197,12 @@ unifyAndSubstitute :: Type -> Type -> InferM Type
 unifyAndSubstitute expected given = do
   term <- ask
   session <- get
-  let (result, subst) = unify expected given
+  let (result, subst) = U.unify expected given
   case result of
     Left (t, u) -> inferError $ TypeMismatch term expected given t u
     Right t -> do
-      modify (flip execSubstituton subst)
+      modify (substitute subst)
       return t
-
-  where
-    execSubstituton :: Session -> [Substitution] -> Session
-    execSubstituton = foldr $ \ (Substitute var t) -> Map.map (substitute var t)
-
---
--- unifyAndSubstitute :: Term -> Type -> Type -> Session -> TCM (Type, Session)
--- unifyAndSubstitute term expected given session = do
---     let (result, subst) = unify expected given
---     case result of
---       Left (t, u) -> throwError $ InferError $ TypeMismatch term expected given t u
---       Right t -> do
---         let session' = execSubstituton session subst
---         return (t, session')
 
 putIn :: Chan -> Type -> InferM ()
 putIn chan t = do
@@ -263,8 +250,9 @@ inferTerm term = execInferM term Map.empty infer
 
 inferTerm2 :: Term -> TCM Session
 inferTerm2 term = do
-  ((substitute, result), freeChannels) <- runInferM2 Map.empty (inferWith term Map.empty)
-  return $ Map.union (substitute result) (substitute freeChannels)
+  ((subst, result), freeChannels) <- runInferM2 Map.empty (inferWith term Map.empty)
+  -- traceShow (subst, freeChannels) (return ())
+  return $ Map.union (substitute subst result) (substitute subst freeChannels)
 
 
 typeCheck :: Name -> Session -> Term -> TCM ()
@@ -531,91 +519,14 @@ weaken = Map.map (\t -> if weakened t then t else Req t)
 
 checkIfEqual :: Term -> Type -> Type -> TCM ()
 checkIfEqual term expected given = do
-    let (result, _) = unify expected given
+    let (result, _) = U.unify expected given
     case result of
       Left (a, b) -> throwError $ InferError $ TypeMismatch term expected given a b
       Right _ -> return ()
 
---------------------------------------------------------------------------------
--- | Unification
 
-data Substitution = Substitute TypeVar Type
-  deriving (Show)
-type UniError = (Type, Type)
-type UniM = ExceptT UniError (State [Substitution])
-
-unify :: Type -> Type -> (Either (Type, Type) Type, [Substitution])
-unify a b = runState (runExceptT (run a b)) []
-  where
-    run :: Type -> Type -> UniM Type
-    run (Var        i)  v               = do
-      modify ((:) (Substitute i v))
-      return v
-    run t               (Var        j)  = do
-      modify ((:) (Substitute j t))
-      return t
-    -- run (Subst  t x u)  (Subst  v y w)  = Subst  <$> run t v <*> (modify ((:) (Substitute x (Var y))) >> return y) <*> run u w
-    run (Dual     t  )  v               = dual   <$> run t        (dual v)
-    run t               (Dual     v  )  = dual   <$> run (dual t) v
-    run (Times    t u)  (Times    v w)  = Times  <$> run t v <*> run u w
-    run (Par      t u)  (Par      v w)  = Par    <$> run t v <*> run u w
-    run (Plus     t u)  (Plus     v w)  = Plus   <$> run t v <*> run u w
-    run (With     t u)  (With     v w)  = With   <$> run t v <*> run u w
-    run (Acc      t  )  (Acc      v  )  = run t v
-    run (Req      t  )  (Req      v  )  = run t v
-    run (Exists   _ u Nothing) (Exists   _ w Nothing)  = run u w
-    -- happens when we are composing ∃ with ∀
-    run (Exists   _ (Var ghost) (Just (witness, substituted))) (Exists var body Nothing) = do
-      -- substitute the ghost of ∃ with the body of ∀
-      modify ((:) (Substitute ghost body))
-      -- unify the substituted ghost with the substituted body
-      run substituted (substitute var witness body)
-    run (Exists var body Nothing)  (Exists   _ (Var ghost) (Just (witness, substituted))) = do
-      -- substitute the ghost of ∃ with the body of ∀
-      modify ((:) (Substitute ghost body))
-      -- unify the substituted ghost with the substituted body
-      run (substitute var witness body) substituted
-    run (Forall   _ u)  (Forall   _ w)  = run u w
-    run One             One             = return One
-    run Top             Top             = return Top
-    run Zero            Zero            = return Zero
-    run Bot             Bot             = return Bot
-    run t               v               = throwError (t, v)
-
--- replace a type variable in some type with another type
-substitute :: TypeVar -> Type -> Type -> Type
-substitute var new (Var var')
-  | var ==      var' = new
-  | otherwise        = Var var'
-substitute var new (Dual t)       = Dual (substitute var new t)
-substitute var new (Times t u)    = Times (substitute var new t) (substitute var new u)
-substitute var new (Par t u)      = Par (substitute var new t) (substitute var new u)
-substitute var new (Plus t u)     = Plus (substitute var new t) (substitute var new u)
-substitute var new (With t u)     = With (substitute var new t) (substitute var new u)
-substitute var new (Acc t)        = Acc (substitute var new t)
-substitute var new (Req t)        = Req (substitute var new t)
-substitute var new (Exists t u _) = Exists t (substitute var new u) Nothing
-substitute var new (Forall t u)   = Forall t (substitute var new u)
-substitute _   _   others         = others
-
--- freeVariable :: Process Loc -> Set (TermName Loc)
--- freeVariable (Var x _) = Set.fromList [x, y]
--- freeVariable (Link x y _) = Set.fromList [x, y]
--- freeVariable (Compose x _ p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)
--- freeVariable (Output x y p q _) = Set.insert x $ Set.delete y $ Set.union (freeVariable p) (freeVariable q)
--- freeVariable (Input x y p _) = Set.insert x $ Set.delete y (freeVariable p)
--- freeVariable (SelectL x p _) = Set.insert x $ freeVariable p
--- freeVariable (SelectR x p _) = Set.insert x $ freeVariable p
--- freeVariable (Choice x p q _) = Set.insert x $ Set.union (freeVariable p) (freeVariable q)
--- freeVariable (Accept x y p _) = Set.insert x $ Set.delete y (freeVariable p)
--- freeVariable (Request x y p _) = Set.insert x $ Set.delete y (freeVariable p)
--- freeVariable (OutputT x _ p _) = Set.insert x (freeVariable p)
--- freeVariable (InputT x _ p _) = Set.insert x (freeVariable p)
--- freeVariable (EmptyOutput x _) = Set.singleton x
--- freeVariable (EmptyInput x p _) = Set.insert x $ freeVariable p
--- freeVariable (EmptyChoice x _) = Set.singleton x
-
-
+substitute :: [Substitution] -> Session -> Session
+substitute = flip $ foldr $ \ (Substitute var t) -> Map.map (U.substitute var t)
 
 --------------------------------------------------------------------------------
 -- | InferM2
@@ -636,7 +547,7 @@ evalInferM2 session program = evalStateT program session
 
 inferWith :: Term           -- the term to infer
           -> Session        -- channels that we know exist in the session
-          -> InferM2  ( Session -> Session -- substitution function
+          -> InferM2  ( [Substitution] -- substitutions
                       , Session  -- other channels that we didn't know before
                       )
 inferWith term input = case term of
@@ -645,34 +556,89 @@ inferWith term input = case term of
     definition <- lift $ gets stDefinitions
     case Map.lookup x definition of
       Nothing -> throwError $ InferError $ DefnNotFound term x
-      Just (Annotated _ t) -> return (id, toAbstract t)
+      Just (Annotated _ t) -> return ([], toAbstract t)
       Just (Unannotated p) -> inferWith p input
 
   Link x y _ -> do
     a <- extract x
     b <- extract y
-    (t , substitute) <- unifyOppositeM a b
+    (t , substitute) <- unifyOpposite a b
     return (substitute, Map.empty)
-
 
   Compose x annotation p q _ -> do
 
-      -- generate fresh type for if not annotated
-      t <- case annotation of
-            Nothing -> freshType
-            Just t  -> return (toAbstract t)
+    -- generate fresh type for if not annotated
+    t <- case annotation of
+          Nothing -> freshType
+          Just t  -> return (toAbstract t)
 
-      -- infer P
-      let inputP = Map.singleton (toAbstract x) t
-      (substituteP, othersP) <- inferWith p inputP
+    -- infer P
+    (substituteP, othersP) <- inferWith p $ pairs [(x, t)]
 
-      -- infer Q
-      let inputQ = substituteP (dualSession inputP)
-      (substituteQ, othersQ) <- inferWith q inputQ
+    -- infer Q
+    (substituteQ, othersQ) <- inferWith q $ dualSession $ pairs [(x, t)]
 
-      return (substituteQ . substituteP, Map.union othersP othersQ)
+    return (substituteQ ++ substituteP, Map.union othersP othersQ)
 
-  _ -> return (id, Map.empty)
+  Output x y p q _ -> do
+
+    -- infer P
+    a <- freshType
+    (substituteP, othersP) <- inferWith p $ pairs [(y, a)]
+
+    -- infer Q
+    b <- freshType
+    (substituteQ, othersQ) <- inferWith q $ pairs [(x, b)]
+
+    c <- extract x
+    (t , substitute) <- unify c (Times a b)
+
+    return (substitute ++ substituteQ ++ substituteP, Map.insert (toAbstract x) t $ Map.union othersP othersQ)
+
+
+    -- sessionShouldBeDisjoint sessionP sessionQ
+    --
+    -- put (Map.union sessionP sessionQ)
+    --
+    -- putIn x (Times a b)
+
+
+  EmptyOutput x _ -> do
+
+    t <- extract x
+    (t', substitute) <- unify One t
+
+    -- sessionShouldBeEmpty
+    return (substitute, Map.empty)
+
+
+  EmptyInput x p _ -> do
+
+    t <- extract x
+    (t', substitute) <- unify Bot t
+
+    (substituteP, sessionP) <- inferWith p Map.empty
+
+    -- checkNotInSession x
+
+
+    return (substitute ++ substituteP, sessionP)
+
+  -- EmptyChoice x _ -> do
+  --
+  --
+  --   t <- takeOut x
+  --   t' <- unifyAndSubstitute Top t
+  --
+  --   putIn x t'
+
+  End _ -> do
+
+    -- sessionShouldBeEmpty
+    return ([], Map.empty)
+
+
+  _ -> return ([], Map.empty)
 
   where
     -- from the input session
@@ -687,22 +653,20 @@ inferWith term input = case term of
 
     -- taking extra care when unifying two opposite types
     -- because we might will lose something when taking the dual of (Exists _ _ _)
-    unifyOppositeM :: Type -> Type -> InferM2 (Type, Session -> Session)
-    unifyOppositeM a@(Exists _ _ _) b@(Forall _ _) = unifyM a (dual b)
-    unifyOppositeM a@(Forall _ _) b@(Exists _ _ _) = unifyM (dual a) b
-    unifyOppositeM a b                             = unifyM a (dual b)
+    unifyOpposite :: Type -> Type -> InferM2 (Type, [Substitution])
+    unifyOpposite a@(Exists _ _ _) b@(Forall _ _) = unify a (dual b)
+    unifyOpposite a@(Forall _ _) b@(Exists _ _ _) = unify (dual a) b
+    unifyOpposite a b                             = unify a (dual b)
 
     -- unify the two given types, and update the give session.
     -- for better error message, make the former type be the expecting type
     -- and the latter be the given type
-    unifyM :: Type -> Type -> InferM2 (Type, Session -> Session)
-    unifyM expected given = do
-      let (result, subst) = unify expected given
+    unify :: Type -> Type -> InferM2 (Type, [Substitution])
+    unify expected given = do
+      let (result, subst) = U.unify expected given
       case result of
         Left (t, u) -> throwError $ InferError $ TypeMismatch term expected given t u
-        Right t -> do
-          let f session = foldr (\ (Substitute var t) -> Map.map (substitute var t)) session subst
-          return (t, f)
+        Right t -> return (t, subst)
 
     freshType :: InferM2 Type
     freshType = do
@@ -712,6 +676,10 @@ inferWith term input = case term of
 
     dualSession :: Session -> Session
     dualSession = fmap dual
+
+    pairs :: [(C.TermName Loc, Type)] -> Session
+    pairs = Map.fromList . map (\(c, t) -> (toAbstract c, t))
+
 
   -- where
   --   execSubstituton :: Session -> [Substitution] -> Session
