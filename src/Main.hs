@@ -5,8 +5,8 @@ import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
 import Syntax.Parser
 import TypeChecking
+import TypeChecking.Types
 import Pretty
-import Runtime
 
 import Data.Monoid (mempty, (<>))
 

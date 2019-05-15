@@ -14,7 +14,9 @@ import Test.Tasty.HUnit
 import Test.Util
 import Syntax.Abstract
 import qualified Syntax.Concrete as C
-import TypeChecking (inferTerm, inferTerm2)
+import qualified TypeChecking.InferOld as Old
+import qualified TypeChecking.Infer as New
+
 import Main
 
 tests :: TestTree
@@ -165,7 +167,7 @@ emptyChoice = testCase "emptyChoice" $ do
 
 infer :: C.Process Loc -> IO Session
 infer term = do
-  (result, _) <- runM $ runTCM (inferTerm2 term)
+  (result, _) <- runM $ runTCM (New.inferTerm term)
   case result of
     Left  err         -> assertFailure $ show err
     Right (actual, _) -> return actual
