@@ -14,7 +14,7 @@ import Test.Tasty.HUnit
 import Test.Util
 import Syntax.Abstract
 import qualified Syntax.Concrete as C
-import TypeChecking (inferTerm)
+import TypeChecking (inferTerm, inferTerm2)
 import Main
 
 tests :: TestTree
@@ -156,9 +156,16 @@ emptyChoice = testCase "emptyChoice" $ do
   let expected = Map.fromList [("x", Top)]
   actual @?= expected
 
+-- infer :: C.Process Loc -> IO Session
+-- infer term = do
+--   (result, _) <- runM $ runTCM (inferTerm term)
+--   case result of
+--     Left  err         -> assertFailure $ show err
+--     Right (actual, _) -> return actual
+
 infer :: C.Process Loc -> IO Session
 infer term = do
-  (result, _) <- runM $ runTCM (inferTerm term)
+  (result, _) <- runM $ runTCM (inferTerm2 term)
   case result of
     Left  err         -> assertFailure $ show err
     Right (actual, _) -> return actual

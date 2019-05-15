@@ -61,6 +61,7 @@ data InferError
   | CannotAppearInside Term Chan
   | SessionShouldBeTheSame Term Session
   | SessionShouldBeDisjoint Term Session
+  | ChannelNotFound Term Chan Session
   | ChannelNotComsumed Term Session
   | DefnNotFound Term Name
   deriving (Show)
@@ -258,7 +259,13 @@ checkSessionShouldBeTheSame a b = do
         (Map.difference b a)
 
 inferTerm :: Term -> TCM Session
-inferTerm term = infer' term Map.empty
+inferTerm term = execInferM term Map.empty infer
+
+inferTerm2 :: Term -> TCM Session
+inferTerm2 term = do
+  ((substitute, result), freeChannels) <- runInferM2 Map.empty (inferWith term Map.empty)
+  return $ Map.union (substitute result) (substitute freeChannels)
+
 
 typeCheck :: Name -> Session -> Term -> TCM ()
 typeCheck name annotated term = do
@@ -273,10 +280,6 @@ typeCheck name annotated term = do
 
   -- look into the types and see if they are also the same
   forM_ (Map.intersectionWith (,) annotated inferred) (uncurry (checkIfEqual term))
-
-infer' :: Term -> Session -> TCM Session
-infer' term session = execInferM term session infer
-
 
 infer :: InferM ()
 infer = do
@@ -299,7 +302,7 @@ infer = do
     -----------------------------
     -- x ↔ y ⊢ w : A  , x : A'
 
-    -- input  : x ↔ y
+    -- input  : x ↔ y, w, x
 
     --  w  A
 
@@ -611,3 +614,106 @@ substitute _   _   others         = others
 -- freeVariable (EmptyOutput x _) = Set.singleton x
 -- freeVariable (EmptyInput x p _) = Set.insert x $ freeVariable p
 -- freeVariable (EmptyChoice x _) = Set.singleton x
+
+
+
+--------------------------------------------------------------------------------
+-- | InferM2
+
+
+type InferM2 = StateT Session TCM
+
+
+execInferM2 :: Session -> InferM2 a -> TCM Session
+execInferM2 session program = execStateT program session
+
+runInferM2 :: Session -> InferM2 a -> TCM (a, Session)
+runInferM2 session program = runStateT program session
+
+evalInferM2 :: Session -> InferM2 a -> TCM a
+evalInferM2 session program = evalStateT program session
+
+
+inferWith :: Term           -- the term to infer
+          -> Session        -- channels that we know exist in the session
+          -> InferM2  ( Session -> Session -- substitution function
+                      , Session  -- other channels that we didn't know before
+                      )
+inferWith term input = case term of
+
+  Call x _ -> do
+    definition <- lift $ gets stDefinitions
+    case Map.lookup x definition of
+      Nothing -> throwError $ InferError $ DefnNotFound term x
+      Just (Annotated _ t) -> return (id, toAbstract t)
+      Just (Unannotated p) -> inferWith p input
+
+  Link x y _ -> do
+    a <- extract x
+    b <- extract y
+    (t , substitute) <- unifyOppositeM a b
+    return (substitute, Map.empty)
+
+
+  Compose x annotation p q _ -> do
+
+      -- generate fresh type for if not annotated
+      t <- case annotation of
+            Nothing -> freshType
+            Just t  -> return (toAbstract t)
+
+      -- infer P
+      let inputP = Map.singleton (toAbstract x) t
+      (substituteP, othersP) <- inferWith p inputP
+
+      -- infer Q
+      let inputQ = substituteP (dualSession inputP)
+      (substituteQ, othersQ) <- inferWith q inputQ
+
+      return (substituteQ . substituteP, Map.union othersP othersQ)
+
+  _ -> return (id, Map.empty)
+
+  where
+    -- from the input session
+    extract :: Chan -> InferM2 Type
+    extract chan = case Map.lookup (toAbstract chan) input of
+      Nothing -> do
+        t <- freshType
+        -- emitting free variable
+        modify (Map.insert (toAbstract chan) t)
+        return t
+      Just t  -> return t
+
+    -- taking extra care when unifying two opposite types
+    -- because we might will lose something when taking the dual of (Exists _ _ _)
+    unifyOppositeM :: Type -> Type -> InferM2 (Type, Session -> Session)
+    unifyOppositeM a@(Exists _ _ _) b@(Forall _ _) = unifyM a (dual b)
+    unifyOppositeM a@(Forall _ _) b@(Exists _ _ _) = unifyM (dual a) b
+    unifyOppositeM a b                             = unifyM a (dual b)
+
+    -- unify the two given types, and update the give session.
+    -- for better error message, make the former type be the expecting type
+    -- and the latter be the given type
+    unifyM :: Type -> Type -> InferM2 (Type, Session -> Session)
+    unifyM expected given = do
+      let (result, subst) = unify expected given
+      case result of
+        Left (t, u) -> throwError $ InferError $ TypeMismatch term expected given t u
+        Right t -> do
+          let f session = foldr (\ (Substitute var t) -> Map.map (substitute var t)) session subst
+          return (t, f)
+
+    freshType :: InferM2 Type
+    freshType = do
+        i <- lift $ gets stTypeCount
+        lift $ modify $ \ st -> st { stTypeCount = i + 1 }
+        return $ Var $ Nameless i
+
+    dualSession :: Session -> Session
+    dualSession = fmap dual
+
+  -- where
+  --   execSubstituton :: Session -> [Substitution] -> Session
+
+--
