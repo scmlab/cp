@@ -49,10 +49,10 @@ data InferError
   = General Text
   | TypeMismatch Term Type Type Type Type
   | SessionMismatch Name Session Session
-  | SessionShouldBeAllRequesting Term Session
   | CannotAppearInside Term Chan
   | SessionShouldBeTheSame Term Session
   | SessionShouldBeDisjoint Term Session
+  | SessionShouldAllBeRequesting Term Session
   | ChannelNotFound Term Chan Session
   | ChannelNotComsumed Term Session
   | DefnNotFound Term Name

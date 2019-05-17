@@ -237,7 +237,7 @@ prettyInferError (SessionMismatch term expected actual) =
       <>  "when checking the following term"
     ] [locOf term]
 
-prettyInferError (SessionShouldBeAllRequesting term session) =
+prettyInferError (SessionShouldAllBeRequesting term session) =
   prettyError' "Channels should all be requesting"
     [ "there are some channels"
         <> line

@@ -69,7 +69,8 @@ substitute var new (Plus t u)     = Plus (substitute var new t) (substitute var 
 substitute var new (With t u)     = With (substitute var new t) (substitute var new u)
 substitute var new (Acc t)        = Acc (substitute var new t)
 substitute var new (Req t)        = Req (substitute var new t)
-substitute var new (Exists t u _) = Exists t (substitute var new u) Nothing
+substitute var new (Exists t u Nothing) = Exists t (substitute var new u) Nothing
+substitute var new (Exists t u (Just (v, w))) = Exists t (substitute var new u) (Just (substitute var new v, substitute var new w))
 substitute var new (Forall t u)   = Forall t (substitute var new u)
 substitute _   _   others         = others
 
