@@ -21,6 +21,7 @@ import Data.Maybe (mapMaybe)
 
 import Control.Monad
 import Control.Monad.State
+import Control.Monad.Writer
 import Control.Monad.Except
 
 import Debug.Trace
@@ -29,13 +30,13 @@ import Debug.Trace
 -- | TCM
 
 execInferM :: Session -> InferM a -> TCM Session
-execInferM session program = execStateT program session
+execInferM session program = execStateT (runWriterT program) session
 
-runInferM :: Session -> InferM a -> TCM (a, Session)
-runInferM session program = runStateT program session
+runInferM :: Session -> InferM a -> TCM ((a, [Substitution]), Session)
+runInferM session program = runStateT (runWriterT program) session
 
-evalInferM :: Session -> InferM a -> TCM a
-evalInferM session program = evalStateT program session
+evalInferM :: Session -> InferM a -> TCM (a, [Substitution])
+evalInferM session program = evalStateT (runWriterT program) session
 
 -- there should be only at most one type signature or term definition
 checkDuplications :: Program Loc -> TCM ()
@@ -134,9 +135,8 @@ sessionShouldAllBeRequesting term session = do
 
 inferTerm :: Term -> TCM Session
 inferTerm term = do
-  ((subst, result), freeChannels) <- runInferM Map.empty (inferWith term Map.empty)
-  -- traceShow (subst, freeChannels) (return ())
-  return $ Map.union (substitute subst result) (substitute subst freeChannels)
+  ((result, substitutions), freeChannels) <- runInferM Map.empty (inferWith term Map.empty)
+  return $ Map.union (substitute substitutions result) (substitute substitutions freeChannels)
 
 
 typeCheck :: Name -> Session -> Term -> TCM ()
@@ -177,28 +177,26 @@ substitute = flip $ foldr $ \ (Substitute var t) -> Map.map (U.substitute var t)
 -- | InferM
 
 
-type InferM = StateT Session TCM
+type InferM = WriterT [Substitution] (StateT Session TCM)
 
 
 inferWith :: Term           -- the term to infer
           -> Session        -- channels that we know exist in the session
-          -> InferM  ( [Substitution] -- substitutions
-                      , Session  -- other channels that we didn't know before
-                      )
+          -> InferM Session  -- other channels that we didn't know before
 inferWith term input = case term of
 
   Call x _ -> do
-    definition <- lift $ gets stDefinitions
+    definition <- lift $ lift $ gets stDefinitions
     case Map.lookup x definition of
       Nothing -> throwError $ InferError $ DefnNotFound term x
-      Just (Annotated _ t) -> return ([], toAbstract t)
+      Just (Annotated _ t) -> return (toAbstract t)
       Just (Unannotated p) -> inferWith p input
 
   Link x y _ -> do
     a <- extract x
     b <- extract y
-    (t , substitute) <- unifyOpposite a b
-    return (substitute, Map.empty)
+    t <- unifyOpposite a b
+    return Map.empty
 
   Compose x annotation p q _ -> do
 
@@ -208,111 +206,111 @@ inferWith term input = case term of
           Just t  -> return (toAbstract t)
 
     -- infer P
-    (substituteP, othersP) <- inferWith p $ pairs [(x, t)]
+    sessionP <- inferWith p $ pairs [(x, t)]
 
     -- infer Q
-    (substituteQ, othersQ) <- inferWith q $ dualSession $ pairs [(x, t)]
+    sessionQ <- inferWith q $ dualSession $ pairs [(x, t)]
 
-    return (substituteP ++ substituteQ, Map.union othersP othersQ)
+    return (Map.union sessionP sessionQ)
 
   Output x y p q _ -> do
 
     -- infer P
     a <- freshType
-    (substituteP, sessionP) <- inferWith p $ pairs [(y, a)]
+    sessionP <- inferWith p $ pairs [(y, a)]
 
     -- infer Q
     b <- freshType
-    (substituteQ, sessionQ) <- inferWith q $ pairs [(x, b)]
+    sessionQ <- inferWith q $ pairs [(x, b)]
 
     c <- extract x
-    (t , substitute) <- unify c (Times a b)
+    t <- unify c (Times a b)
 
     sessionShouldBeDisjoint term sessionP sessionQ
 
-    return (substituteP ++ substituteQ ++ substitute, Map.union sessionP sessionQ)
+    return (Map.union sessionP sessionQ)
 
   Input x y p _ -> do
 
     a <- freshType  -- y : a
     b <- freshType  -- x : b
-    (substituteP, sessionP) <- inferWith p $ pairs [(y, a), (x, b)]
+    session <- inferWith p $ pairs [(y, a), (x, b)]
 
     c <- extract x
-    (t , substitute) <- unify c (Par a b)
+    t <- unify c (Par a b)
 
-    return (substituteP ++ substitute, Map.insert (toAbstract x) t sessionP)
+    return (Map.insert (toAbstract x) t session)
 
   SelectL x p _ -> do
 
     -- infer P
     a <- freshType
     b <- freshType
-    (substituteP, sessionP) <- inferWith p $ pairs [(x, a)]
+    session <- inferWith p $ pairs [(x, a)]
 
     c <- extract x
-    (t , substitute) <- unify c (Plus a b)
+    t <- unify c (Plus a b)
 
-    return (substituteP ++ substitute, Map.insert (toAbstract x) t sessionP)
+    return (Map.insert (toAbstract x) t session)
 
   SelectR x p _ -> do
 
     -- infer P
     b <- freshType
     a <- freshType
-    (substituteP, sessionP) <- inferWith p $ pairs [(x, b)]
+    session <- inferWith p $ pairs [(x, b)]
 
     c <- extract x
-    (t , substitute) <- unify c (Plus a b)
+    t <- unify c (Plus a b)
 
-    return (substituteP ++ substitute, Map.insert (toAbstract x) t sessionP)
+    return (Map.insert (toAbstract x) t session)
 
   Choice x p q _ -> do
 
     a <- freshType
-    (substituteP, sessionP) <- inferWith p $ pairs [(x, a)]
+    sessionP <- inferWith p $ pairs [(x, a)]
 
     b <- freshType
-    (substituteQ, sessionQ) <- inferWith q $ pairs [(x, b)]
+    sessionQ <- inferWith q $ pairs [(x, b)]
 
     c <- extract x
-    (t , substitute) <- unify c (With a b)
+    t <- unify c (With a b)
 
     sessionShouldBeTheSame term sessionP sessionQ
 
-    return (substituteP ++ substituteQ ++ substitute, Map.insert (toAbstract x) t sessionP)
+    return (Map.insert (toAbstract x) t sessionP)
 
   Accept x y p _ -> do
 
     a <- freshType
-    (substituteP, sessionP) <- inferWith p $ pairs [(y, a)]
+    session <- inferWith p $ pairs [(y, a)]
 
-    sessionShouldAllBeRequesting term sessionP
+    sessionShouldAllBeRequesting term session
 
     a' <- extract x
-    (t , substitute) <- unify a' (Acc a)
+    t <- unify a' (Acc a)
 
-    return (substituteP ++ substitute, Map.insert (toAbstract x) t sessionP)
+    return (Map.insert (toAbstract x) t session)
 
   Request x y p _ -> do
 
     a <- freshType
-    (substituteP, sessionP) <- inferWith p $ pairs [(y, a)]
+    session <- inferWith p $ pairs [(y, a)]
 
     a' <- extract x
-    (t , substitute) <- unify a' (Req a)
+    t <- unify a' (Req a)
 
-    return (substituteP ++ substitute, Map.insert (toAbstract x) t sessionP)
+    return (Map.insert (toAbstract x) t session)
 
   OutputT x outputType p _ -> do
 
 
     afterSubstitution <- freshType    -- B {A / X}
     beforeSubstitution <- freshType   -- B
-    (substituteP, sessionP) <- inferWith p $ pairs [(x, afterSubstitution)]
+    session <- inferWith p $ pairs [(x, afterSubstitution)]
 
     body <- extract x
-    (body' , substitute) <- unify
+    body' <- unify
       body
       (Exists
                 Unknown             -- the type variable to be substituted
@@ -322,51 +320,45 @@ inferWith term input = case term of
                   , afterSubstitution       -- the resulting type after substitution
                   )))
 
-    return (substituteP ++ substitute, Map.insert (toAbstract x) body' sessionP)
+    return (Map.insert (toAbstract x) body' session)
 
 
   InputT x var p _ -> do
 
     b <- freshType
-    (substituteP, sessionP) <- inferWith p $ pairs [(x, b)]
+    session <- inferWith p $ pairs [(x, b)]
 
     t <- extract x
-    (t' , substitute) <- unify t (Forall (toAbstract var) b)
+    t' <- unify t (Forall (toAbstract var) b)
 
-    return (substituteP ++ substitute, Map.insert (toAbstract x) t' sessionP)
+    return (Map.insert (toAbstract x) t' session)
 
 
   EmptyOutput x _ -> do
 
     t <- extract x
-    (t', substitute) <- unify One t
+    t' <- unify One t
 
-    return (substitute, Map.empty)
+    return Map.empty
 
   EmptyInput x p _ -> do
 
     t <- extract x
-    (t', substitute) <- unify Bot t
+    t' <- unify Bot t
 
-    (substituteP, sessionP) <- inferWith p Map.empty
+    sessionP <- inferWith p Map.empty
 
 
-    return (substitute ++ substituteP, sessionP)
+    return sessionP
 
   EmptyChoice x _ -> do
 
     t <- extract x
-    (t', substitute) <- unify Top t
+    t' <- unify Top t
 
-    return (substitute, Map.empty)
+    return Map.empty
 
-  End _ -> do
-
-    -- sessionShouldBeEmpty
-    return ([], Map.empty)
-
-
-  _ -> return ([], Map.empty)
+  End _ -> return Map.empty
 
   where
     -- from the input session
@@ -381,7 +373,7 @@ inferWith term input = case term of
 
     -- taking extra care when unifying two opposite types
     -- because we might will lose something when taking the dual of (Exists _ _ _)
-    unifyOpposite :: Type -> Type -> InferM (Type, [Substitution])
+    unifyOpposite :: Type -> Type -> InferM Type
     unifyOpposite a@(Exists _ _ _) b@(Forall _ _) = unify a (dual b)
     unifyOpposite a@(Forall _ _) b@(Exists _ _ _) = unify (dual a) b
     unifyOpposite a b                             = unify a (dual b)
@@ -389,17 +381,19 @@ inferWith term input = case term of
     -- unify the two given types, and update the give session.
     -- for better error message, make the former type be the expecting type
     -- and the latter be the given type
-    unify :: Type -> Type -> InferM (Type, [Substitution])
+    unify :: Type -> Type -> InferM Type
     unify expected given = do
       let (result, subst) = U.unify expected given
       case result of
         Left (t, u) -> throwError $ InferError $ TypeMismatch term expected given t u
-        Right t -> return (t, subst)
+        Right t -> do
+          tell subst
+          return t
 
     freshType :: InferM Type
     freshType = do
-        i <- lift $ gets stTypeCount
-        lift $ modify $ \ st -> st { stTypeCount = i + 1 }
+        i <- lift $ lift $ gets stTypeCount
+        lift $ lift $ modify $ \ st -> st { stTypeCount = i + 1 }
         return $ Var $ Nameless i
 
     dualSession :: Session -> Session

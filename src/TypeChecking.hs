@@ -86,12 +86,6 @@ putDefiniotions (Program declarations _) =
 --------------------------------------------------------------------------------
 -- | Inference
 
-inferTerm2 :: Term -> TCM Session
-inferTerm2 term = do
-  ((subst, result), freeChannels) <- New.runInferM Map.empty (New.inferWith term Map.empty)
-  return $ Map.union (substitute subst result) (substitute subst freeChannels)
-
-
 typeCheck :: Name -> Session -> Term -> TCM ()
 typeCheck name annotated term = do
   inferred <- New.inferTerm term
