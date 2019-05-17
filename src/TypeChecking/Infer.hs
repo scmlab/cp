@@ -27,7 +27,7 @@ import Control.Monad.Except
 import Debug.Trace
 
 --------------------------------------------------------------------------------
--- | TCM
+-- | InferM
 
 execInferM :: Session -> InferM a -> TCM Session
 execInferM session program = execStateT (runWriterT program) session
@@ -37,66 +37,6 @@ runInferM session program = runStateT (runWriterT program) session
 
 evalInferM :: Session -> InferM a -> TCM (a, [Substitution])
 evalInferM session program = evalStateT (runWriterT program) session
-
--- there should be only at most one type signature or term definition
-checkDuplications :: Program Loc -> TCM ()
-checkDuplications (Program declarations _) = do
-  let typeSigNames = mapMaybe typeSigName declarations
-  let termDefnNames = mapMaybe termDefnName declarations
-
-  case getDuplicatedPair typeSigNames of
-    Nothing     -> return ()
-    Just (a, b) -> throwError $ TypeSigDuplicated a b
-  case getDuplicatedPair termDefnNames of
-    Nothing     -> return ()
-    Just (a, b) -> throwError $ TermDefnDuplicated a b
-
-  where
-    getDuplicatedPair :: [TermName Loc] -> Maybe (TermName Loc, TermName Loc)
-    getDuplicatedPair names =
-      let dup = filter ((> 1) . length) $ List.group $ List.sort names
-      in if null dup then Nothing else Just (head dup !! 0, head dup !! 1)
-
-
-checkAll :: Program Loc -> TCM (Map (TermName Loc) A.Session)
-checkAll program = do
-  -- checking the definitions
-  checkDuplications program
-  -- store the definitions
-  putDefiniotions program
-
-  -- return the inferred sessions of unannotated definitions
-  definitions <- gets stDefinitions
-  Map.traverseMaybeWithKey typeCheckOrInfer definitions
-
-typeCheckOrInfer :: Name -> Definition -> TCM (Maybe A.Session)
-typeCheckOrInfer name (Annotated   term session) = do
-  _ <- typeCheck name (toAbstract session) term
-  return Nothing
-typeCheckOrInfer _ (Unannotated term) =
-  inferTerm term >>= return . Just
-
-putDefiniotions :: Program Loc -> TCM ()
-putDefiniotions (Program declarations _) =
-  modify $ \ st -> st { stDefinitions = Map.union termsWithTypes termsWithoutTypes }
-  where
-    toTypeSigPair (TypeSig n t _) = Just (n, t)
-    toTypeSigPair _               = Nothing
-
-    toTermDefnPair (TermDefn n t _) = Just (n, t)
-    toTermDefnPair _                = Nothing
-
-    typeSigs  = Map.fromList $ mapMaybe toTypeSigPair declarations
-    termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
-
-    termsWithTypes :: Map Name Definition
-    termsWithTypes = fmap (uncurry Annotated) $ Map.intersectionWith (,) termDefns typeSigs
-
-    termsWithoutTypes :: Map Name Definition
-    termsWithoutTypes =  fmap Unannotated $ Map.difference termDefns typeSigs
-
---------------------------------------------------------------------------------
--- | InferM
 
 inferError :: InferError -> InferM a
 inferError = lift . throwError . InferError
@@ -136,6 +76,7 @@ sessionShouldAllBeRequesting term session = do
 inferTerm :: Term -> TCM Session
 inferTerm term = do
   ((result, substitutions), freeChannels) <- runInferM Map.empty (inferWith term Map.empty)
+  traceShow substitutions (return ())
   return $ Map.union (substitute substitutions result) (substitute substitutions freeChannels)
 
 
@@ -184,6 +125,11 @@ inferWith :: Term           -- the term to infer
           -> Session        -- channels that we know exist in the session
           -> InferM Session  -- other channels that we didn't know before
 inferWith term input = case term of
+
+  -- free variables may be bound by variables from `input`
+  -- freeVars <- get
+  -- Map.intersectionWith (\binder free -> Substitution )
+
 
   Call x _ -> do
     definition <- lift $ lift $ gets stDefinitions
@@ -239,7 +185,8 @@ inferWith term input = case term of
     c <- extract x
     t <- unify c (Par a b)
 
-    return (Map.insert (toAbstract x) t session)
+    -- traceShow session (return ())
+    return session
 
   SelectL x p _ -> do
 
@@ -343,11 +290,10 @@ inferWith term input = case term of
 
   EmptyInput x p _ -> do
 
-    t <- extract x
-    t' <- unify Bot t
-
     sessionP <- inferWith p Map.empty
 
+    t <- extract x
+    t' <- unify Bot t
 
     return sessionP
 
@@ -363,13 +309,19 @@ inferWith term input = case term of
   where
     -- from the input session
     extract :: Chan -> InferM Type
-    extract chan = case Map.lookup (toAbstract chan) input of
-      Nothing -> do
-        t <- freshType
-        -- emitting free variable
-        modify (Map.insert (toAbstract chan) t)
-        return t
-      Just t  -> return t
+    extract chan = do
+      traceShow (toAbstract chan) (return ())
+
+      traceShow ("input: " ++ show input) (return ())
+      freeVars <- get
+      traceShow ("free:  " ++ show freeVars) (return ())
+      case Map.lookup (toAbstract chan) input of
+        Nothing -> do
+          t <- freshType
+          -- emitting free variable
+          modify (Map.insert (toAbstract chan) t)
+          return t
+        Just t  -> return t
 
     -- taking extra care when unifying two opposite types
     -- because we might will lose something when taking the dual of (Exists _ _ _)

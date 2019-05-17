@@ -14,8 +14,13 @@ import Control.Monad.Except
 --------------------------------------------------------------------------------
 -- | Unification
 
-data Substitution = Substitute TypeVar Type
-  deriving (Show)
+data Substitution = Substitute
+                      TypeVar   -- substitutee
+                      Type      -- substituter
+
+instance Show Substitution where
+  show (Substitute var t) = show var ++ " => " ++ show t
+
 type UniError = (Type, Type)
 type UniM = ExceptT UniError (State [Substitution])
 

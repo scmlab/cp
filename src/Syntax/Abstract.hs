@@ -10,7 +10,12 @@ import Data.Map (Map)
 -- | Type Variable
 
 data TypeVar = Nameless Int | Named Text | Unknown
-    deriving (Show, Ord, Eq)
+    deriving (Ord, Eq)
+
+instance Show TypeVar where
+    show (Nameless i) = "$" ++ show i
+    show (Named n) = show n
+    show Unknown = "?"
 
 --------------------------------------------------------------------------------
 -- | Term level
