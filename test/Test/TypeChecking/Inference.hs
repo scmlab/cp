@@ -20,6 +20,7 @@ import qualified TypeChecking.Infer as New
 import TypeChecking (checkAll)
 import TypeChecking.Types
 
+import Base
 import Main
 
 infer :: C.Process Loc -> IO Session
@@ -47,10 +48,10 @@ defn filePath name = do
 
 tests :: TestTree
 tests = testGroup "Type Inference"
-  [ examples ]
-  -- [ basics
-  -- , examples
-  -- ]
+  -- [ examples ]
+  [ basics
+  , examples
+  ]
 
 basics :: TestTree
 basics = testGroup "basics"
@@ -178,6 +179,7 @@ examples = testGroup "examples"
   , shopQuote
   , selectChoice
   , clientServer
+  , churchNumeral
   ]
 
 --
@@ -189,6 +191,8 @@ examples = testGroup "examples"
 --   where
 --     get = defn "test/source/a.clp"
 
+whatever :: Type
+whatever = Var Unknown
 
 typeOfBuy :: Type
 typeOfBuy = Times One (Times One (Par Bot Bot))
@@ -205,7 +209,7 @@ buySell = testCase "buy/sell" $ do
     get = defn "test/source/buy-sell.clp"
 
 typeOfShop :: Type
-typeOfShop = Times One (Par Bot (Var Unknown))
+typeOfShop = Times One (Par Bot whatever)
 
 typeOfShop' :: Type
 typeOfShop' = Times One (Par Bot Bot)
@@ -225,10 +229,10 @@ shopQuote = testCase "shop/quote" $ do
 selectChoice :: TestTree
 selectChoice = testCase "select/choice" $ do
   selectBuy <- get "selectBuy"
-  selectBuy @?= Map.fromList [ ("x", Plus typeOfBuy (Var Unknown)) ]
+  selectBuy @?= Map.fromList [ ("x", Plus typeOfBuy whatever) ]
 
   selectShop <- get "selectShop"
-  selectShop @?= Map.fromList [ ("x", Plus (Var Unknown) typeOfShop) ]
+  selectShop @?= Map.fromList [ ("x", Plus whatever typeOfShop) ]
 
   choice <- get "choice"
   choice @?= Map.fromList [ ("x", With (dual typeOfBuy) (dual typeOfShop')) ]
@@ -245,10 +249,10 @@ selectChoice = testCase "select/choice" $ do
 clientServer :: TestTree
 clientServer = testCase "client/server" $ do
   client <- get "client"
-  client @?= Map.fromList [ ("x", Req (Var Unknown)) ]
+  client @?= Map.fromList [ ("x", Req whatever) ]
 
   server <- get "server"
-  server @?= Map.fromList [ ("x", Acc (Var Unknown)) ]
+  server @?= Map.fromList [ ("x", Acc whatever) ]
 
 
   run <- get "run"
@@ -257,3 +261,15 @@ clientServer = testCase "client/server" $ do
 
   where
     get = defn "test/source/buy-sell.clp"
+
+churchNumeral :: TestTree
+churchNumeral = testCase "church numeral" $ do
+
+  zero <- get "zero"
+  zero @?= Map.fromList [("x", Forall (Named "X") (Par whatever (Par whatever whatever)))]
+
+  one <- get "one"
+  one @?= Map.fromList [("x", Forall (Named "X") (Par (Req (Times whatever whatever)) (Par whatever whatever)))]
+
+  where
+    get = defn "test/source/church.clp"

@@ -134,7 +134,7 @@ inferWith term input = do
     Link x y _ -> do
       a <- extract x
       b <- extract y
-      t <- unifyOpposite a b
+      unifyOpposite a b
       return Map.empty
 
     Compose x annotation p q _ -> do
@@ -164,7 +164,7 @@ inferWith term input = do
       sessionQ <- inferWith q $ pairs [(x, b)]
 
       c <- extract x
-      t <- unify c (Times a b)
+      unify c (Times a b)
 
       sessionShouldBeDisjoint term sessionP sessionQ
 
@@ -177,7 +177,7 @@ inferWith term input = do
       session <- inferWith p $ pairs [(y, a), (x, b)]
 
       c <- extract x
-      t <- unify c (Par a b)
+      unify c (Par a b)
 
       -- traceShow session (return ())
       return session
@@ -190,7 +190,7 @@ inferWith term input = do
       session <- inferWith p $ pairs [(x, a)]
 
       c <- extract x
-      t <- unify c (Plus a b)
+      unify c (Plus a b)
 
       return session
 
@@ -202,7 +202,7 @@ inferWith term input = do
       session <- inferWith p $ pairs [(x, b)]
 
       c <- extract x
-      t <- unify c (Plus a b)
+      unify c (Plus a b)
 
       return session
 
@@ -215,7 +215,7 @@ inferWith term input = do
       sessionQ <- inferWith q $ pairs [(x, b)]
 
       c <- extract x
-      t <- unify c (With a b)
+      unify c (With a b)
 
       sessionShouldBeTheSame term sessionP sessionQ
 
@@ -229,7 +229,7 @@ inferWith term input = do
       sessionShouldAllBeRequesting term session
 
       a' <- extract x
-      t <- unify a' (Acc a)
+      unify a' (Acc a)
 
       return session
 
@@ -239,7 +239,7 @@ inferWith term input = do
       session <- inferWith p $ pairs [(y, a)]
 
       a' <- extract x
-      t <- unify a' (Req a)
+      unify a' (Req a)
 
       return session
 
@@ -251,7 +251,7 @@ inferWith term input = do
       session <- inferWith p $ pairs [(x, afterSubstitution)]
 
       body <- extract x
-      body' <- unify
+      unify
         body
         (Exists
                   Unknown             -- the type variable to be substituted
@@ -270,7 +270,7 @@ inferWith term input = do
       session <- inferWith p $ pairs [(x, b)]
 
       t <- extract x
-      t' <- unify t (Forall (toAbstract var) b)
+      unify t (Forall (toAbstract var) b)
 
       return session
 
@@ -278,7 +278,7 @@ inferWith term input = do
     EmptyOutput x _ -> do
 
       t <- extract x
-      t' <- unify One t
+      unify One t
 
       return Map.empty
 
@@ -287,14 +287,14 @@ inferWith term input = do
       sessionP <- inferWith p Map.empty
 
       t <- extract x
-      t' <- unify Bot t
+      unify Bot t
 
       return sessionP
 
     EmptyChoice x _ -> do
 
       t <- extract x
-      t' <- unify Top t
+      unify Top t
 
       return Map.empty
 
@@ -313,7 +313,7 @@ inferWith term input = do
 
   let boundVars = Map.mapMaybe id $ Map.intersectionWith bind input freeVars
   -- remove bound vars from free vars
-  modify (\ freeVars -> Map.difference freeVars boundVars)
+  modify (flip Map.difference boundVars)
   -- substitute free variables thrown by the sub clauses with the ones from `input`
   tell $ Map.elems boundVars
 
@@ -326,12 +326,11 @@ inferWith term input = do
           -> Maybe Substitution
     bind (Var var)  t = Just $ Substitute var (Var t)
     bind (Dual var) t = bind var (dual t)
-    bind x          t = Nothing
+    bind _          _ = Nothing
 
     -- from the input session
     extract :: Chan -> InferM Type
     extract chan = do
-      freeVars <- get
       case Map.lookup (toAbstract chan) input of
         Nothing -> do
           t <- freshTypeVar
@@ -342,7 +341,7 @@ inferWith term input = do
 
     -- taking extra care when unifying two opposite types
     -- because we might will lose something when taking the dual of (Exists _ _ _)
-    unifyOpposite :: Type -> Type -> InferM Type
+    unifyOpposite :: Type -> Type -> InferM ()
     unifyOpposite a@(Exists _ _ _) b@(Forall _ _) = unify a (dual b)
     unifyOpposite a@(Forall _ _) b@(Exists _ _ _) = unify (dual a) b
     unifyOpposite a b                             = unify a (dual b)
@@ -350,16 +349,12 @@ inferWith term input = do
     -- unify the two given types, and update the give session.
     -- for better error message, make the former type be the expecting type
     -- and the latter be the given type
-    unify :: Type -> Type -> InferM Type
+    unify :: Type -> Type -> InferM ()
     unify expected given = do
       let (result, subst) = U.unify expected given
       case result of
         Left (t, u) -> throwError $ InferError $ TypeMismatch term expected given t u
-        Right t -> do
-          tell subst
-          return t
-
-
+        Right _ -> tell subst
 
     freshTypeVar :: InferM TypeVar
     freshTypeVar = do

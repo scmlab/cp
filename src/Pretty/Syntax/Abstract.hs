@@ -16,6 +16,7 @@ instance Pretty TypeVar where
   pretty (Nameless i)   = "$" <> pretty i
   pretty (Named i)      = pretty i
   pretty Unknown        = "$_"
+  pretty (DualOf i)     = "^" <> pretty i
 
 instance Pretty Process where
   pretty (Call x) = pretty x
