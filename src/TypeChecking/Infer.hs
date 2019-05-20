@@ -301,6 +301,12 @@ inferWith term input = do
     End _ -> return Map.empty
 
 
+    Mix p q _ -> do
+
+      sessionP <- inferWith p Map.empty
+      sessionQ <- inferWith q Map.empty
+      return $ Map.union sessionP sessionQ
+
 
   -- free variables may be bound by variables from `input`
   freeVars <- get
