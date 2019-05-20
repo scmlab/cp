@@ -24,3 +24,8 @@ choice = x.case(sell, quote)
 
 runBuy = \ x . (selectBuy | choice)
 runShop = \ x . (selectShop | choice)
+
+client = ?x[y].selectBuy | ?x[y].selectShop
+server = !x(y).choice
+
+run = \x. (client | server)

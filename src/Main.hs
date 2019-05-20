@@ -91,7 +91,7 @@ runTCM program = do
 
 main :: IO ()
 main = void $ runM $ handleError $ do
-    let filePath = "test/source/a.clp"
+    let filePath = "test/source/buy-sell.clp"
     program <- readSource filePath >>= parseSource filePath
 
     (inferred, _) <- runTCM (checkAll program)

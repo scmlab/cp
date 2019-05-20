@@ -177,6 +177,7 @@ examples = testGroup "examples"
   [ buySell
   , shopQuote
   , selectChoice
+  , clientServer
   ]
 
 --
@@ -237,6 +238,22 @@ selectChoice = testCase "select/choice" $ do
 
   runShop <- get "runShop"
   runShop @?= Map.fromList []
+
+  where
+    get = defn "test/source/buy-sell.clp"
+
+clientServer :: TestTree
+clientServer = testCase "client/server" $ do
+  client <- get "client"
+  client @?= Map.fromList [ ("x", Req (Var Unknown)) ]
+
+  server <- get "server"
+  server @?= Map.fromList [ ("x", Acc (Var Unknown)) ]
+
+
+  run <- get "run"
+  run @?= Map.fromList []
+
 
   where
     get = defn "test/source/buy-sell.clp"
