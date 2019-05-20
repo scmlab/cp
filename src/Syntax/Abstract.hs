@@ -9,13 +9,14 @@ import Data.Map (Map)
 --------------------------------------------------------------------------------
 -- | Type Variable
 
-data TypeVar = Nameless Int | Named Text | Unknown
+data TypeVar = Nameless Int | Named Text | Unknown | DualOf TypeVar
     deriving (Ord, Eq)
 
 instance Show TypeVar where
     show (Nameless i) = "$" ++ show i
     show (Named n) = show n
     show Unknown = "?"
+    show (DualOf v) = "^" ++ show v
 
 --------------------------------------------------------------------------------
 -- | Term level
@@ -105,8 +106,14 @@ data Type
     | Top
     deriving (Eq, Show)
 
+instance HasDual TypeVar where
+  dual (Nameless i) = DualOf (Nameless i)
+  dual (Named n)    = DualOf (Named n)
+  dual Unknown      = Unknown
+  dual (DualOf v)   = v
+
 instance HasDual Type where
-  dual (Var a)          = Dual (Var a)
+  dual (Var a)          = Var (dual a)
   dual (Dual a)         = a
   dual (Times a b)      = Par (dual a) (dual b)
   dual (Par a b)        = Times (dual a) (dual b)

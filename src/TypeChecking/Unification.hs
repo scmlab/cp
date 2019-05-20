@@ -1,14 +1,9 @@
 module TypeChecking.Unification where
 
-import qualified Syntax.Concrete as C
-import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
-import qualified Syntax.Abstract as A
-import Syntax.Abstract (Session, Type(..), TypeVar(..))
+import Syntax.Abstract (Type(..), TypeVar(..))
 import Syntax.Base
 
-import Control.Monad
 import Control.Monad.State
-import Control.Monad.Reader
 import Control.Monad.Except
 
 --------------------------------------------------------------------------------
@@ -64,6 +59,9 @@ unify a b = runState (runExceptT (run a b)) []
 
 -- replace a type variable in some type with another type
 substitute :: TypeVar -> Type -> Type -> Type
+substitute var new (Var (DualOf var'))
+  | var ==      var' = dual new
+  | otherwise        = Var (DualOf var')
 substitute var new (Var var')
   | var ==      var' = new
   | otherwise        = Var var'

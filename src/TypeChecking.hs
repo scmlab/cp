@@ -2,9 +2,6 @@ module TypeChecking where
 
 import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
 import qualified Syntax.Abstract as A
-import Syntax.Abstract (Session, Type(..))
-import qualified TypeChecking.Unification as U
-import TypeChecking.Unification (Substitution(..))
 import TypeChecking.Infer
 import TypeChecking.Types
 --
@@ -17,7 +14,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe)
 
-import Control.Monad
 import Control.Monad.State
 import Control.Monad.Except
 

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 91fc2ea0adc945e5ffb503e8ef745b69265f187d8cee3592e9764e1edd3278f4
+-- hash: a0924a56cd6e9288186f5ace459d0837475711fa967da95ddbe28531d0665a18
 
 name:           cp
 version:        0.1.0.0
@@ -64,6 +64,7 @@ test-suite cp-test
   other-modules:
       Test.Parser
       Test.TypeChecking
+      Test.TypeChecking.Inference
       Test.Util
       Main
       Pretty

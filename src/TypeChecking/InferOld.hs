@@ -1,7 +1,5 @@
 module TypeChecking.InferOld where
 
--- import Syntax.Concrete
-import qualified Syntax.Concrete as C
 import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
 import qualified Syntax.Abstract as A
 import Syntax.Abstract (Session, Type(..), TypeVar(..))
@@ -144,7 +142,6 @@ unifyOppositeAndSubstitute a b                             = unifyAndSubstitute 
 unifyAndSubstitute :: Type -> Type -> InferM Type
 unifyAndSubstitute expected given = do
   term <- ask
-  session <- get
   let (result, subst) = U.unify expected given
   case result of
     Left (t, u) -> inferError $ TypeMismatch term expected given t u

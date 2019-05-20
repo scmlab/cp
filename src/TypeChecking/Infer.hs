@@ -14,14 +14,12 @@ import Prelude hiding (lookup)
 
 import Data.Loc (Loc)
 
-import qualified Data.List as List
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Maybe (mapMaybe)
 
 import Control.Monad
 import Control.Monad.State
-import Control.Monad.Writer
+import Control.Monad.Writer hiding (Dual)
 import Control.Monad.Except
 
 import Debug.Trace
@@ -76,9 +74,7 @@ sessionShouldAllBeRequesting term session = do
 inferTerm :: Term -> TCM Session
 inferTerm term = do
   ((result, substitutions), freeChannels) <- runInferM Map.empty (inferWith term Map.empty)
-  traceShow substitutions (return ())
   return $ Map.union (substitute substitutions result) (substitute substitutions (fmap Var freeChannels))
-
 
 typeCheck :: Name -> Session -> Term -> TCM ()
 typeCheck name annotated term = do
@@ -153,7 +149,7 @@ inferWith term input = do
       sessionP <- inferWith p $ pairs [(x, t)]
 
       -- infer Q
-      sessionQ <- inferWith q $ dualSession $ pairs [(x, t)]
+      sessionQ <- inferWith q $ pairs [(x, dual t)]
 
       return (Map.union sessionP sessionQ)
 
@@ -307,28 +303,27 @@ inferWith term input = do
 
   -- free variables may be bound by variables from `input`
   freeVars <- get
-  let boundVars = Map.intersectionWith Substitute freeVars input
+  let boundVars = Map.mapMaybe id $ Map.intersectionWith bind input freeVars
   -- remove bound vars from free vars
   modify (\ freeVars -> Map.difference freeVars boundVars)
-  --
+  -- substitute free variables thrown by the sub clauses with the ones from `input`
   tell $ Map.elems boundVars
-  traceShow (boundVars) (return ())
-
 
   return result
 
   where
-    -- bind :: Type -> Type -> InferM Substitution
-    -- bind (Var var)
+    -- binding variables from `input` with free variables
+    bind  :: Type -- binder
+          -> TypeVar -- free variable
+          -> Maybe Substitution
+    bind (Var var)  t = Just $ Substitute var (Var t)
+    bind (Dual var) t = bind var (dual t)
+    bind x          t = Nothing
 
     -- from the input session
     extract :: Chan -> InferM Type
     extract chan = do
-      traceShow (toAbstract chan) (return ())
-
-      traceShow ("input: " ++ show input) (return ())
       freeVars <- get
-      traceShow ("free:  " ++ show freeVars) (return ())
       case Map.lookup (toAbstract chan) input of
         Nothing -> do
           t <- freshTypeVar
@@ -367,9 +362,6 @@ inferWith term input = do
 
     freshType :: InferM Type
     freshType = Var <$> freshTypeVar
-
-    dualSession :: Session -> Session
-    dualSession = fmap dual
 
     pairs :: [(C.TermName Loc, Type)] -> Session
     pairs = Map.fromList . map (\(c, t) -> (toAbstract c, t))
