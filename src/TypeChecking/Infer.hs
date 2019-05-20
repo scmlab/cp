@@ -150,6 +150,7 @@ inferWith term input = do
       -- infer Q
       sessionQ <- inferWith q $ pairs [(x, dual t)]
 
+
       return (Map.union sessionP sessionQ)
 
     Output x y p q _ -> do
@@ -191,7 +192,7 @@ inferWith term input = do
       c <- extract x
       t <- unify c (Plus a b)
 
-      return (Map.insert (toAbstract x) t session)
+      return session
 
     SelectR x p _ -> do
 
@@ -203,7 +204,7 @@ inferWith term input = do
       c <- extract x
       t <- unify c (Plus a b)
 
-      return (Map.insert (toAbstract x) t session)
+      return session
 
     Choice x p q _ -> do
 
@@ -218,7 +219,7 @@ inferWith term input = do
 
       sessionShouldBeTheSame term sessionP sessionQ
 
-      return (Map.insert (toAbstract x) t sessionP)
+      return sessionP
 
     Accept x y p _ -> do
 
@@ -230,7 +231,7 @@ inferWith term input = do
       a' <- extract x
       t <- unify a' (Acc a)
 
-      return (Map.insert (toAbstract x) t session)
+      return session
 
     Request x y p _ -> do
 
@@ -240,7 +241,7 @@ inferWith term input = do
       a' <- extract x
       t <- unify a' (Req a)
 
-      return (Map.insert (toAbstract x) t session)
+      return session
 
     OutputT x outputType p _ -> do
 
@@ -260,7 +261,7 @@ inferWith term input = do
                     , afterSubstitution       -- the resulting type after substitution
                     )))
 
-      return (Map.insert (toAbstract x) body' session)
+      return session
 
 
     InputT x var p _ -> do
@@ -271,7 +272,7 @@ inferWith term input = do
       t <- extract x
       t' <- unify t (Forall (toAbstract var) b)
 
-      return (Map.insert (toAbstract x) t' session)
+      return session
 
 
     EmptyOutput x _ -> do
@@ -300,8 +301,10 @@ inferWith term input = do
     End _ -> return Map.empty
 
 
+
   -- free variables may be bound by variables from `input`
   freeVars <- get
+
   let boundVars = Map.mapMaybe id $ Map.intersectionWith bind input freeVars
   -- remove bound vars from free vars
   modify (\ freeVars -> Map.difference freeVars boundVars)

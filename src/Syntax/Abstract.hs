@@ -10,13 +10,23 @@ import Data.Map (Map)
 -- | Type Variable
 
 data TypeVar = Nameless Int | Named Text | Unknown | DualOf TypeVar
-    deriving (Ord, Eq)
 
 instance Show TypeVar where
     show (Nameless i) = "$" ++ show i
     show (Named n) = show n
     show Unknown = "?"
     show (DualOf v) = "^" ++ show v
+
+instance Eq TypeVar where
+    -- Unknown is equivalent to anything
+    Unknown == _ = True
+    _ == Unknown = True
+    --
+    Nameless i == Nameless j = i == j
+    Named m == Named n = m == n
+    DualOf m == DualOf n = m == n
+    --
+    _ == _ = False
 
 --------------------------------------------------------------------------------
 -- | Term level

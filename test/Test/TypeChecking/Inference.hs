@@ -13,6 +13,7 @@ import Test.Tasty.HUnit
 --
 import Test.Util
 import Syntax.Abstract
+import Syntax.Base
 import qualified Syntax.Concrete as C
 import qualified TypeChecking.InferOld as Old
 import qualified TypeChecking.Infer as New
@@ -73,8 +74,8 @@ link :: TestTree
 link = testCase "link" $ do
   actual <- parseProc "x <-> y" >>= infer
   let expected = Map.fromList
-        [ ("x", Dual (Var (Nameless 1)))
-        , ("y",      (Var (Nameless 1)))
+        [ ("x", (Var (DualOf (Nameless 1))))
+        , ("y", (Var (Nameless 1)))
         ]
   actual @?= expected
 
@@ -174,15 +175,68 @@ emptyChoice = testCase "emptyChoice" $ do
 examples :: TestTree
 examples = testGroup "examples"
   [ buySell
+  , shopQuote
+  , selectChoice
   ]
+
+--
+-- debug :: TestTree
+-- debug = testCase "debug" $ do
+--   main <- get "main"
+--   main @?= Map.fromList []
+--
+--   where
+--     get = defn "test/source/a.clp"
+
+
+typeOfBuy :: Type
+typeOfBuy = Times One (Times One (Par Bot Bot))
 
 buySell :: TestTree
 buySell = testCase "buy/sell" $ do
   buy <- get "buy"
-  buy @?= Map.fromList [ ("x", Times One (Times One (Par Bot Bot))) ]
+  buy @?= Map.fromList [ ("x", typeOfBuy) ]
 
   sell <- get "sell"
   sell @?= Map.fromList [ ("x", Par Bot (Par Bot (Times One One))) ]
+
+  where
+    get = defn "test/source/buy-sell.clp"
+
+typeOfShop :: Type
+typeOfShop = Times One (Par Bot (Var Unknown))
+
+typeOfShop' :: Type
+typeOfShop' = Times One (Par Bot Bot)
+
+
+shopQuote :: TestTree
+shopQuote = testCase "shop/quote" $ do
+  shop <- get "shop"
+  shop @?= Map.fromList [ ("x", typeOfShop) ]
+
+  quote <- get "quote"
+  quote @?= Map.fromList [ ("x", Par Bot (Times One One)) ]
+
+  where
+    get = defn "test/source/buy-sell.clp"
+
+selectChoice :: TestTree
+selectChoice = testCase "select/choice" $ do
+  selectBuy <- get "selectBuy"
+  selectBuy @?= Map.fromList [ ("x", Plus typeOfBuy (Var Unknown)) ]
+
+  selectShop <- get "selectShop"
+  selectShop @?= Map.fromList [ ("x", Plus (Var Unknown) typeOfShop) ]
+
+  choice <- get "choice"
+  choice @?= Map.fromList [ ("x", With (dual typeOfBuy) (dual typeOfShop')) ]
+
+  runBuy <- get "runBuy"
+  runBuy @?= Map.fromList []
+
+  runShop <- get "runShop"
+  runShop @?= Map.fromList []
 
   where
     get = defn "test/source/buy-sell.clp"
