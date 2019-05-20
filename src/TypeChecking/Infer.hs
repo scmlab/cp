@@ -115,10 +115,6 @@ substitute :: [Substitution] -> Session -> Session
 substitute = flip $ foldr $ \ (Substitute var t) -> Map.map (U.substitute var t)
 
 
--- bind :: Type -> Type -> Substitution
--- bind (Var var) t = Substitute var t
--- bind _         t = Substitute var t
-
 --------------------------------------------------------------------------------
 -- | InferM
 
@@ -131,15 +127,8 @@ inferWith :: Term           -- the term to infer
           -> Session        -- channels that we know exist in the session
           -> InferM Session  -- other channels that we didn't know before
 inferWith term input = do
-  -- free variables may be bound by variables from `input`
-  -- freeVars <- get
-  --
-  --
-  -- let substitutions = Map.intersectionWith bind freeVars input
 
-
-
-  case term of
+  result <- case term of
     Call x _ -> do
       definition <- lift $ lift $ gets stDefinitions
       case Map.lookup x definition of
@@ -315,7 +304,23 @@ inferWith term input = do
 
     End _ -> return Map.empty
 
+
+  -- free variables may be bound by variables from `input`
+  freeVars <- get
+  let boundVars = Map.intersectionWith Substitute freeVars input
+  -- remove bound vars from free vars
+  modify (\ freeVars -> Map.difference freeVars boundVars)
+  --
+  tell $ Map.elems boundVars
+  traceShow (boundVars) (return ())
+
+
+  return result
+
   where
+    -- bind :: Type -> Type -> InferM Substitution
+    -- bind (Var var)
+
     -- from the input session
     extract :: Chan -> InferM Type
     extract chan = do
