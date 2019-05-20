@@ -37,6 +37,12 @@ load filePath = do
     Left  err         -> assertFailure $ show err
     Right (actual, _) -> return $ Map.mapKeys C.toAbstract actual
 
+defn :: FilePath -> Text -> IO Session
+defn filePath name = do
+  defns <- load filePath
+  case Map.lookup name defns of
+    Nothing -> assertFailure $ "Definition not found"
+    Just session -> return session
 
 tests :: TestTree
 tests = testGroup "Type Inference"
@@ -75,65 +81,57 @@ link = testCase "link" $ do
 cut :: TestTree
 cut = testCase "cut" $ do
   actual <- parseProc "\\x . (x[].end | x().end)" >>= infer
-  let expected = Map.fromList []
-  actual @?= expected
+  actual @?= Map.fromList []
 
 
 output :: TestTree
 output = testCase "output" $ do
   actual <- parseProc "x[y].(y[].end | x().end)" >>= infer
-  let expected = Map.fromList [("x", Times One Bot)]
-  actual @?= expected
+  actual @?= Map.fromList [("x", Times One Bot)]
 
 
 input :: TestTree
 input = testCase "input" $ do
   actual <- parseProc "x(y).(y[].end)" >>= infer
-  let expected = Map.fromList
+  actual @?= Map.fromList
         [ ("x", Par One (Var (Nameless 1)))
         ]
-  actual @?= expected
 
 selectLeft :: TestTree
 selectLeft = testCase "select left" $ do
   actual <- parseProc "x[inl].x[].end" >>= infer
-  let expected = Map.fromList
+  actual @?= Map.fromList
         [ ("x", Plus One (Var (Nameless 1)))
         ]
-  actual @?= expected
 
 selectRight :: TestTree
 selectRight = testCase "select right" $ do
   actual <- parseProc "x[inr].x[].end" >>= infer
-  let expected = Map.fromList
+  actual @?= Map.fromList
         [ ("x", Plus (Var (Nameless 1)) One)
         ]
-  actual @?= expected
 
 choice :: TestTree
 choice = testCase "choice" $ do
   actual <- parseProc "x.case(x[].end, x[].end)" >>= infer
-  let expected = Map.fromList
+  actual @?= Map.fromList
         [ ("x", With One One)
         ]
-  actual @?= expected
 
 
 accept :: TestTree
 accept = testCase "accept" $ do
   actual <- parseProc "!x(y).(y[].end)" >>= infer
-  let expected = Map.fromList
+  actual @?= Map.fromList
         [ ("x", Acc One)
         ]
-  actual @?= expected
 
 request :: TestTree
 request = testCase "request" $ do
   actual <- parseProc "?x[y].y[].end" >>= infer
-  let expected = Map.fromList
+  actual @?= Map.fromList
         [ ("x", Req One)
         ]
-  actual @?= expected
 --
 -- weaken :: TestTree
 -- weaken = testCase "weaken" $ do
@@ -147,36 +145,31 @@ request = testCase "request" $ do
 outputType :: TestTree
 outputType = testCase "output type" $ do
   actual <- parseProc "x[1].x[].end" >>= infer
-  let expected = Map.fromList
+  actual @?= Map.fromList
         [ ("x", Exists Unknown (Var (Nameless 1)) (Just (One, One)))
         ]
-  actual @?= expected
 
 inputType :: TestTree
 inputType = testCase "input type" $ do
   actual <- parseProc "x(X).x[].end" >>= infer
-  let expected = Map.fromList
+  actual @?= Map.fromList
         [ ("x", Forall (Named "X") One)
         ]
-  actual @?= expected
 
 emptyOutput :: TestTree
 emptyOutput = testCase "emptyOutput" $ do
   actual <- parseProc "x[].end" >>= infer
-  let expected = Map.fromList [("x", One)]
-  actual @?= expected
+  actual @?= Map.fromList [("x", One)]
 
 emptyInput :: TestTree
 emptyInput = testCase "emptyInput" $ do
   actual <- parseProc "x().end" >>= infer
-  let expected = Map.fromList [("x", Bot)]
-  actual @?= expected
+  actual @?= Map.fromList [("x", Bot)]
 
 emptyChoice :: TestTree
 emptyChoice = testCase "emptyChoice" $ do
   actual <- parseProc "x.case()" >>= infer
-  let expected = Map.fromList [("x", Top)]
-  actual @?= expected
+  actual @?= Map.fromList [("x", Top)]
 
 examples :: TestTree
 examples = testGroup "examples"
@@ -185,18 +178,11 @@ examples = testGroup "examples"
 
 buySell :: TestTree
 buySell = testCase "buy/sell" $ do
-  defns <- load "test/source/buy-sell.clp"
-  actual <- case Map.lookup "a" defns of
-    Nothing -> assertFailure $ "Definition not found"
-    Just session -> return session
+  buy <- get "buy"
+  buy @?= Map.fromList [ ("x", Times One (Times One (Par Bot Bot))) ]
 
-  let expected = Map.fromList
-        [ ("x", Par Bot Bot)
-        ]
-  actual @?= expected
+  sell <- get "sell"
+  sell @?= Map.fromList [ ("x", Par Bot (Par Bot (Times One One))) ]
 
--- buy :: TestTree
--- buy = testCase "buy" $ do
---   actual <- parseProc "x.case()" >>= infer
---   let expected = Map.fromList [("x", Top)]
---   actual @?= expected
+  where
+    get = defn "test/source/buy-sell.clp"

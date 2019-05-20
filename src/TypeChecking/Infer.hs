@@ -70,7 +70,6 @@ sessionShouldAllBeRequesting term session = do
     isRequesting (Req _) = True
     isRequesting _       = False
 
-
 inferTerm :: Term -> TCM Session
 inferTerm term = do
   ((result, substitutions), freeChannels) <- runInferM Map.empty (inferWith term Map.empty)
