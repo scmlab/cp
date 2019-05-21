@@ -217,6 +217,8 @@ inferWith term input = do
 
     -- {C}
     -- {C = A ⊗ B}
+
+    -- {Γ and Δ be disjoint}
     -- -----------------------------
     -- x[y] . (P | Q) ⊢ {Γ , Δ , x : C}
 
@@ -245,6 +247,10 @@ inferWith term input = do
     -- premise 6  input   : show    that C , A , B are known
     -- premise 6  output  : show    that C = A ⊗ B is unknown
     -- premise 6  output  : assume  that C = A ⊗ B is known
+
+    -- premise 5  input   : vacuous
+    -- premise 5  output  : show    that Γ and Δ 's disjointness is unknown
+    -- premise 5  output  : assume  that Γ and Δ 's disjointness is known
 
     -- conclusion output  : show that Γ , Δ and x : C are known
 
