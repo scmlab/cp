@@ -131,11 +131,67 @@ inferWith term input = do
         Just (Annotated _ t) -> return (toAbstract t)
         Just (Unannotated p) -> inferWith p input
 
+    -- {A}
+    -- {B}
+    -- {A = ¬ B}
+    -- -----------------------------
+    -- x ↔ y ⊢ {x : A , y : B}
+
+    -- conclusion input   : assume that x and y are known
+
+    -- premise 1  input   : vacuous
+    -- premise 1  output  : show that A is unknown
+    -- premise 1  output  : assume that A is known
+
+    -- premise 2  input   : vacuous
+    -- premise 2  output  : show that B is unknown
+    -- premise 2  output  : assume that B is known
+
+    -- premise 3  input   : show    that A , B are known
+    -- premise 3  output  : show    that A = ¬ B is unknown
+    -- premise 3  output  : assume  that A = ¬ B is known
+
+    -- conclusion output  : show that x : A and y : B are known
+
     Link x y _ -> do
       a <- extract x
       b <- extract y
       unifyOpposite a b
       return Map.empty
+    --
+    -- {A}
+    -- P ⊢ {Γ}, x : A
+    --
+    -- {B}
+    -- Q ⊢ {Δ}, y : B
+    --
+    -- {A = ¬ B}
+    -- -----------------------------
+    -- ν x . (P | Q) ⊢ {Γ , Δ}
+
+    -- conclusion input   : assume that x , P and Q are known
+
+    -- premise 1  input   : vacuous
+    -- premise 1  output  : show    that A is unknown
+    -- premise 1  output  : assume  that A is known
+
+    -- premise 2  input   : show    that P , x and A are known
+    -- premise 2  output  : show    that Γ is unknown
+    -- premise 2  output  : assume  that Γ is known
+
+    -- premise 3  input   : vacuous
+    -- premise 3  output  : show    that B is unknown
+    -- premise 3  output  : assume  that B is known
+
+    -- premise 4  input   : show    that Q , y and B are known
+    -- premise 4  output  : show    that Δ is unknown
+    -- premise 4  output  : assume  that Δ is known
+
+    -- premise 5  input   : show    that A , B are known
+    -- premise 5  output  : show    that A = ¬ B is unknown
+    -- premise 5  output  : assume  that A = ¬ B is known
+
+    -- conclusion output  : show that Γ and Δ are known
 
     Compose x annotation p q _ -> do
 
@@ -152,6 +208,45 @@ inferWith term input = do
 
 
       return (Map.union sessionP sessionQ)
+
+    -- {A}
+    -- P ⊢ {Γ}, y : A
+    --
+    -- {B}
+    -- Q ⊢ {Δ}, x : B
+
+    -- {C}
+    -- {C = A ⊗ B}
+    -- -----------------------------
+    -- x[y] . (P | Q) ⊢ {Γ , Δ , x : C}
+
+    -- conclusion input   : assume that x , y , P , Q are known
+
+    -- premise 1  input   : vacuous
+    -- premise 1  output  : show    that A is unknown
+    -- premise 1  output  : assume  that A is known
+
+    -- premise 2  input   : show    that P , y , A are known
+    -- premise 2  output  : show    that Γ is unknown
+    -- premise 2  output  : assume  that Γ is known
+
+    -- premise 3  input   : vacuous
+    -- premise 3  output  : show    that B is unknown
+    -- premise 3  output  : assume  that B is known
+
+    -- premise 4  input   : show    that Q , x , B are known
+    -- premise 4  output  : show    that Δ is unknown
+    -- premise 4  output  : assume  that Δ is known
+
+    -- premise 5  input   : vacuous
+    -- premise 5  output  : show    that C is unknown
+    -- premise 5  output  : assume  that C is known
+
+    -- premise 6  input   : show    that C , A , B are known
+    -- premise 6  output  : show    that C = A ⊗ B is unknown
+    -- premise 6  output  : assume  that C = A ⊗ B is known
+
+    -- conclusion output  : show that Γ , Δ and x : C are known
 
     Output x y p q _ -> do
 
@@ -170,6 +265,15 @@ inferWith term input = do
 
       return (Map.union sessionP sessionQ)
 
+    -- {A}
+    -- {B}
+    -- P ⊢ {Γ}, y : A, x : B
+
+    -- {C}
+    -- {C = A ⅋ B}
+    -- -----------------------------
+    -- x(y) . P ⊢ {Γ , x : C}
+
     Input x y p _ -> do
 
       a <- freshType  -- y : a
@@ -179,8 +283,16 @@ inferWith term input = do
       c <- extract x
       unify c (Par a b)
 
-      -- traceShow session (return ())
       return session
+
+    -- {A}
+    -- {B}
+    -- P ⊢ {Γ}, y : A
+
+    -- {C}
+    -- {C = A ⊕ B}
+    -- -----------------------------
+    -- x[inl] . P ⊢ {Γ , x : C}
 
     SelectL x p _ -> do
 
@@ -194,6 +306,15 @@ inferWith term input = do
 
       return session
 
+    -- {A}
+    -- {B}
+    -- P ⊢ {Γ}, x : B
+
+    -- {C}
+    -- {C = A ⊕ B}
+    -- -----------------------------
+    -- x[inr] . P ⊢ {Γ , x : C}
+
     SelectR x p _ -> do
 
       -- infer P
@@ -205,6 +326,51 @@ inferWith term input = do
       unify c (Plus a b)
 
       return session
+
+    -- {A}
+    -- P ⊢ {Γ}, x : A
+    --
+    -- {B}
+    -- Q ⊢ {Δ}, x : B
+
+    -- {C}
+    -- {C = A & B}
+    --
+    -- {Γ = Δ}
+    -- -----------------------------
+    -- x.case(P, Q) ⊢ {Γ , x : C}
+
+    -- conclusion input   : assume that x , P , Q are known
+
+    -- premise 1  input   : vacuous
+    -- premise 1  output  : show    that A is unknown
+    -- premise 1  output  : assume  that A is known
+
+    -- premise 2  input   : show    that P , x , A are known
+    -- premise 2  output  : show    that Γ is unknown
+    -- premise 2  output  : assume  that Γ is known
+
+    -- premise 3  input   : vacuous
+    -- premise 3  output  : show    that B is unknown
+    -- premise 3  output  : assume  that B is known
+
+    -- premise 4  input   : show    that Q , x , B are known
+    -- premise 4  output  : show    that Δ is unknown
+    -- premise 4  output  : assume  that Δ is known
+
+    -- premise 5  input   : vacuous
+    -- premise 5  output  : show    that C is unknown
+    -- premise 5  output  : assume  that C is known
+
+    -- premise 6  input   : show    that C , A , B are known
+    -- premise 6  output  : show    that C = A & B is unknown
+    -- premise 6  output  : assume  that C = A & B is known
+
+    -- premise 7  input   : show    that Γ , Δ are known
+    -- premise 7  output  : show    that Γ = Δ is unknown
+    -- premise 7  output  : assume  that Γ = Δ is known
+
+    -- conclusion output  : show that Γ and x : C are known
 
     Choice x p q _ -> do
 
@@ -221,6 +387,15 @@ inferWith term input = do
 
       return sessionP
 
+    -- {A}
+    -- P ⊢ {Γ}, y : A
+    -- {?Γ}
+
+    -- {B}
+    -- {B = !A}
+    -- -----------------------------
+    -- !x(y).P ⊢ {Γ , x : B}
+
     Accept x y p _ -> do
 
       a <- freshType
@@ -233,6 +408,14 @@ inferWith term input = do
 
       return session
 
+    -- {A}
+    -- P ⊢ {Γ}, y : A
+    --
+    -- {B}
+    -- {B = ?A}
+    -- -----------------------------
+    -- ?x[y].P ⊢ {Γ , x : B}
+
     Request x y p _ -> do
 
       a <- freshType
@@ -243,19 +426,52 @@ inferWith term input = do
 
       return session
 
+    -- {B[A/X]}
+    -- P ⊢ {Γ}, x : B[A/X]
+
+    -- {B}
+    -- {C}
+    -- {C = ∃_.B}
+    -- -----------------------------
+    -- x[A].P ⊢ {Γ , x : C}
+
+    -- conclusion input   : assume that x , A, P are known
+
+    -- premise 1  input   : vacuous
+    -- premise 1  output  : show    that B[A/X] is unknown
+    -- premise 1  output  : assume  that B[A/X] is known
+
+    -- premise 2  input   : show    that P , x , [A/X] are known
+    -- premise 2  output  : show    that Γ is unknown
+    -- premise 2  output  : assume  that Γ is known
+
+    -- premise 3  input   : vacuous
+    -- premise 3  output  : show    that B is unknown
+    -- premise 3  output  : assume  that B is known
+
+    -- premise 4  input   : vacuous
+    -- premise 4  output  : show    that C is unknown
+    -- premise 4  output  : assume  that C is known
+
+    -- premise 5  input   : show    that C , B , A , B[A/X] are known
+    -- premise 5  output  : show    that C = ∃_.B is unknown
+    -- premise 5  output  : assume  that C = ∃_.B is known
+
+    -- conclusion output  : show that Γ and x : C are known
+
     OutputT x outputType p _ -> do
 
 
       afterSubstitution <- freshType    -- B {A / X}
-      beforeSubstitution <- freshType   -- B
       session <- inferWith p $ pairs [(x, afterSubstitution)]
 
-      body <- extract x
+      beforeSubstitution <- freshType   -- B
+      t <- extract x
       unify
-        body
+        t
         (Exists
-                  Unknown             -- the type variable to be substituted
-                  beforeSubstitution  -- the type before substitution
+                  Unknown                     -- the type variable to be substituted
+                  beforeSubstitution          -- the type before substitution
                   (Just
                     ( toAbstract outputType   -- the type to be substituted with
                     , afterSubstitution       -- the resulting type after substitution
@@ -263,6 +479,14 @@ inferWith term input = do
 
       return session
 
+
+    -- {B}
+    -- P ⊢ {Γ}, x : B
+
+    -- {C}
+    -- {C = ∀X.B}
+    -- -----------------------------
+    -- x(X).P ⊢ {Γ , x : C}
 
     InputT x var p _ -> do
 
@@ -274,6 +498,11 @@ inferWith term input = do
 
       return session
 
+    -- {C}
+    -- {C = 1}
+    -- -----------------------------
+    -- x[].0 ⊢ {x : C}
+
 
     EmptyOutput x _ -> do
 
@@ -281,6 +510,12 @@ inferWith term input = do
       unify One t
 
       return Map.empty
+
+    -- P ⊢ {Γ}
+    -- {C}
+    -- {C = ⊥}
+    -- -----------------------------
+    -- x().P ⊢ {Γ , x : C}
 
     EmptyInput x p _ -> do
 
@@ -291,6 +526,13 @@ inferWith term input = do
 
       return sessionP
 
+    -- TODO: fix that spurious Map.empty
+    -- {Γ}
+    -- {C}
+    -- {C = ⊤}
+    -- -----------------------------
+    -- x.case() ⊢ {Γ , x : C}
+
     EmptyChoice x _ -> do
 
       t <- extract x
@@ -298,8 +540,16 @@ inferWith term input = do
 
       return Map.empty
 
+    -- -----------------------------
+    -- end ⊢ {}
+
     End _ -> return Map.empty
 
+
+    -- P ⊢ {Γ}
+    -- Q ⊢ {Δ}
+    -- -----------------------------
+    -- P | Q ⊢ {Γ , Δ}
 
     Mix p q _ -> do
 
