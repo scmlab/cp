@@ -27,40 +27,47 @@ import System.Console.Haskeline
 import System.Console.GetOpt
 import System.Environment
 
-putSource :: Maybe ByteString -> M ()
-putSource x = modify $ \ st -> st { stSource = x }
+-- putSource :: Maybe ByteString -> M ()
+-- putSource x = modify $ \ st -> st { stSource = x }
 
-getSourceOrThrow :: M ByteString
+getSourceOrThrow :: M (String, ByteString)
 getSourceOrThrow = do
   result <- gets stSource
   case result of
     Nothing -> throwError $ Panic "Can't read the stored source code"
-    Just source -> return source
+    Just v -> return v
 
 --------------------------------------------------------------------------------
 -- |
 
-readSource :: FilePath -> M ByteString
-readSource filePath = do
-    readResult <- liftIO $ try (BS.readFile filePath)
-    case readResult of
-        Left err -> throwError $ Panic $ show (err :: IOException)
-        Right source -> do
-          -- store the source in the monad for later debugging use
-          putSource (Just source)
-          return source
+loadSource :: FilePath -> M ()
+loadSource filePath = do
+  readResult <- liftIO $ try (BS.readFile filePath)
+  case readResult of
+      Left err -> throwError $ Panic $ show (err :: IOException)
+      Right source -> do
+        -- store the source in the monad for later debugging use
+        modify $ \ st -> st { stSource = Just (filePath, source) }
 
-parseSource :: FilePath -> ByteString -> M (C.Program Loc)
-parseSource filePath source = do
-    case parseConcreteProgram filePath source of
-        Left err -> throwError $ ParseError err
-        Right v -> return v
+parseSource :: M ()
+parseSource = do
+  (filePath, source) <- getSourceOrThrow
+  case parseConcreteProgram filePath source of
+      Left err -> throwError $ ParseError err
+      Right cst -> do
+        modify $ \ st -> st { stConcrete = Just cst }
 
-handleError :: M () -> M ()
-handleError program = do
-  source <- getSourceOrThrow
+handleM :: M a -> IO (Maybe a)
+handleM program = do
+  (result, state) <- runM program
+  case result of
+    Left err -> do
+      case stSource state of
+        Nothing -> print err
+        Just (_, source) -> putDoc $ prettyError err source
+      return Nothing
+    Right value -> return (Just value)
 
-  program `catchError` (\err -> liftIO $ putDoc $ prettyError err source)
 
 
 runTCM :: TCM a -> M (a, TCState)
@@ -84,8 +91,8 @@ main = do
         Nothing -> return ()
         Just input -> do
           -- outputStrLn $ show $ parseCommand input
-          liftIO $ handleCommand $ parseCommand input
-          loop
+          keepLooping <- liftIO $ handleCommand $ parseCommand input
+          when keepLooping loop
     --
     --
     -- void $ runM $ handleError $ do
@@ -136,7 +143,7 @@ parseOpts argv =
 --------------------------------------------------------------------------------
 -- | REPL
 
-data Command = Load FilePath | TypeOf String | Quit | Help
+data Command = Load FilePath | TypeOf String | Quit | Help | Noop
   deriving (Show)
 
 trim :: String -> String
@@ -151,14 +158,23 @@ parseCommand key
   | otherwise = case trim key of
       ":q"    -> Quit
       ":quit" -> Quit
-      _ -> Help
+      _ -> Noop
 
-handleCommand :: Command -> IO ()
-handleCommand _ = displayHelp
--- handleCommand (Load filePath) = do
--- handleCommand (TypeOf name) = do
--- handleCommand Quit = do
--- handleCommand Help = do
+handleCommand :: Command -> IO Bool
+handleCommand (Load filePath) = do
+  result <- handleM $ do
+    loadSource filePath
+    parseSource
+    return ()
+  case result of
+    Nothing -> return ()
+    Just value -> putStrLn $ "loaded: " ++ filePath
+
+  return True
+handleCommand (TypeOf name) = return True
+handleCommand Quit = return False
+handleCommand Help = displayHelp >> return True
+handleCommand Noop = return True
 
 displayHelp :: IO ()
 displayHelp = liftIO $ do
