@@ -15,7 +15,7 @@ import Data.Text (Text)
 import Data.Text.Prettyprint.Doc.Render.Terminal
 
 import Data.Char (isSpace)
-import Data.List (dropWhileEnd, isPrefixOf)
+import Data.List (dropWhileEnd, isPrefixOf, find)
 
 -- import qualified Data.ByteString.Lazy.Char8 as BC
 
@@ -26,6 +26,7 @@ import Control.Monad.Except
 import System.Console.Haskeline
 import System.Console.GetOpt
 import System.Environment
+import Debug.Trace
 
 -- putSource :: Maybe ByteString -> M ()
 -- putSource x = modify $ \ st -> st { stSource = x }
@@ -77,13 +78,65 @@ runTCM program = do
       Left err -> throwError $ TypeError err
       Right val -> return (val, s)
 
+commands :: [String]
+commands = [ ":load", ":reload", ":type", ":quit", ":help" ]
+
+data Matching = Complete String | Partial [String] | Over String [String] | None
+
+match :: String -> Matching
+match raw = case words (reverse raw) of
+  [] -> None
+  (x:xs) -> if elem x commands
+              then if null xs then Complete x else Over x xs
+              else case filter (isPrefixOf x) commands of
+                [] -> None
+                matched -> Partial matched
+
+
 main :: IO ()
 main = do
   (opts, _filePaths) <- getArgs >>= parseOpts
   case optMode opts of
     ModeHelp -> putStrLn $ usageInfo usage options
-    ModeREPL -> runInputT defaultSettings loop
+    ModeREPL -> runInputT settings loop
   where
+
+    settings :: Settings IO
+    settings = setComplete complete defaultSettings
+
+    complete :: CompletionFunc IO
+    complete (left, right) = case match left of
+      Complete ":load" -> completeFilename (left, right)
+      Complete ":reload" -> completeFilename (left, right)
+      Complete _ -> return (left, [Completion "" "" False])
+      Partial matched -> return ("", map simpleCompletion matched)
+      Over ":load" _ -> completeFilename (left, right)
+      Over ":reload" _ -> completeFilename (left, right)
+      Over _ _ -> return (left, [Completion "" "" False])
+      None -> completeCommands
+
+    completeCommands :: IO (String, [Completion])
+    completeCommands = return ("", map simpleCompletion commands)
+
+    -- complete (left, right) = completeFilename (left, right)
+    -- complete (" daol:", right) = completeFilename (" daol:", right)
+    --
+    --
+    -- complete (left, right) = case words (reverse left) of
+    --   [] -> completeFilename (left, right)
+    --   (x:_) -> if isCompleted x
+    --     then completeFilename (reverse (" " ++ x), right)
+    --     else case matched x of
+    --       [] -> completeFilename (left, right)
+    --       result -> return ("", map simpleCompletion result)
+    --
+    --   where
+    --     commands' = map ((:) ':') commands
+    --     isCompleted x = elem x commands'
+    --     matched x = filter (isPrefixOf x) commands'
+
+
+
     loop :: InputT IO ()
     loop = do
       minput <- getInputLine "> "
