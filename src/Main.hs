@@ -98,13 +98,13 @@ main = do
   (opts, _filePaths) <- getArgs >>= parseOpts
   case optMode opts of
     ModeHelp -> putStrLn $ usageInfo usage options
-    ModeREPL -> runInputT settings loop
+    ModeREPL -> void $ handleM $ runInputT settings loop
   where
 
-    settings :: Settings IO
+    settings :: Settings M
     settings = setComplete complete defaultSettings
 
-    complete :: CompletionFunc IO
+    complete :: CompletionFunc M
     complete (left, right) = case match left of
       Complete ":load" -> completeFilename (left, right)
       Complete ":reload" -> completeFilename (left, right)
@@ -115,7 +115,7 @@ main = do
       Over _ _ -> return (left, [Completion "" "" False])
       None -> completeCommands
 
-    completeCommands :: IO (String, [Completion])
+    completeCommands :: M (String, [Completion])
     completeCommands = return ("", map simpleCompletion commands)
 
     -- complete (left, right) = completeFilename (left, right)
@@ -137,7 +137,7 @@ main = do
 
 
 
-    loop :: InputT IO ()
+    loop :: InputT M ()
     loop = do
       minput <- getInputLine "> "
       case minput of
