@@ -23,19 +23,19 @@ type Name = TermName Loc
 type Chan = Name
 type Term = Process Loc
 
-data Definition = Annotated   Term (C.Session Loc)
-                | Unannotated Term
+data Definition = Annotated   Name Term (C.Session Loc)
+                | Unannotated Name Term
                 deriving (Show)
 
 isAnnotated :: Definition -> Bool
-isAnnotated (Annotated _ _) = True
-isAnnotated _               = False
+isAnnotated (Annotated _ _ _) = True
+isAnnotated _                 = False
 
 type CtxVar = Int
 
 data TCState = TCState
   { stTypeCount   :: Int              -- for type variables
-  , stDefinitions :: Map Name Definition
+  , stDefinitions :: Map Text Definition
   } deriving (Show)
 
 initialTCState :: TCState

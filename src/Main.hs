@@ -11,16 +11,21 @@ import Base
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import Data.Loc (Loc(..))
-import Data.Text (Text)
+-- import Data.Text (Text)
 import Data.Text.Prettyprint.Doc.Render.Terminal
 
+import qualified Data.Map as Map
+import Data.Maybe (isNothing)
 import Data.Char (isSpace)
-import Data.List (dropWhileEnd, isPrefixOf, find)
+import Data.List (dropWhileEnd, isPrefixOf)
+import Data.Text (Text)
+import qualified Data.Text as Text
+import Data.Text.Prettyprint.Doc
 
 -- import qualified Data.ByteString.Lazy.Char8 as BC
 
 import Control.Exception (IOException, try)
-import Control.Monad.State
+import Control.Monad.State hiding (state)
 import Control.Monad.Except
 
 import System.Console.Haskeline
@@ -28,12 +33,13 @@ import System.Console.GetOpt
 import System.Environment
 import Debug.Trace
 
+
 -- putSource :: Maybe ByteString -> M ()
 -- putSource x = modify $ \ st -> st { stSource = x }
 
 getSourceOrThrow :: M (String, ByteString)
 getSourceOrThrow = do
-  result <- gets stSource
+  result <- gets replSource
   case result of
     Nothing -> throwError $ Panic "Can't read the stored source code"
     Just v -> return v
@@ -48,28 +54,35 @@ loadSource filePath = do
       Left err -> throwError $ Panic $ show (err :: IOException)
       Right source -> do
         -- store the source in the monad for later debugging use
-        modify $ \ st -> st { stSource = Just (filePath, source) }
+        modify $ \ st -> st { replSource = Just (filePath, source) }
 
-parseSource :: M ()
+parseSource :: M (C.Program Loc)
 parseSource = do
   (filePath, source) <- getSourceOrThrow
   case parseConcreteProgram filePath source of
       Left err -> throwError $ ParseError err
       Right cst -> do
-        modify $ \ st -> st { stConcrete = Just cst }
+        modify $ \ st -> st { replConcrete = Just cst }
+        return cst
 
-handleM :: M a -> IO (Maybe a)
+printErrorIO :: MState -> Error -> IO ()
+printErrorIO state err = case replSource state of
+  Nothing -> print err
+  Just (_, source) -> putDoc $ prettyError err source
+
+printError :: Error -> REPL ()
+printError err = do
+  state <- lift get
+  liftIO $ printErrorIO state err
+
+handleM :: M a -> REPL (Maybe a)
 handleM program = do
-  (result, state) <- runM program
+  result <- lift $ runExceptT program
   case result of
     Left err -> do
-      case stSource state of
-        Nothing -> print err
-        Just (_, source) -> putDoc $ prettyError err source
+      printError err
       return Nothing
     Right value -> return (Just value)
-
-
 
 runTCM :: TCM a -> M (a, TCState)
 runTCM program = do
@@ -78,34 +91,20 @@ runTCM program = do
       Left err -> throwError $ TypeError err
       Right val -> return (val, s)
 
-commands :: [String]
-commands = [ ":load", ":reload", ":type", ":quit", ":help" ]
-
-data Matching = Complete String | Partial [String] | Over String [String] | None
-
-match :: String -> Matching
-match raw = case words (reverse raw) of
-  [] -> None
-  (x:xs) -> if elem x commands
-              then if null xs then Complete x else Over x xs
-              else case filter (isPrefixOf x) commands of
-                [] -> None
-                matched -> Partial matched
-
-
 main :: IO ()
 main = do
   (opts, _filePaths) <- getArgs >>= parseOpts
   case optMode opts of
     ModeHelp -> putStrLn $ usageInfo usage options
-    ModeREPL -> void $ handleM $ runInputT settings loop
+    ModeREPL -> void $ runREPL settings loop
+      -- void $ runInputT settings loop
   where
 
-    settings :: Settings M
-    settings = setComplete complete defaultSettings
+    settings :: Settings Core
+    settings = setComplete customComplete defaultSettings
 
-    complete :: CompletionFunc M
-    complete (left, right) = case match left of
+    customComplete :: CompletionFunc Core
+    customComplete (left, right) = case match left of
       Complete ":load" -> completeFilename (left, right)
       Complete ":reload" -> completeFilename (left, right)
       Complete _ -> return (left, [Completion "" "" False])
@@ -115,55 +114,17 @@ main = do
       Over _ _ -> return (left, [Completion "" "" False])
       None -> completeCommands
 
-    completeCommands :: M (String, [Completion])
+    completeCommands :: Core (String, [Completion])
     completeCommands = return ("", map simpleCompletion commands)
 
-    -- complete (left, right) = completeFilename (left, right)
-    -- complete (" daol:", right) = completeFilename (" daol:", right)
-    --
-    --
-    -- complete (left, right) = case words (reverse left) of
-    --   [] -> completeFilename (left, right)
-    --   (x:_) -> if isCompleted x
-    --     then completeFilename (reverse (" " ++ x), right)
-    --     else case matched x of
-    --       [] -> completeFilename (left, right)
-    --       result -> return ("", map simpleCompletion result)
-    --
-    --   where
-    --     commands' = map ((:) ':') commands
-    --     isCompleted x = elem x commands'
-    --     matched x = filter (isPrefixOf x) commands'
-
-
-
-    loop :: InputT M ()
+    loop :: REPL ()
     loop = do
       minput <- getInputLine "> "
       case minput of
         Nothing -> return ()
         Just input -> do
-          -- outputStrLn $ show $ parseCommand input
-          keepLooping <- liftIO $ handleCommand $ parseCommand input
+          keepLooping <- handleCommand $ parseCommand input
           when keepLooping loop
-    --
-    --
-    -- void $ runM $ handleError $ do
-    -- let filePath = "test/source/church.clp"
-    -- program <- readSource filePath >>= parseSource filePath
-    --
-    -- (inferred, _) <- runTCM (checkAll program)
-    --
-    -- -- printing inferred sessions
-    -- _ <- Map.traverseWithKey (\name session -> do
-    --   liftIO $ putStrLn $ show $ pretty name
-    --   liftIO $ putStrLn $ show $ pretty session) inferred
-    --
-    --
-    --
-    --
-    --
-    -- return ()
 
 --------------------------------------------------------------------------------
 -- | Command-line arguments
@@ -196,7 +157,7 @@ parseOpts argv =
 --------------------------------------------------------------------------------
 -- | REPL
 
-data Command = Load FilePath | TypeOf String | Quit | Help | Noop
+data Command = Load FilePath | TypeOf Text | Quit | Help | Noop
   deriving (Show)
 
 trim :: String -> String
@@ -206,27 +167,40 @@ parseCommand :: String -> Command
 parseCommand key
   | ":load" `isPrefixOf` key = (Load . trim . drop 5) key
   | ":l"    `isPrefixOf` key = (Load . trim . drop 2) key
-  | ":type" `isPrefixOf` key = (TypeOf . trim . drop 5) key
-  | ":t"    `isPrefixOf` key = (TypeOf . trim . drop 2) key
+  | ":type" `isPrefixOf` key = (TypeOf . Text.pack . trim . drop 5) key
+  | ":t"    `isPrefixOf` key = (TypeOf . Text.pack . trim . drop 2) key
   | otherwise = case trim key of
       ":q"    -> Quit
       ":quit" -> Quit
       _ -> Noop
 
-handleCommand :: Command -> IO Bool
-handleCommand (Load filePath) = do
-  result <- handleM $ do
-    loadSource filePath
-    parseSource
-    return ()
-  case result of
-    Nothing -> return ()
-    Just value -> putStrLn $ "loaded: " ++ filePath
+whenLoaded :: REPL () -> REPL ()
+whenLoaded program = do
+  result <- lift $ gets replSource
+  if (isNothing result)
+    then liftIO $ putStrLn "Error: code not loaded"
+    else program
 
+
+handleCommand :: Command -> REPL Bool
+handleCommand (Load filePath) = do
+  void $ handleM $ do
+    loadSource filePath
+    program <- parseSource
+    (inferred, _) <- runTCM $ checkAll program
+    modify $ \ st -> st { replInferred = inferred }
+    return ()
+    -- liftIO $ putStrLn $ "loaded: " ++ filePath
   return True
-handleCommand (TypeOf name) = return True
+handleCommand (TypeOf name) = do
+  whenLoaded $ do
+    inferred <- lift $ gets replInferred
+    case Map.lookup name inferred of
+      Nothing -> liftIO $ putDoc $ pretty name <+> "is not defined" <> line
+      Just s  -> liftIO $ putDoc $ pretty s <> line
+  return True
 handleCommand Quit = return False
-handleCommand Help = displayHelp >> return True
+handleCommand Help = liftIO displayHelp >> return True
 handleCommand Noop = return True
 
 displayHelp :: IO ()
@@ -247,3 +221,17 @@ displayHelp = liftIO $ do
   putStrLn "  :type                 for sessions and types  (:t)"
   putStrLn "  :quit                 bye                     (:q)"
   putStrLn "======================================================"
+
+commands :: [String]
+commands = [ ":load", ":reload", ":type", ":quit", ":help" ]
+
+data Matching = Complete String | Partial [String] | Over String [String] | None
+
+match :: String -> Matching
+match raw = case words (reverse raw) of
+  [] -> None
+  (x:xs) -> if elem x commands
+              then if null xs then Complete x else Over x xs
+              else case filter (isPrefixOf x) commands of
+                [] -> None
+                matched -> Partial matched

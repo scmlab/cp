@@ -126,10 +126,10 @@ inferWith term input = do
   result <- case term of
     Call x _ -> do
       definition <- lift $ lift $ gets stDefinitions
-      case Map.lookup x definition of
+      case Map.lookup (toAbstract x) definition of
         Nothing -> throwError $ InferError $ DefnNotFound term x
-        Just (Annotated _ t) -> return (toAbstract t)
-        Just (Unannotated p) -> inferWith p input
+        Just (Annotated _ _ t) -> return (toAbstract t)
+        Just (Unannotated _ p) -> inferWith p input
 
     -- {A}
     -- {B}
