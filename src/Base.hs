@@ -23,6 +23,7 @@ import System.Console.Haskeline.MonadException
 data MState = MState
   { replSource    :: Maybe (String, ByteString)
   , replConcrete  :: Maybe (C.Program Loc)
+  , replDefinitions :: Map Text Definition
   , replInferred  :: Map Text A.Session
   } deriving (Show)
 
@@ -35,7 +36,7 @@ type M = ExceptT Error (StateT MState IO)
 
 
 initialState :: MState
-initialState = MState Nothing Nothing Map.empty
+initialState = MState Nothing Nothing Map.empty Map.empty
 
 runM :: M a -> IO (Either Error a, MState)
 runM program = runStateT (runExceptT program) initialState

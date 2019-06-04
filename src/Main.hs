@@ -107,12 +107,26 @@ main = do
     customComplete (left, right) = case match left of
       Complete ":load" -> completeFilename (left, right)
       Complete ":reload" -> completeFilename (left, right)
+      Complete ":type" -> completeDefinitions left []
       Complete _ -> return (left, [Completion "" "" False])
       Partial matched -> return ("", map simpleCompletion matched)
       Over ":load" _ -> completeFilename (left, right)
       Over ":reload" _ -> completeFilename (left, right)
+      Over ":type" xs -> completeDefinitions left xs
       Over _ _ -> return (left, [Completion "" "" False])
-      None -> completeCommands
+      None -> completeDefinitions left []
+
+    completeDefinitions :: String -> [String] -> Core (String, [Completion])
+    completeDefinitions left partials = do
+      -- get the names of all definitions
+      defns <- map Text.unpack <$> Map.keys <$> gets replDefinitions
+      -- complete only the last chuck
+      let partial = if null partials then "" else last partials
+      let matched = case filter (isPrefixOf partial) defns of
+                      [] -> defns
+                      xs -> xs
+      let left' = if null partials then left else dropWhile (/= ' ') left
+      return (left', map simpleCompletion matched)
 
     completeCommands :: Core (String, [Completion])
     completeCommands = return ("", map simpleCompletion commands)
@@ -125,6 +139,7 @@ main = do
         Just input -> do
           keepLooping <- handleCommand $ parseCommand input
           when keepLooping loop
+
 
 --------------------------------------------------------------------------------
 -- | Command-line arguments
@@ -187,8 +202,11 @@ handleCommand (Load filePath) = do
   void $ handleM $ do
     loadSource filePath
     program <- parseSource
-    (inferred, _) <- runTCM $ checkAll program
-    modify $ \ st -> st { replInferred = inferred }
+    (inferred, tcmState) <- runTCM $ checkAll program
+    modify $ \ st -> st
+      { replInferred = inferred
+      , replDefinitions = stDefinitions tcmState
+      }
     return ()
     -- liftIO $ putStrLn $ "loaded: " ++ filePath
   return True
@@ -226,6 +244,7 @@ commands :: [String]
 commands = [ ":load", ":reload", ":type", ":quit", ":help" ]
 
 data Matching = Complete String | Partial [String] | Over String [String] | None
+  deriving (Show)
 
 match :: String -> Matching
 match raw = case words (reverse raw) of
@@ -234,4 +253,6 @@ match raw = case words (reverse raw) of
               then if null xs then Complete x else Over x xs
               else case filter (isPrefixOf x) commands of
                 [] -> None
-                matched -> Partial matched
+                matched -> if length x == 2
+                  then if null xs then Complete (head matched) else Over (head matched) xs
+                  else Partial matched
