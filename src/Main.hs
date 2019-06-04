@@ -97,6 +97,9 @@ main = do
   case optMode opts of
     ModeHelp -> putStrLn $ usageInfo usage options
     ModeREPL -> void $ runREPL settings loop
+    ModeDev -> void $ runREPL settings $ do
+      _ <- handleCommand $ parseCommand ":l test/source/buy-sell.clp"
+      loop
       -- void $ runInputT settings loop
   where
 
@@ -114,7 +117,8 @@ main = do
       Over ":reload" _ -> completeFilename (left, right)
       Over ":type" xs -> completeDefinitions left xs
       Over _ _ -> return (left, [Completion "" "" False])
-      None -> completeDefinitions left []
+      None "" -> completeCommands
+      None _ -> completeDefinitions left []
 
     completeDefinitions :: String -> [String] -> Core (String, [Completion])
     completeDefinitions left partials = do
@@ -144,7 +148,7 @@ main = do
 --------------------------------------------------------------------------------
 -- | Command-line arguments
 
-data Mode = ModeREPL | ModeHelp
+data Mode = ModeREPL | ModeHelp | ModeDev
 
 data Options = Options
   { optMode :: Mode
@@ -158,6 +162,7 @@ defaultOptions = Options
 options :: [OptDescr (Options -> Options)]
 options =
   [ Option ['h']  ["help"]  (NoArg (\opts -> opts { optMode = ModeHelp }))  "print this help message"
+  , Option ['d']  ["dev"]  (NoArg (\opts -> opts { optMode = ModeDev }))   "for testing"
   ]
 
 usage :: String
@@ -243,16 +248,16 @@ displayHelp = liftIO $ do
 commands :: [String]
 commands = [ ":load", ":reload", ":type", ":quit", ":help" ]
 
-data Matching = Complete String | Partial [String] | Over String [String] | None
+data Matching = Complete String | Partial [String] | Over String [String] | None String
   deriving (Show)
 
 match :: String -> Matching
 match raw = case words (reverse raw) of
-  [] -> None
+  [] -> None ""
   (x:xs) -> if elem x commands
               then if null xs then Complete x else Over x xs
               else case filter (isPrefixOf x) commands of
-                [] -> None
+                [] -> None raw
                 matched -> if length x == 2
                   then if null xs then Complete (head matched) else Over (head matched) xs
                   else Partial matched
