@@ -1,4 +1,4 @@
-module TypeChecking.Types where
+module TypeChecking.Base where
 
 -- import Syntax.Concrete
 import qualified Syntax.Concrete as C

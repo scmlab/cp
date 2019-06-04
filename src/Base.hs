@@ -4,7 +4,7 @@ module Base where
 import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
 import Syntax.Parser
-import TypeChecking.Types
+import TypeChecking.Base
 
 import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
@@ -28,6 +28,7 @@ data MState = MState
   } deriving (Show)
 
 data Error = ParseError ParseError
+           | RuntimeError RuntimeError
            | TypeError TypeError
            | Panic String
            deriving (Show)
@@ -64,3 +65,11 @@ instance (MonadException m) => MonadException (ExceptT e m) where
     controlIO f = ExceptT $ controlIO $ \(RunIO run) -> let
                     run' = RunIO (fmap ExceptT . run . runExceptT)
                     in fmap runExceptT $ f run'
+
+--------------------------------------------------------------------------------
+-- | Runtime Error
+
+data RuntimeError
+  = Runtime_DefnNotFound A.Name
+  deriving (Show)
+-- data Rule = AxCut Chan

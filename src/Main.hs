@@ -4,9 +4,10 @@ module Main where
 import qualified Syntax.Concrete as C
 import Syntax.Parser
 import TypeChecking
-import TypeChecking.Types
+import TypeChecking.Base
 import Pretty.Error
 import Base
+import Runtime
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS

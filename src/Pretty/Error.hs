@@ -3,7 +3,7 @@
 module Pretty.Error where
 
 import Syntax.Parser.Type
-import TypeChecking.Types
+import TypeChecking.Base
 import Pretty
 import Base
 

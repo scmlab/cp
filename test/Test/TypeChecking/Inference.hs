@@ -18,7 +18,7 @@ import qualified Syntax.Concrete as C
 import qualified TypeChecking.InferOld as Old
 import qualified TypeChecking.Infer as New
 import TypeChecking (checkAll)
-import TypeChecking.Types
+import TypeChecking.Base
 
 import Base
 import Main

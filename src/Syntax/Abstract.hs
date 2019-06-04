@@ -32,44 +32,45 @@ instance Eq TypeVar where
 -- | Term level
 
 type TypeName = Text
-type TermName = Text
+type Chan = Text
+type Name = Text
 
 data Program = Program [Declaration]
     deriving (Show)
 data Declaration
-    = TypeSig  TermName Session
-    | TermDefn TermName Process
+    = TypeSig  Name Session
+    | TermDefn Name Process
     deriving (Show)
 data Process
-    = Call TermName
+    = Call Name
     -- link: x ↔ y
-    | Link TermName TermName
+    | Link Chan Chan
     -- parallelcomposition: νx:(P|Q)
-    | Compose TermName (Maybe Type) Process Process
+    | Compose Chan (Maybe Type) Process Process
     -- output: x[y].(P|Q)
-    | Output TermName TermName Process Process
+    | Output Chan Chan Process Process
     -- input: x(y).P
-    | Input TermName TermName Process
+    | Input Chan Chan Process
     -- left selection: x[inl].P
-    | SelectL TermName Process
+    | SelectL Chan Process
     -- right selection: x[inr].P
-    | SelectR TermName Process
+    | SelectR Chan Process
     -- choice: x.case(P,Q)
-    | Choice TermName Process Process
+    | Choice Chan Process Process
     -- server accept: !x(y).P
-    | Accept TermName TermName Process
+    | Accept Chan Chan Process
     -- client request: ?x[y].P
-    | Request TermName TermName Process
+    | Request Chan Chan Process
     -- output type: x[Y].P
-    | OutputT TermName Type Process
+    | OutputT Chan Type Process
     -- input type: x(Y).P
-    | InputT TermName TypeVar Process
+    | InputT Chan TypeVar Process
     -- empty output: x[].0
-    | EmptyOutput TermName
+    | EmptyOutput Chan
     -- empty input: x().P
-    | EmptyInput TermName Process
+    | EmptyInput Chan Process
     -- empty choice: x.case()
-    | EmptyChoice TermName
+    | EmptyChoice Chan
 
     | End
     -- mix: P | Q
@@ -80,7 +81,7 @@ data Process
 --------------------------------------------------------------------------------
 -- | Type level
 
-type Session = Map TermName Type
+type Session = Map Chan Type
 data Type
     = Var TypeVar
     -- Subst B X A: B { A / X }

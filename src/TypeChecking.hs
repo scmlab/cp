@@ -4,7 +4,7 @@ import qualified Syntax.Concrete as C
 import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
 import qualified Syntax.Abstract as A
 import TypeChecking.Infer
-import TypeChecking.Types
+import TypeChecking.Base
 --
 import Prelude hiding (lookup)
 

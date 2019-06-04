@@ -199,7 +199,7 @@ instance ToAbstract (TypeVar ann) A.TypeVar where
 instance ToAbstract (TypeName ann) A.TypeName where
     toAbstract (TypeName name    _) = name
 
-instance ToAbstract (TermName ann) A.TermName where
+instance ToAbstract (TermName ann) A.Chan where
     toAbstract (TermName name    _) = name
 
 instance ToAbstract (Process ann) A.Process where

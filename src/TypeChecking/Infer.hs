@@ -8,7 +8,7 @@ import Syntax.Abstract (Session, Type(..), TypeVar(..))
 import Syntax.Base
 import qualified TypeChecking.Unification as U
 import TypeChecking.Unification (Substitution(..))
-import TypeChecking.Types
+import TypeChecking.Base
 --
 import Prelude hiding (lookup)
 
@@ -114,7 +114,7 @@ substitute = flip $ foldr $ \ (Substitute var t) -> Map.map (U.substitute var t)
 -- | InferM
 
 
-type TypeVars = Map A.TermName TypeVar
+type TypeVars = Map A.Chan TypeVar
 type InferM = WriterT [Substitution] (StateT TypeVars TCM)
 
 
