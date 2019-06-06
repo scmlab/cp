@@ -5,6 +5,7 @@ import Control.Monad.State
 import Control.Monad.Except
 import Data.Loc
 import Data.Text (Text)
+import Data.ByteString.Lazy (ByteString)
 
 import Language.Lexer.Applicative
 
@@ -75,21 +76,23 @@ data Token
 --------------------------------------------------------------------------------
 -- | ParseError and stuff
 
-data ParseError = Lexical Pos | Syntatical Loc Token
+data ParseError = Lexical ByteString Pos | Syntatical ByteString Loc Token
   deriving (Show)
 
 data ParserState = ParserState
-  { currentLoc :: Loc
-  , lookaheadLoc :: Loc
-  , tokenStream :: TokenStream (L Token)
+  { currentLoc    :: Loc
+  , lookaheadLoc  :: Loc
+  , tokenStream   :: TokenStream (L Token)
+  , rawSource     :: ByteString -- for error reporting
   } deriving (Show)
 
 type Parser = StateT ParserState (Except ParseError)
 
 syntaticalError :: Token -> Parser a
 syntaticalError tok = do
+  src <- gets rawSource
   loc <- gets lookaheadLoc
-  throwError $ Syntatical loc tok
+  throwError $ Syntatical src loc tok
 
 getLoc :: Parser Loc
 getLoc = gets lookaheadLoc

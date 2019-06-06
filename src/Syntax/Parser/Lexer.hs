@@ -11,6 +11,7 @@ import Data.Loc
 import Data.Text (Text, pack)
 import Language.Lexer.Applicative
 import Text.Regex.Applicative
+import Debug.Trace
 
 matchWhen :: (s -> Bool) -> a -> RE s a
 matchWhen p symbol = msym (\t -> if p t then Just symbol else Nothing)
@@ -118,12 +119,13 @@ scanNext :: Parser Token
 scanNext = do
   result <- gets tokenStream
   oldLoc <- gets lookaheadLoc
+  src    <- gets rawSource
   case result of
     TsToken (L newLoc tok) stream -> do
-      put $ ParserState oldLoc newLoc stream
+      put $ ParserState oldLoc newLoc stream src
       return tok
     TsEof -> do
-      modify $ \st -> st { currentLoc = oldLoc , lookaheadLoc = NoLoc}
+      modify $ \st -> st { currentLoc = oldLoc , lookaheadLoc = oldLoc}
       return TokenEOF
     TsError (LexicalError pos) -> do
-      throwError $ Lexical pos
+      throwError $ Lexical src pos

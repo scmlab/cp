@@ -2,7 +2,7 @@ module Syntax.Parser
   ( parseProgram
   , parseConcreteProcess
   , parseAbstractProcess
-  , parseSession
+  , parseAbstraceSession
   , parseConcreteProgram
   , ParseError(..)
   )
@@ -24,21 +24,21 @@ import Language.Lexer.Applicative
 parseConcreteProcess :: ByteString -> Either ParseError (C.Process Loc)
 parseConcreteProcess src = runExcept (evalStateT processParser initState)
   where filePath = "<interactive>"
-        initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
+        initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
 parseAbstractProcess :: ByteString -> Either ParseError A.Process
 parseAbstractProcess src = C.toAbstract <$> parseConcreteProcess src
 
-parseSession :: ByteString -> Either ParseError A.Session
-parseSession src = C.toAbstract <$> runExcept (evalStateT sessionParser initState)
+parseAbstraceSession :: ByteString -> Either ParseError A.Session
+parseAbstraceSession src = C.toAbstract <$> runExcept (evalStateT sessionParser initState)
   where filePath = "<interactive>"
-        initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
+        initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
         startingLoc = Loc (startPos filePath) (startPos  filePath)
 
 parseConcreteProgram :: FilePath -> ByteString -> Either ParseError (C.Program Loc)
 parseConcreteProgram filePath src = runExcept (evalStateT programParser initState)
-  where initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
+  where initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
 parseProgram :: FilePath -> ByteString -> Either ParseError A.Program

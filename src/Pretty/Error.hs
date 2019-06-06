@@ -60,13 +60,11 @@ formatError header paragraphs locations (Just source) =
             ]) locations
 
 
-prettyParseError :: ParseError -> Maybe ByteString -> Doc AnsiStyle
-prettyParseError (Lexical pos) =
-  formatError "Lexical parse error" []
-    [locOf pos]
-prettyParseError (Syntatical loc _) =
-  formatError "Lexical parse error" []
-    [loc]
+prettyParseError :: ParseError -> Doc AnsiStyle
+prettyParseError (Lexical src pos) =
+  formatError "Lexical parse error" [] [locOf pos] (Just src)
+prettyParseError (Syntatical src loc _) =
+  formatError "Lexical parse error" [] [loc] (Just src)
 
 
 prettyTypeError :: TypeError -> Maybe ByteString -> Doc AnsiStyle
@@ -176,7 +174,7 @@ instance Pretty RuntimeError where
 prettyError :: Error -> Maybe ByteString -> Doc AnsiStyle
 prettyError err source = do
   case err of
-    ParseError parseError -> prettyParseError parseError source
+    ParseError parseError -> prettyParseError parseError
     TypeError typeError -> prettyTypeError typeError source
     RuntimeError runtimeError -> pretty runtimeError
     Panic msg -> pretty msg
