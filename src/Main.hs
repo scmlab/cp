@@ -5,6 +5,7 @@ import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
 import Syntax.Parser
 import TypeChecking
+import TypeChecking.Infer
 import TypeChecking.Base
 import Pretty.Error
 import Base
@@ -68,8 +69,8 @@ parseSource = do
         modify $ \ st -> st { replConcrete = Just cst }
         return cst
 
-parseProcess :: ByteString -> M A.Process
-parseProcess raw = case parseAbstractProcess raw of
+parseProcess :: ByteString -> M (C.Process Loc)
+parseProcess raw = case parseConcreteProcess raw of
   Left err -> throwError $ ParseError err
   Right ast -> return ast
 
@@ -185,7 +186,7 @@ parseOpts argv =
 --------------------------------------------------------------------------------
 -- | REPL
 
-data Command = Load FilePath | TypeOf Text | Eval ByteString | Quit | Help | Noop
+data Command = Load FilePath | TypeOf ByteString | Eval ByteString | Quit | Help | Noop
   deriving (Show)
 
 trim :: String -> String
@@ -195,11 +196,12 @@ parseCommand :: String -> Command
 parseCommand key
   | ":load" `isPrefixOf` key = (Load . trim . drop 5) key
   | ":l"    `isPrefixOf` key = (Load . trim . drop 2) key
-  | ":type" `isPrefixOf` key = (TypeOf . Text.pack . trim . drop 5) key
-  | ":t"    `isPrefixOf` key = (TypeOf . Text.pack . trim . drop 2) key
+  | ":type" `isPrefixOf` key = (TypeOf . BS8.pack . trim . drop 5) key
+  | ":t"    `isPrefixOf` key = (TypeOf . BS8.pack . trim . drop 2) key
   | otherwise = case trim key of
       ":q"    -> Quit
       ":quit" -> Quit
+      ""      -> Noop
       s       -> Eval (BS8.pack s)
         -- traceShow "!!!" (Noop)
 
@@ -224,20 +226,25 @@ handleCommand (Load filePath) = do
     return ()
     -- liftIO $ putStrLn $ "loaded: " ++ filePath
   return True
-handleCommand (TypeOf name) = do
-  whenLoaded $ do
-    inferred <- lift $ gets replInferred
-    case Map.lookup name inferred of
-      Nothing -> void $ handleM $ throwError $ RuntimeError $ Runtime_DefnNotFound name
-        -- liftIO $ putDoc $ pretty name <+> "is not defined" <> line
-      Just s  -> liftIO $ putDoc $ pretty s <> line
+handleCommand (TypeOf s) = do
+  void $ handleM $ do
+    term <- parseProcess s
+    (session, _) <- runTCM (inferTerm term)
+    liftIO $ putDoc $ pretty session <> line
+    return ()
+
+  -- whenLoaded $ do
+  --   inferred <- lift $ gets replInferred
+  --   case Map.lookup name inferred of
+  --     Nothing -> void $ handleM $ throwError $ RuntimeError $ Runtime_NotInScope name
+  --     Just s  -> liftIO $ putDoc $ pretty s <> line
   return True
 handleCommand Quit = return False
 handleCommand Help = liftIO displayHelp >> return True
 handleCommand (Eval s) = do
   void $ handleM $ do
     process <- parseProcess s
-    result <- reduce process
+    result <- reduce (C.toAbstract process)
     liftIO $ putDoc $ pretty result <> line
     return ()
   return True

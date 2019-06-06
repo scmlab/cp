@@ -169,18 +169,14 @@ prettyInferError (SessionShouldBeDisjoint term session) =
 prettyInferError e = formatError "" [pretty $ show $ e] []
 
 prettyRuntimeError :: RuntimeError -> Doc AnsiStyle
-prettyRuntimeError (Runtime_DefnNotFound name) =
+prettyRuntimeError (Runtime_NotInScope name) =
   formatError "Process not defined"
-    [ highlight name <+> "is not found"
+    [ highlight name <+> "is not in scope"
     ] [] Nothing
 prettyRuntimeError Runtime_CodeNotLoaded =
   formatError "Source not loaded yet"
     [ "type " <> highlight (":l FILEPATH" :: Text) <> " to load the source"
     ] [] Nothing
-
--- instance Pretty RuntimeError where
---   pretty (Runtime_DefnNotFound name) = pretty name <+> "is not defined" <> line
---   pretty Runtime_CodeNotLoaded = pretty name <+> "is not defined" <> line
 
 prettyError :: Error -> Maybe ByteString -> Doc AnsiStyle
 prettyError err source = do

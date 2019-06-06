@@ -19,7 +19,7 @@ lookupProcess :: Name -> M Process
 lookupProcess name = do
   definition <- gets replDefinitions
   case Map.lookup name definition of
-    Nothing -> throwError $ RuntimeError $ Runtime_DefnNotFound name
+    Nothing -> throwError $ RuntimeError $ Runtime_NotInScope name
     Just (Annotated _ p _) -> return (toAbstract p)
     Just (Unannotated _ p) -> return (toAbstract p)
 

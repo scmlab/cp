@@ -69,7 +69,7 @@ instance (MonadException m) => MonadException (ExceptT e m) where
 -- | Runtime Error
 
 data RuntimeError
-  = Runtime_DefnNotFound A.Name
+  = Runtime_NotInScope A.Name
   | Runtime_CodeNotLoaded
   deriving (Show)
 -- data Rule = AxCut Chan
