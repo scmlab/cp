@@ -21,7 +21,11 @@ instance Pretty TypeVar where
 instance Pretty Process where
   pretty (Call x) = pretty x
   pretty (Link x y) = pretty x <> " ↔ " <> pretty y
-  pretty (Compose x t p q) = pretty x
+  pretty (Compose x Nothing p q) = "ν " <> pretty x
+    <> " ( " <> pretty p
+    <> " | " <> pretty q
+    <> " )"
+  pretty (Compose x t p q) = "ν " <> pretty x
     <> " : " <> pretty t
     <> " ( " <> pretty p
     <> " | " <> pretty q

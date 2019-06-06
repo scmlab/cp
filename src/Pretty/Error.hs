@@ -150,9 +150,13 @@ prettyInferError (SessionShouldBeDisjoint term session) =
 
 prettyInferError e = formatError "" [pretty $ show $ e] []
 
+instance Pretty RuntimeError where
+  pretty (Runtime_DefnNotFound name) = pretty name <+> "is not defined" <> line
+
 prettyError :: Error -> ByteString -> Doc AnsiStyle
 prettyError err source = do
   case err of
     ParseError parseError -> prettyParseError parseError source
     TypeError typeError -> prettyTypeError typeError source
+    RuntimeError runtimeError -> pretty runtimeError
     Panic msg -> pretty msg

@@ -15,7 +15,6 @@ import qualified Data.Map as Map
 import Control.Monad.State
 import Control.Monad.Except
 import System.Console.Haskeline
-import System.Console.Haskeline.MonadException
 
 --------------------------------------------------------------------------------
 -- | The M Monad

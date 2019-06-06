@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings                  #-}
 module Main where
 
+import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
 import Syntax.Parser
 import TypeChecking
@@ -11,6 +12,7 @@ import Runtime
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
+import qualified Data.ByteString.Lazy.Char8 as BS8
 import Data.Loc (Loc(..))
 -- import Data.Text (Text)
 import Data.Text.Prettyprint.Doc.Render.Terminal
@@ -65,6 +67,11 @@ parseSource = do
       Right cst -> do
         modify $ \ st -> st { replConcrete = Just cst }
         return cst
+
+parseProcess :: ByteString -> M A.Process
+parseProcess raw = case parseAbstractProcess raw of
+  Left err -> throwError $ ParseError err
+  Right ast -> return ast
 
 printErrorIO :: MState -> Error -> IO ()
 printErrorIO state err = case replSource state of
@@ -178,7 +185,7 @@ parseOpts argv =
 --------------------------------------------------------------------------------
 -- | REPL
 
-data Command = Load FilePath | TypeOf Text | Quit | Help | Noop
+data Command = Load FilePath | TypeOf Text | Eval ByteString | Quit | Help | Noop
   deriving (Show)
 
 trim :: String -> String
@@ -193,7 +200,8 @@ parseCommand key
   | otherwise = case trim key of
       ":q"    -> Quit
       ":quit" -> Quit
-      _ -> Noop
+      s       -> Eval (BS8.pack s)
+        -- traceShow "!!!" (Noop)
 
 whenLoaded :: REPL () -> REPL ()
 whenLoaded program = do
@@ -225,6 +233,13 @@ handleCommand (TypeOf name) = do
   return True
 handleCommand Quit = return False
 handleCommand Help = liftIO displayHelp >> return True
+handleCommand (Eval s) = do
+  void $ handleM $ do
+    process <- parseProcess s
+    result <- reduce process
+    liftIO $ putDoc $ pretty result <> line
+    return ()
+  return True
 handleCommand Noop = return True
 
 displayHelp :: IO ()

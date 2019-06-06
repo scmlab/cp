@@ -7,6 +7,19 @@ compute = u() . v() . w[] . end
 
 buy = x[u] . (putName | x[v] . (putCredit | x(w) . x() . getReceipt))
 sell = x(u) . x(v) . x[w] . (compute | x[] . end)
+runBuy2 = \ x . (buy | sell)
+
+
+
+
+
+
+
+
+
+
+
+
 
 -- shop/quote
 
@@ -22,7 +35,9 @@ selectBuy = x[inl] . buy
 selectShop = x[inr] . shop
 choice = x.case(sell, quote)
 
+
 runBuy = \ x . (selectBuy | choice)
+
 runShop = \ x . (selectShop | choice)
 
 client = ?x[y].selectBuy | ?x[y].selectShop

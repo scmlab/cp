@@ -1,6 +1,7 @@
 module Syntax.Parser
   ( parseProgram
-  , parseProcess
+  , parseConcreteProcess
+  , parseAbstractProcess
   , parseSession
   , parseConcreteProgram
   , ParseError(..)
@@ -20,11 +21,14 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Loc
 import Language.Lexer.Applicative
 
-parseProcess :: ByteString -> Either ParseError (C.Process Loc)
-parseProcess src = runExcept (evalStateT processParser initState)
+parseConcreteProcess :: ByteString -> Either ParseError (C.Process Loc)
+parseConcreteProcess src = runExcept (evalStateT processParser initState)
   where filePath = ""
         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src))
         startingLoc = Loc (startPos filePath) (startPos  filePath)
+
+parseAbstractProcess :: ByteString -> Either ParseError A.Process
+parseAbstractProcess src = C.toAbstract <$> parseConcreteProcess src
 
 parseSession :: ByteString -> Either ParseError A.Session
 parseSession src = C.toAbstract <$> runExcept (evalStateT sessionParser initState)

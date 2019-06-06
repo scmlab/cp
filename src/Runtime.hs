@@ -15,18 +15,90 @@ import Control.Monad.State
 import Control.Monad.Except
 
 
-reduce :: Process -> Process
--- reduce (Compose chan _ (Link x y) p) = undefined
-reduce _ = undefined
-
-
-substitute :: Process -> Chan -> Chan -> M Process
-substitute (Call name) a b = do
+lookupProcess :: Name -> M Process
+lookupProcess name = do
   definition <- gets replDefinitions
   case Map.lookup name definition of
     Nothing -> throwError $ RuntimeError $ Runtime_DefnNotFound name
-    Just (Annotated _ p _) -> substitute (toAbstract p) a b
-    Just (Unannotated _ p) -> substitute (toAbstract p) a b
+    Just (Annotated _ p _) -> return (toAbstract p)
+    Just (Unannotated _ p) -> return (toAbstract p)
+
+reduce :: Process -> M Process
+reduce (Call name) = lookupProcess name >>= reduce
+reduce (Compose chan t p q) = do
+  p' <- reduce p
+  q' <- reduce q
+  compose chan t p' q'
+reduce others = return others
+
+compose :: Chan -> (Maybe Type) -> Process -> Process -> M Process
+-- expanding calls
+compose chan t (Call name) q = do
+  p <- lookupProcess name
+  compose chan t p q >>= reduce
+compose chan t p (Call name)
+  = compose chan (fmap Dual t) (Call name) p >>= reduce
+-- AxCut
+compose chan t (Link x y) p
+  | chan == x = substitute p x y >>= reduce
+  | chan == y = substitute p y x >>= reduce
+  | otherwise = reduce $ Compose chan t (Link x y) p
+compose chan t p (Link x y)
+  = compose chan (fmap Dual t) (Link x y) p >>= reduce
+-- β⊗􏰀􏰀􏰀⅋
+compose chan t (Output x y p q) (Input v w r)
+  | chan == x && chan == v = compose y Nothing p (Compose x Nothing q r) >>= reduce
+  | otherwise = reduce $ Compose chan t (Output x y p q) (Input v w r)
+compose chan t (Input v w r) (Output x y p q)
+  = compose chan (fmap Dual t) (Output x y p q) (Input v w r) >>= reduce
+-- β⊕& left
+compose chan t (SelectL x p) (Choice y q r)
+  | chan == x && chan == y = compose x Nothing p q >>= reduce
+  | otherwise = reduce $ Compose chan t (SelectL x p) (Choice y q r)
+compose chan t (Choice y q r) (SelectL x p)
+  = compose chan (fmap Dual t) (SelectL x p) (Choice y q r) >>= reduce
+-- β⊕& right
+compose chan t (SelectR x p) (Choice y q r)
+  | chan == x && chan == y = compose x Nothing p r >>= reduce
+  | otherwise = reduce $ Compose chan t (SelectR x p) (Choice y q r)
+compose chan t (Choice y q r) (SelectR x p)
+  = compose chan (fmap Dual t) (SelectR x p) (Choice y q r) >>= reduce
+-- β!?
+-- compose chan t (InputT x y p) (OutputT v w q)
+--   | chan == x && chan == v = return $ Compose y Nothing p q
+--   | otherwise = return $ Compose chan t (InputT x y p) (OutputT v w q)
+-- compose chan t (OutputT v w q) (InputT x y p)
+--   = compose chan (fmap Dual t) (InputT x y p) (OutputT v w q)
+-- β1⊥
+compose chan t (EmptyOutput x) (EmptyInput y p)
+  | chan == x && chan == y = reduce p
+  | otherwise = reduce $ Compose chan t (EmptyOutput x) (EmptyInput y p)
+compose chan t (EmptyInput y p) (EmptyOutput x)
+  = compose chan (fmap Dual t) (EmptyOutput x) (EmptyInput y p) >>= reduce
+compose chan t p q = return $ Compose chan t p q
+
+-- reduce :: Process -> M Process
+-- reduce process = case process of
+--   Call name -> lookupProcess name
+--   -- AxCut
+--   Compose chan _ (Link x y) p ->
+--           if chan == x then substitute p x y
+--     else  if chan == y then substitute p y x
+--     else  return process
+--   -- AxCut + Swap
+--   Compose chan t p (Link x y) -> reduce (swap chan t p (Link x y))
+--   --
+-- reduce _ = undefined
+
+-- Swap
+swap :: Chan -> (Maybe Type) -> Process -> Process -> Process
+swap x Nothing p q = Compose x Nothing q p
+swap x (Just t) p q = Compose x (Just (Dual t)) q p
+
+substitute :: Process -> Chan -> Chan -> M Process
+substitute (Call name) a b = do
+  p <- lookupProcess name
+  substitute p a b
 substitute (Link x y) a b =
   Link
     <$> substChan x a b
