@@ -83,7 +83,7 @@ printError err = do
   state <- lift get
   liftIO $ printErrorIO state err
 
-handleM :: Show a => M a -> REPL (Maybe a)
+handleM :: M a -> REPL (Maybe a)
 handleM program = do
   result <- lift $ runExceptT program
   case result of
@@ -207,7 +207,7 @@ whenLoaded :: REPL () -> REPL ()
 whenLoaded program = do
   result <- lift $ gets replSource
   if (isNothing result)
-    then liftIO $ putStrLn "Error: code not loaded"
+    then void $ handleM $ throwError $ RuntimeError $ Runtime_CodeNotLoaded
     else program
 
 
@@ -228,7 +228,8 @@ handleCommand (TypeOf name) = do
   whenLoaded $ do
     inferred <- lift $ gets replInferred
     case Map.lookup name inferred of
-      Nothing -> liftIO $ putDoc $ pretty name <+> "is not defined" <> line
+      Nothing -> void $ handleM $ throwError $ RuntimeError $ Runtime_DefnNotFound name
+        -- liftIO $ putDoc $ pretty name <+> "is not defined" <> line
       Just s  -> liftIO $ putDoc $ pretty s <> line
   return True
 handleCommand Quit = return False
