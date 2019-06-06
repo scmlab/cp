@@ -21,8 +21,27 @@ import Data.Text.Prettyprint.Doc.Render.Terminal
 -- |
 
 
-formatError :: Text -> [Doc AnsiStyle] -> [Loc] -> ByteString -> Doc AnsiStyle
-formatError header paragraphs locations source =
+formatError :: Text             -- Header
+            -> [Doc AnsiStyle]  -- Description
+            -> [Loc]            -- List of locations to highlight
+            -> Maybe ByteString -- Source code to be highlighted
+            -> Doc AnsiStyle
+formatError header paragraphs locations Nothing =
+  vsep
+    [ softline'
+    , indent 2 pieces
+    , indent 2 text
+    , softline'
+    ]
+  where
+      text = vsep $
+            [ annotate (color Red) $ pretty header
+            , softline
+            ]
+            ++ (map (\ x -> x <> line) paragraphs)
+      pieces :: Doc AnsiStyle
+      pieces = hsep $ map (\loc -> annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)) locations
+formatError header paragraphs locations (Just source) =
   vsep
     [ softline'
     , indent 2 text
@@ -36,11 +55,12 @@ formatError header paragraphs locations source =
             ]
             ++ (map (\ x -> x <> line) paragraphs)
       pieces = vsep $ map (\loc -> vsep
-        [ annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
-        , reAnnotate toAnsiStyle $ prettySourceCode $ SourceCode source loc 1
-        ]) locations
+            [ annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
+            , reAnnotate toAnsiStyle $ prettySourceCode $ SourceCode source loc 1
+            ]) locations
 
-prettyParseError :: ParseError -> ByteString -> Doc AnsiStyle
+
+prettyParseError :: ParseError -> Maybe ByteString -> Doc AnsiStyle
 prettyParseError (Lexical pos) =
   formatError "Lexical parse error" []
     [locOf pos]
@@ -49,7 +69,7 @@ prettyParseError (Syntatical loc _) =
     [loc]
 
 
-prettyTypeError :: TypeError -> ByteString -> Doc AnsiStyle
+prettyTypeError :: TypeError -> Maybe ByteString -> Doc AnsiStyle
 prettyTypeError (TypeSigDuplicated a b) =
   formatError "Duplicating type signature" []
     [locOf a, locOf b]
@@ -64,7 +84,7 @@ prettyTypeError (Others msg) =
 highlight :: Pretty a => a -> Doc AnsiStyle
 highlight = annotate (colorDull Blue) . pretty
 
-prettyInferError :: InferError -> ByteString -> Doc AnsiStyle
+prettyInferError :: InferError -> Maybe ByteString -> Doc AnsiStyle
 prettyInferError (General msg) = formatError "Other unformatted inference errors" [pretty msg] []
 prettyInferError (CannotAppearInside term chan) =
   formatError "Channel not allowed"
@@ -153,7 +173,7 @@ prettyInferError e = formatError "" [pretty $ show $ e] []
 instance Pretty RuntimeError where
   pretty (Runtime_DefnNotFound name) = pretty name <+> "is not defined" <> line
 
-prettyError :: Error -> ByteString -> Doc AnsiStyle
+prettyError :: Error -> Maybe ByteString -> Doc AnsiStyle
 prettyError err source = do
   case err of
     ParseError parseError -> prettyParseError parseError source

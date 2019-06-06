@@ -75,15 +75,15 @@ parseProcess raw = case parseAbstractProcess raw of
 
 printErrorIO :: MState -> Error -> IO ()
 printErrorIO state err = case replSource state of
-  Nothing -> print err
-  Just (_, source) -> putDoc $ prettyError err source
+  Nothing -> putDoc $ prettyError err Nothing
+  Just (_, source) -> putDoc $ prettyError err (Just source)
 
 printError :: Error -> REPL ()
 printError err = do
   state <- lift get
   liftIO $ printErrorIO state err
 
-handleM :: M a -> REPL (Maybe a)
+handleM :: Show a => M a -> REPL (Maybe a)
 handleM program = do
   result <- lift $ runExceptT program
   case result of
