@@ -60,7 +60,7 @@ loadSource filePath = do
         -- store the source in the monad for later debugging use
         modify $ \ st -> st { replSource = Just (filePath, source) }
 
-parseSource :: M (C.Program Loc)
+parseSource :: M C.Program
 parseSource = do
   (filePath, source) <- getSourceOrThrow
   case parseConcreteProgram filePath source of
@@ -69,7 +69,7 @@ parseSource = do
         modify $ \ st -> st { replConcrete = Just cst }
         return cst
 
-parseProcess :: ByteString -> M (C.Process Loc)
+parseProcess :: ByteString -> M (C.Process)
 parseProcess raw = case parseConcreteProcess raw of
   Left err -> throwError $ ParseError err
   Right ast -> return ast

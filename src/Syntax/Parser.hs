@@ -21,7 +21,7 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Loc
 import Language.Lexer.Applicative
 
-parseConcreteProcess :: ByteString -> Either ParseError (C.Process Loc)
+parseConcreteProcess :: ByteString -> Either ParseError C.Process
 parseConcreteProcess src = runExcept (evalStateT processParser initState)
   where filePath = "<interactive>"
         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
@@ -36,7 +36,7 @@ parseAbstraceSession src = C.toAbstract <$> runExcept (evalStateT sessionParser 
         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
         startingLoc = Loc (startPos filePath) (startPos  filePath)
 
-parseConcreteProgram :: FilePath -> ByteString -> Either ParseError (C.Program Loc)
+parseConcreteProgram :: FilePath -> ByteString -> Either ParseError C.Program
 parseConcreteProgram filePath src = runExcept (evalStateT programParser initState)
   where initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
         startingLoc = Loc (startPos filePath) (startPos filePath)

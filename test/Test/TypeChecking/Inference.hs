@@ -23,14 +23,14 @@ import TypeChecking.Base
 import Base
 import Main
 
-infer :: C.Process Loc -> IO Session
+infer :: C.Process -> IO Session
 infer term = do
   (result, _) <- runM $ runTCM (New.inferTerm term)
   case result of
     Left  err         -> assertFailure $ show err
     Right (actual, _) -> return actual
 
-load :: FilePath -> IO (Map TermName Session)
+load :: FilePath -> IO (Map Proc Session)
 load filePath = do
   (result, _) <- runM $ do
       program <- readSource filePath >>= parseSource filePath

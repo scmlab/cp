@@ -8,7 +8,6 @@ import TypeChecking.Base
 
 import Data.ByteString.Lazy (ByteString)
 import Data.Text (Text)
-import Data.Loc (Loc(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -21,7 +20,7 @@ import System.Console.Haskeline
 
 data MState = MState
   { replSource    :: Maybe (String, ByteString)
-  , replConcrete  :: Maybe (C.Program Loc)
+  , replConcrete  :: Maybe C.Program
   , replDefinitions :: Map Text Definition
   , replInferred  :: Map Text A.Session
   } deriving (Show)

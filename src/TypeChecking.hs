@@ -24,7 +24,7 @@ import Control.Monad.Except
 -- | TCM
 
 -- there should be only at most one type signature or term definition
-checkDuplications :: Program Loc -> TCM ()
+checkDuplications :: Program -> TCM ()
 checkDuplications (Program declarations _) = do
   let typeSigNames = mapMaybe typeSigName declarations
   let termDefnNames = mapMaybe termDefnName declarations
@@ -43,7 +43,7 @@ checkDuplications (Program declarations _) = do
       in if null dup then Nothing else Just (head dup !! 0, head dup !! 1)
 
 
-checkAll :: Program Loc -> TCM (Map Text A.Session)
+checkAll :: Program -> TCM (Map Text A.Session)
 checkAll program = do
   -- checking the definitions
   checkDuplications program
@@ -61,7 +61,7 @@ typeCheckOrInfer key (Annotated name term session) = do
 typeCheckOrInfer _ (Unannotated name term) =
   inferTerm term >>= return . Just
 
-putDefiniotions :: Program Loc -> TCM ()
+putDefiniotions :: Program -> TCM ()
 putDefiniotions (Program declarations _) =
   modify $ \ st -> st { stDefinitions = Map.union termsWithTypes termsWithoutTypes }
   where
@@ -71,10 +71,10 @@ putDefiniotions (Program declarations _) =
     toTermDefnPair (TermDefn n t _) = Just (toAbstract n, (n, t))
     toTermDefnPair _                = Nothing
 
-    typeSigs :: Map Text (C.Session Loc)
+    typeSigs :: Map Text C.Session
     typeSigs  = Map.fromList $ mapMaybe toTypeSigPair declarations
 
-    termDefns :: Map Text (Name, Term)
+    termDefns :: Map Text (Name, Process)
     termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
 
     termsWithTypes :: Map Text Definition

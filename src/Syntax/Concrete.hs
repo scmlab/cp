@@ -10,79 +10,77 @@ import qualified Syntax.Abstract as A
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
 import Data.Map (Map)
+import Data.Function (on)
 import qualified Data.Map as Map
 import Prelude hiding (LT, EQ, GT)
 
 --------------------------------------------------------------------------------
 -- | Concrete Syntax Tree
 
-data TypeVar      ann = Named Text ann
-                      deriving (Show, Ord, Eq, Functor)
+-- variables and names
+data Name     = Name      Text Loc deriving (Show)
+data Chan     = Chan      Text Loc deriving (Show)
+data TypeVar  = Named     Text Loc deriving (Show)
+data TypeName = TypeName  Text Loc deriving (Show)
 
-data TermName     ann = TermName Text ann
-                      deriving (Show, Functor)
-data TypeName     ann = TypeName Text ann
-                      deriving (Show, Functor)
 
-data Program      ann = Program     [Declaration ann]                       ann
-                      deriving (Show, Functor)
+data Program = Program [Declaration] Loc deriving (Show)
 
-data Declaration  ann = TypeSig   (TermName ann)  (Session ann)             ann
-                      | TermDefn  (TermName ann)  (Process ann)             ann
-                      deriving (Show, Functor)
+data Declaration = TypeSig  Name Session Loc
+                 | TermDefn Name Process Loc
+                 deriving (Show)
 
-data Process  ann = Call      (TermName ann)                                ann
-                  | Link      (TermName ann) (TermName ann)                 ann
-                  | Compose   (TermName ann) (Maybe (Type ann)) (Process  ann) (Process ann)   ann
-                  | Output    (TermName ann) (TermName ann) (Process ann) (Process ann) ann
-                  | Input     (TermName ann) (TermName ann) (Process ann)   ann
-                  | SelectL   (TermName ann) (Process  ann)                 ann
-                  | SelectR   (TermName ann) (Process  ann)                 ann
-                  | Choice    (TermName ann) (Process  ann) (Process ann)   ann
-                  | Accept    (TermName ann) (TermName ann) (Process ann)   ann
-                  | Request   (TermName ann) (TermName ann) (Process ann)   ann
-                  | OutputT   (TermName ann) (Type     ann) (Process ann)   ann
-                  | InputT    (TermName ann) (TypeVar  ann) (Process ann)   ann
-                  | EmptyOutput              (TermName ann)                 ann
-                  | EmptyInput               (TermName ann) (Process ann)   ann
-                  | EmptyChoice              (TermName ann)                 ann
-                  | End                                                     ann
-                  | Mix       (Process ann)   (Process ann)                 ann
-                  deriving (Show, Functor)
-
-data Session ann = Session (Map (TermName ann) (Type ann)) ann
+data Process  = Call      Name                              Loc
+              | Link      Chan Chan                         Loc
+              | Compose   Chan (Maybe Type) Process Process Loc
+              | Output    Chan Chan Process Process         Loc
+              | Input     Chan Chan Process                 Loc
+              | SelectL   Chan Process                      Loc
+              | SelectR   Chan Process                      Loc
+              | Choice    Chan Process Process              Loc
+              | Accept    Chan Chan Process                 Loc
+              | Request   Chan Chan Process                 Loc
+              | OutputT   Chan Type Process                 Loc
+              | InputT    Chan TypeVar Process              Loc
+              | EmptyOutput Chan                            Loc
+              | EmptyInput  Chan Process                    Loc
+              | EmptyChoice Chan                            Loc
+              | End                                         Loc
+              | Mix       Process   Process                 Loc
               deriving (Show)
 
-instance Functor Session where
-  fmap f (Session p x) = Session (Map.mapKeys (fmap f) $ Map.map (fmap f) p) (f x)
+data Session = Session (Map Chan Type) Loc deriving (Show)
 
-insertSession :: TermName ann -> Type ann -> Session ann -> Session ann
+-- instance Functor Session where
+--   fmap f (Session p x) = Session (Map.mapKeys (fmap f) $ Map.map (fmap f) p) (f x)
+
+insertSession :: Chan -> Type -> Session -> Session
 insertSession x t (Session pairs m) =
     Session (Map.insert x t pairs) m
 
-emptySession :: ann -> Session ann
+emptySession :: Loc -> Session
 emptySession l = Session Map.empty l
 
-singletonSession :: TermName ann -> Type ann -> ann -> Session ann
+singletonSession :: Chan -> Type -> Loc -> Session
 singletonSession x t l = Session (Map.insert x t Map.empty) l
 
-data Type ann = Var     (TypeVar  ann)              ann
-              | Dual    (Type ann)                  ann
-              | Times   (Type ann)      (Type ann)  ann
-              | Par     (Type ann)      (Type ann)  ann
-              | Plus    (Type ann)      (Type ann)  ann
-              | With    (Type ann)      (Type ann)  ann
-              | Acc     (Type ann)                  ann
-              | Req     (Type ann)                  ann
-              | Exists  (TypeVar  ann)  (Type ann)  ann
-              | Forall  (TypeVar  ann)  (Type ann)  ann
-              | One                                 ann
-              | Bot                                 ann
-              | Zero                                ann
-              | Top                                 ann
-              deriving (Show, Functor, Ord)
+data Type = Var     TypeVar         Loc
+          | Dual    Type            Loc
+          | Times   Type      Type  Loc
+          | Par     Type      Type  Loc
+          | Plus    Type      Type  Loc
+          | With    Type      Type  Loc
+          | Acc     Type            Loc
+          | Req     Type            Loc
+          | Exists  TypeVar   Type  Loc
+          | Forall  TypeVar   Type  Loc
+          | One                     Loc
+          | Bot                     Loc
+          | Zero                    Loc
+          | Top                     Loc
+          deriving (Show)
 
-instance HasDual (Type ann) where
+instance HasDual Type where
   dual (Var i l)        = Dual (Var i l) l
   dual (Dual a _)       = a
   dual (Times a b l)    = Par (dual a) (dual b) l
@@ -98,49 +96,61 @@ instance HasDual (Type ann) where
   dual (Zero l)         = Top l
   dual (Top l)          = Zero l
 
-typeSigName :: Declaration ann -> Maybe (TermName ann)
+typeSigName :: Declaration -> Maybe Name
 typeSigName (TypeSig n _ _) = Just n
-typeSigName _             = Nothing
+typeSigName _               = Nothing
 
-termDefnName :: Declaration ann -> Maybe (TermName ann)
+termDefnName :: Declaration -> Maybe Name
 termDefnName (TermDefn n _ _) = Just n
-termDefnName _              = Nothing
-
-instance Eq (Type ann) where
-  (==) a b = toAbstract (dual a) == toAbstract (dual b)
+termDefnName _                = Nothing
 
 --------------------------------------------------------------------------------
 -- | Instances
 
-instance Eq (TermName ann) where
-  (==) (TermName a _) (TermName b _) = a == b
+instance Eq Type where
+  (==) = (==) `on` toAbstract . dual
 
-instance Ord (TermName ann) where
-  compare (TermName a _) (TermName b _) = compare a b
+instance Ord Type where
+  compare = compare `on` toAbstract . dual
 
-instance Eq (TypeName ann) where
-  (==) (TypeName a _) (TypeName b _) = a == b
+instance Eq Name where
+  (==) = (==) `on` toAbstract
 
-instance Ord (TypeName ann) where
-  compare (TypeName a _) (TypeName b _) = compare a b
+instance Ord Name where
+  compare = compare `on` toAbstract
+
+instance Eq Chan where
+  (==) = (==) `on` toAbstract
+
+instance Ord Chan where
+  compare = compare `on` toAbstract
+
+instance Eq TypeName where
+  (==) = (==) `on` toAbstract
+
+instance Ord TypeName where
+  compare = compare `on` toAbstract
 
 --------------------------------------------------------------------------------
 -- | Instance of Located
 
-instance Located (TypeName Loc) where
+instance Located TypeName where
   locOf (TypeName _ loc) = loc
 
-instance Located (TermName Loc) where
-  locOf (TermName _ loc) = loc
+instance Located Name where
+  locOf (Name _ loc) = loc
 
-instance Located (Program Loc) where
+instance Located Chan where
+  locOf (Chan _ loc) = loc
+
+instance Located Program where
   locOf (Program _ loc) = loc
 
-instance Located (Declaration Loc) where
+instance Located Declaration where
   locOf (TypeSig _ _ loc) = loc
   locOf (TermDefn _ _ loc) = loc
 
-instance Located (Process Loc) where
+instance Located Process where
   locOf (Call _ loc) = loc
   locOf (Link _ _ loc) = loc
   locOf (Compose _ _ _ _ loc) = loc
@@ -159,7 +169,7 @@ instance Located (Process Loc) where
   locOf (End loc) = loc
   locOf (Mix _ _ loc) = loc
 
-instance Located (Type Loc) where
+instance Located Type where
   locOf (Var _ loc) = loc
   locOf (Dual _ loc) = loc
   locOf (Times _ _ loc) = loc
@@ -182,27 +192,30 @@ instance Located (Type Loc) where
 class ToAbstract a b | a -> b where
     toAbstract :: a -> b
 
-instance ToAbstract (Program ann) A.Program where
+instance ToAbstract Program A.Program where
     toAbstract (Program declarations _) =
         A.Program (map toAbstract declarations)
 
-instance ToAbstract (Declaration ann) A.Declaration where
+instance ToAbstract Declaration A.Declaration where
     toAbstract (TypeSig name session _) =
         A.TypeSig (toAbstract name) (toAbstract session)
     toAbstract (TermDefn name process _) =
         A.TermDefn (toAbstract name) (toAbstract process)
 
-instance ToAbstract (TypeVar ann) A.TypeVar where
+instance ToAbstract TypeVar A.TypeVar where
     toAbstract (Named var _) =
         A.Named var
 
-instance ToAbstract (TypeName ann) A.TypeName where
+instance ToAbstract TypeName A.TypeName where
     toAbstract (TypeName name    _) = name
 
-instance ToAbstract (TermName ann) A.Chan where
-    toAbstract (TermName name    _) = name
+instance ToAbstract Name A.Name where
+  toAbstract (Name name _) = name
 
-instance ToAbstract (Process ann) A.Process where
+instance ToAbstract Chan A.Chan where
+    toAbstract (Chan name _) = name
+
+instance ToAbstract Process A.Process where
     toAbstract (Call name _) =
         A.Call
             (toAbstract name)
@@ -283,10 +296,10 @@ instance ToAbstract (Process ann) A.Process where
             (toAbstract p)
             (toAbstract q)
 
-instance ToAbstract (Session ann) A.Session where
+instance ToAbstract Session A.Session where
     toAbstract (Session pairs _) = Map.mapKeys toAbstract $ Map.map toAbstract $ pairs
 
-instance ToAbstract (Type ann) A.Type where
+instance ToAbstract Type A.Type where
     toAbstract (Var i _) =
         A.Var
             (toAbstract i)

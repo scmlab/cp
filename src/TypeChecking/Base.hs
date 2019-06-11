@@ -7,7 +7,6 @@ import Syntax.Abstract (Session, Type(..))
 --
 import Prelude hiding (lookup)
 
-import Data.Loc (Loc)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -19,12 +18,8 @@ import Control.Monad.Except
 --------------------------------------------------------------------------------
 -- | State
 
-type Name = TermName Loc
-type Chan = Name
-type Term = Process Loc
-
-data Definition = Annotated   Name Term (C.Session Loc)
-                | Unannotated Name Term
+data Definition = Annotated   Name Process C.Session
+                | Unannotated Name Process
                 deriving (Show)
 
 isAnnotated :: Definition -> Bool
@@ -47,15 +42,15 @@ initialTCState = TCState 0 Map.empty
 
 data InferError
   = General Text
-  | TypeMismatch Term Type Type Type Type
+  | TypeMismatch Process Type Type Type Type
   | SessionMismatch Name Session Session
-  | CannotAppearInside Term Chan
-  | SessionShouldBeTheSame Term Session
-  | SessionShouldBeDisjoint Term Session
-  | SessionShouldAllBeRequesting Term Session
-  | ChannelNotFound Term Chan Session
-  | ChannelNotComsumed Term Session
-  | DefnNotFound Term Name
+  | CannotAppearInside Process Chan
+  | SessionShouldBeTheSame Process Session
+  | SessionShouldBeDisjoint Process Session
+  | SessionShouldAllBeRequesting Process Session
+  | ChannelNotFound Process Chan Session
+  | ChannelNotComsumed Process Session
+  | DefnNotFound Process Name
   deriving (Show)
 
 data TypeError

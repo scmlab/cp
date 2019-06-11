@@ -18,7 +18,7 @@ parseProg src = do
     Left err  -> assertFailure $ show err
     Right val -> return val
 
-parseProc :: ByteString -> IO (Process Loc)
+parseProc :: ByteString -> IO (Process)
 parseProc src = do
   case parseProcess src of
     Left err  -> assertFailure $ show err

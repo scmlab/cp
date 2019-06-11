@@ -78,7 +78,7 @@ substitute var new (Forall t u)   = Forall t (substitute var new u)
 substitute _   _   others         = others
 
 
--- freeVariable :: Process Loc -> Set (TermName Loc)
+-- freeVariable :: Process -> Set Chan
 -- freeVariable (Var x _) = Set.fromList [x, y]
 -- freeVariable (Link x y _) = Set.fromList [x, y]
 -- freeVariable (Compose x _ p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)

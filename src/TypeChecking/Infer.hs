@@ -39,18 +39,18 @@ evalInferM freeVars program = evalStateT (runWriterT program) freeVars
 inferError :: InferError -> InferM a
 inferError = lift . throwError . InferError
 
-sessionShouldBeEmpty :: Term -> Session -> InferM ()
+sessionShouldBeEmpty :: Process -> Session -> InferM ()
 sessionShouldBeEmpty term session = do
   unless (Map.null session) $
     inferError $ ChannelNotComsumed term session
 
-sessionShouldBeDisjoint :: Term -> Session -> Session -> InferM ()
+sessionShouldBeDisjoint :: Process -> Session -> Session -> InferM ()
 sessionShouldBeDisjoint term a b = do
   let intersection = Map.intersection a b
   unless (Map.null intersection) $
     inferError $ SessionShouldBeDisjoint term intersection
 
-sessionShouldBeTheSame :: Term -> Session -> Session -> InferM ()
+sessionShouldBeTheSame :: Process -> Session -> Session -> InferM ()
 sessionShouldBeTheSame term a b = do
   unless (a == b) $
     inferError $ SessionShouldBeTheSame term $
@@ -58,7 +58,7 @@ sessionShouldBeTheSame term a b = do
         (Map.difference a b)
         (Map.difference b a)
 
-sessionShouldAllBeRequesting :: Term -> Session -> InferM ()
+sessionShouldAllBeRequesting :: Process -> Session -> InferM ()
 sessionShouldAllBeRequesting term session = do
   unless (Map.null outliers) $
     inferError $ SessionShouldAllBeRequesting term outliers
@@ -70,12 +70,12 @@ sessionShouldAllBeRequesting term session = do
     isRequesting (Req _) = True
     isRequesting _       = False
 
-inferTerm :: Term -> TCM Session
+inferTerm :: Process -> TCM Session
 inferTerm term = do
   ((result, substitutions), freeChannels) <- runInferM Map.empty (inferWith term Map.empty)
   return $ Map.union (substitute substitutions result) (substitute substitutions (fmap Var freeChannels))
 
-typeCheck :: Name -> Session -> Term -> TCM ()
+typeCheck :: Name -> Session -> Process -> TCM ()
 typeCheck name annotated term = do
   inferred <- inferTerm term
   let notInferred = Map.difference annotated inferred
@@ -98,7 +98,7 @@ weaken = Map.map (\t -> if weakened t then t else Req t)
     weakened _       = False
 
 
-checkIfEqual :: Term -> Type -> Type -> TCM ()
+checkIfEqual :: Process -> Type -> Type -> TCM ()
 checkIfEqual term expected given = do
     let (result, _) = U.unify expected given
     case result of
@@ -118,9 +118,9 @@ type TypeVars = Map A.Chan TypeVar
 type InferM = WriterT [Substitution] (StateT TypeVars TCM)
 
 
-inferWith :: Term           -- the term to infer
+inferWith :: Process        -- the term to infer
           -> Session        -- channels that we know exist in the session
-          -> InferM Session  -- other channels that we didn't know before
+          -> InferM Session -- other channels that we didn't know before
 inferWith term input = do
 
   result <- case term of
@@ -622,7 +622,7 @@ inferWith term input = do
     freshType :: InferM Type
     freshType = Var <$> freshTypeVar
 
-    pairs :: [(C.TermName Loc, Type)] -> Session
+    pairs :: [(C.Chan, Type)] -> Session
     pairs = Map.fromList . map (\(c, t) -> (toAbstract c, t))
 
 

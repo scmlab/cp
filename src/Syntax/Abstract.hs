@@ -10,6 +10,7 @@ import Data.Map (Map)
 -- | Type Variable
 
 data TypeVar = Nameless Int | Named Text | Unknown | DualOf TypeVar
+    deriving (Ord)
 
 instance Show TypeVar where
     show (Nameless i) = "$" ++ show i
@@ -32,8 +33,9 @@ instance Eq TypeVar where
 -- | Term level
 
 type TypeName = Text
-type Chan = Text
+
 type Name = Text
+type Chan = Text
 
 data Program = Program [Declaration]
     deriving (Show)
@@ -115,7 +117,7 @@ data Type
     | Zero
     -- ⊤: unit for With &
     | Top
-    deriving (Eq, Show)
+    deriving (Eq, Ord, Show)
 
 instance HasDual TypeVar where
   dual (Nameless i) = DualOf (Nameless i)
