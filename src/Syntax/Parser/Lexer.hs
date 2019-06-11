@@ -11,7 +11,6 @@ import Data.Loc
 import Data.Text (Text, pack)
 import Language.Lexer.Applicative
 import Text.Regex.Applicative
-import Debug.Trace
 
 matchWhen :: (s -> Bool) -> a -> RE s a
 matchWhen p symbol = msym (\t -> if p t then Just symbol else Nothing)

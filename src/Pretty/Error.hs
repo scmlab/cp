@@ -3,8 +3,10 @@
 module Pretty.Error where
 
 import Syntax.Parser.Type
+import Syntax.Concrete (ToAbstract(..))
 import TypeChecking.Base
 import Pretty
+import Pretty.Syntax.Concrete ()
 import Base
 
 import Data.Monoid ((<>))
@@ -13,6 +15,7 @@ import Data.Text.Prettyprint.Doc hiding (line)
 import Data.Text (Text)
 import Data.Loc (Loc(..), locOf)
 import qualified Data.Loc as Loc
+import qualified Data.Map as Map
 
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
@@ -82,6 +85,9 @@ prettyTypeError (Others msg) =
 highlight :: Pretty a => a -> Doc AnsiStyle
 highlight = annotate (colorDull Blue) . pretty
 
+prettySession :: Session -> Doc AnsiStyle
+prettySession = pretty . Map.mapKeys toAbstract
+
 prettyInferError :: InferError -> Maybe ByteString -> Doc AnsiStyle
 prettyInferError (General msg) = formatError "Other unformatted inference errors" [pretty msg] []
 prettyInferError (CannotAppearInside term chan) =
@@ -96,7 +102,7 @@ prettyInferError (ChannelNotComsumed term session) =
     [ "these channels should be comsumed"
         <> line
         <> line
-        <> indent 2 (pretty session)
+        <> indent 2 (prettySession session)
         <> line
         <> line
         <> "in the following term"
@@ -125,13 +131,13 @@ prettyInferError (SessionMismatch term expected actual) =
           "expected: "
       <> line
       <> line
-      <> indent 2 (pretty expected)
+      <> indent 2 (prettySession expected)
       <> line
       <> line
       <>  "actual: "
       <> line
       <> line
-      <> indent 2 (pretty actual)
+      <> indent 2 (prettySession actual)
       <> line
       <> line
       <>  "when checking the following term"
@@ -144,7 +150,7 @@ prettyInferError (SessionShouldAllBeRequesting term session) =
         <> "that are not requesting anything"
         <> line
         <> line
-        <> indent 2 (pretty session)
+        <> indent 2 (prettySession session)
         <> line
         <> line
         <> "when checking the following term"
@@ -160,7 +166,7 @@ prettyInferError (SessionShouldBeDisjoint term session) =
   formatError "Sessions not disjoint"
     [ "these channels appear in both sides of the session" <> line
         <> line
-        <> indent 2 (pretty session)
+        <> indent 2 (prettySession session)
         <> line
         <> line
         <> "when checking the following term"

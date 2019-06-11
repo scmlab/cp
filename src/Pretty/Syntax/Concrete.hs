@@ -41,3 +41,6 @@ instance Pretty Type where
   pretty (Bot _)          = "⊥"
   pretty (Zero _)         = "𝟘"
   pretty (Top _)          = "⊤"
+  
+instance Pretty Session where
+  pretty = pretty . toAbstract

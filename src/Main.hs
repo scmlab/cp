@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings                  #-}
 module Main where
 
-import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
 import Syntax.Parser
 import TypeChecking
@@ -14,15 +13,12 @@ import Runtime
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
 import qualified Data.ByteString.Lazy.Char8 as BS8
-import Data.Loc (Loc(..))
--- import Data.Text (Text)
 import Data.Text.Prettyprint.Doc.Render.Terminal
 
 import qualified Data.Map as Map
 import Data.Maybe (isNothing)
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd, isPrefixOf)
-import Data.Text (Text)
 import qualified Data.Text as Text
 import Data.Text.Prettyprint.Doc
 
@@ -35,7 +31,7 @@ import Control.Monad.Except
 import System.Console.Haskeline
 import System.Console.GetOpt
 import System.Environment
-import Debug.Trace
+-- import Debug.Trace
 
 
 -- putSource :: Maybe ByteString -> M ()
@@ -132,7 +128,7 @@ main = do
     completeDefinitions :: String -> [String] -> Core (String, [Completion])
     completeDefinitions left partials = do
       -- get the names of all definitions
-      defns <- map Text.unpack <$> Map.keys <$> gets replDefinitions
+      defns <- map (Text.unpack . C.toAbstract) <$> Map.keys <$> gets replDefinitions
       -- complete only the last chuck
       let partial = if null partials then "" else last partials
       let matched = case filter (isPrefixOf partial) defns of
@@ -230,7 +226,7 @@ handleCommand (TypeOf s) = do
   void $ handleM $ do
     term <- parseProcess s
     (session, _) <- runTCM (inferTerm term)
-    liftIO $ putDoc $ pretty session <> line
+    liftIO $ putDoc $ prettySession session <> line
     return ()
 
   -- whenLoaded $ do

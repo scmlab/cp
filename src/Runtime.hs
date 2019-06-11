@@ -3,10 +3,12 @@ module Runtime where
 
 -- import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
 -- import qualified Syntax.Concrete  hiding (Session(..), Type(..), TypeVar(..))
+-- import qualified Syntax.Abstract as A
 import Syntax.Concrete (ToAbstract(..))
 -- import Syntax.Abstract (Session, Type(..), TypeVar(..))
-import Syntax.Abstract
-import TypeChecking.Base (Definition(..))
+import Syntax.Abstract hiding (Session)
+
+import TypeChecking.Base
 import Base
 
 -- import Data.Map (Map)
@@ -18,7 +20,7 @@ import Control.Monad.Except
 lookupProcess :: Name -> M Process
 lookupProcess name = do
   definition <- gets replDefinitions
-  case Map.lookup name definition of
+  case Map.lookup name (Map.mapKeys toAbstract definition) of
     Nothing -> throwError $ RuntimeError $ Runtime_NotInScope name
     Just (Annotated _ p _) -> return (toAbstract p)
     Just (Unannotated _ p) -> return (toAbstract p)

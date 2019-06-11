@@ -1,18 +1,13 @@
 module TypeChecking.Infer where
 
--- import Syntax.Concrete
-import qualified Syntax.Concrete as C
-import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
-import qualified Syntax.Abstract as A
-import Syntax.Abstract (Session, Type(..), TypeVar(..))
+import Syntax.Concrete hiding (Session, Type(..), TypeVar(..))
+import Syntax.Abstract (Type(..), TypeVar(..))
 import Syntax.Base
 import qualified TypeChecking.Unification as U
 import TypeChecking.Unification (Substitution(..))
 import TypeChecking.Base
 --
 import Prelude hiding (lookup)
-
-import Data.Loc (Loc)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -21,8 +16,6 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer hiding (Dual)
 import Control.Monad.Except
-
-import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- | InferM
@@ -114,7 +107,7 @@ substitute = flip $ foldr $ \ (Substitute var t) -> Map.map (U.substitute var t)
 -- | InferM
 
 
-type TypeVars = Map A.Chan TypeVar
+type TypeVars = Map Chan TypeVar
 type InferM = WriterT [Substitution] (StateT TypeVars TCM)
 
 
@@ -126,9 +119,9 @@ inferWith term input = do
   result <- case term of
     Call x _ -> do
       definition <- lift $ lift $ gets stDefinitions
-      case Map.lookup (toAbstract x) definition of
+      case Map.lookup x definition of
         Nothing -> throwError $ InferError $ DefnNotFound term x
-        Just (Annotated _ _ t) -> return (toAbstract t)
+        Just (Annotated _ _ t) -> return t
         Just (Unannotated _ p) -> inferWith p input
 
     -- {A}
@@ -587,11 +580,11 @@ inferWith term input = do
     -- from the input session
     extract :: Chan -> InferM Type
     extract chan = do
-      case Map.lookup (toAbstract chan) input of
+      case Map.lookup chan input of
         Nothing -> do
           t <- freshTypeVar
           -- emitting free variable
-          modify (Map.insert (toAbstract chan) t)
+          modify (Map.insert chan t)
           return $ Var t
         Just t  -> return t
 
@@ -622,8 +615,8 @@ inferWith term input = do
     freshType :: InferM Type
     freshType = Var <$> freshTypeVar
 
-    pairs :: [(C.Chan, Type)] -> Session
-    pairs = Map.fromList . map (\(c, t) -> (toAbstract c, t))
+    pairs :: [(Chan, Type)] -> Session
+    pairs = Map.fromList
 
 
   -- where

@@ -7,7 +7,6 @@ import Syntax.Parser
 import TypeChecking.Base
 
 import Data.ByteString.Lazy (ByteString)
-import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
 
@@ -21,8 +20,8 @@ import System.Console.Haskeline
 data MState = MState
   { replSource    :: Maybe (String, ByteString)
   , replConcrete  :: Maybe C.Program
-  , replDefinitions :: Map Text Definition
-  , replInferred  :: Map Text A.Session
+  , replDefinitions :: Map C.Name Definition
+  , replInferred  :: Map C.Name Session
   } deriving (Show)
 
 data Error = ParseError ParseError

@@ -1,9 +1,8 @@
 module TypeChecking.Base where
 
--- import Syntax.Concrete
 import qualified Syntax.Concrete as C
-import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
-import Syntax.Abstract (Session, Type(..))
+import Syntax.Concrete hiding (Session, Type(..), TypeVar(..))
+import Syntax.Abstract (Type(..))
 --
 import Prelude hiding (lookup)
 
@@ -18,7 +17,13 @@ import Control.Monad.Except
 --------------------------------------------------------------------------------
 -- | State
 
-data Definition = Annotated   Name Process C.Session
+-- concrete channels with abstract types
+type Session = Map Chan Type
+
+convert :: C.Session -> Session
+convert (C.Session pairs _) = Map.map toAbstract pairs
+
+data Definition = Annotated   Name Process Session
                 | Unannotated Name Process
                 deriving (Show)
 
@@ -30,7 +35,7 @@ type CtxVar = Int
 
 data TCState = TCState
   { stTypeCount   :: Int              -- for type variables
-  , stDefinitions :: Map Text Definition
+  , stDefinitions :: Map Name Definition
   } deriving (Show)
 
 initialTCState :: TCState
