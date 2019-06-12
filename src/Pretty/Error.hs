@@ -33,74 +33,57 @@ class Report a where
   reportS :: a -> Maybe ByteString -> Doc AnsiStyle
   reportS a _ = report a
 
--- data Message
---   = Header Text       -- appeas red
---   | Paragraph (Doc AnsiStyle)
---   | Code Loc
---   deriving (Show)
+data ReportMsg
+  = H1 Text       -- appears red
+  | P (Doc AnsiStyle)
+  | CODE Loc
+  deriving (Show)
+
+instance Report ReportMsg where
+  reportS (H1 s) _ = annotate (color Red) $ pretty s
+  reportS (P s) _ = s <> line
+  reportS (CODE loc) Nothing = annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
+  reportS (CODE loc) (Just src) = indent 2 $ vsep
+        [ annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
+        , reAnnotate toAnsiStyle $ prettySourceCode $ SourceCode src loc 1
+        ]
+
+instance Report [ReportMsg] where
+  reportS msgs src = vsep $
+          [ softline' ]
+      ++  map (\msg -> indent 2 $ reportS msg src <> line) msgs
+      ++  [ softline' ]
 
 --------------------------------------------------------------------------------
 -- |
 
-
-
-formatError :: Text             -- Header
-            -> [Doc AnsiStyle]  -- Description
-            -> [Loc]            -- List of locations to highlight
-            -> Maybe ByteString -- Source code to be highlighted
-            -> Doc AnsiStyle
-formatError header paragraphs locations Nothing =
-  vsep
-    [ softline'
-    , indent 2 pieces
-    , indent 2 text
-    , softline'
-    ]
-  where
-      text = vsep $
-            [ annotate (color Red) $ pretty header
-            , softline
-            ]
-            ++ (map (\ x -> x <> line) paragraphs)
-      pieces :: Doc AnsiStyle
-      pieces = hsep $ map (\loc -> annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)) locations
-formatError header paragraphs locations (Just source) =
-  vsep
-    [ softline'
-    , indent 2 text
-    , indent 4 pieces
-    , softline'
-    ]
-  where
-      text = vsep $
-            [ annotate (color Red) $ pretty header
-            , softline
-            ]
-            ++ (map (\ x -> x <> line) paragraphs)
-      pieces = vsep $ map (\loc -> vsep
-            [ annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
-            , reAnnotate toAnsiStyle $ prettySourceCode $ SourceCode source loc 1
-            ]) locations
-
-
 instance Report ParseError where
-  report (Lexical src pos) =
-    formatError "Lexical parse error" [] [locOf pos] (Just src)
-  report (Syntatical src loc _) =
-    formatError "Lexical parse error" [] [loc] (Just src)
+  report (Lexical src pos) = reportS
+    [ H1 "Lexical parse error"
+    , CODE $ locOf pos
+    ] (Just src)
+  report (Syntatical src loc _) = reportS
+    [ H1 "Syntatical parse error"
+    , CODE $ loc
+    ] (Just src)
 
 
 instance Report TypeError where
-  reportS (TypeSigDuplicated a b) =
-    formatError "Duplicating type signature" []
-      [locOf a, locOf b]
-  reportS (TermDefnDuplicated a b) =
-    formatError "Duplicating term definition" []
-      [locOf a, locOf b]
-  reportS (InferError a) =
-     reportS a
-  reportS (Others msg) =
-    formatError "Other unformatted type errors" [pretty msg] []
+  reportS (TypeSigDuplicated a b) = reportS
+    [ H1 "Duplicating type signature"
+    , CODE $ locOf a
+    , CODE $ locOf b
+    ]
+  reportS (TermDefnDuplicated a b) = reportS
+    [ H1 "Duplicating term definition"
+    , CODE $ locOf a
+    , CODE $ locOf b
+    ]
+  reportS (InferError a) = reportS a
+  reportS (Others msg) = reportS
+    [ H1 "Other unformatted type errors"
+    , P $ pretty msg
+    ]
 
 highlight :: Pretty a => a -> Doc AnsiStyle
 highlight = annotate (colorDull Blue) . pretty
@@ -109,46 +92,47 @@ instance Report Session where
   report = pretty . Map.mapKeys toAbstract
 
 instance Report InferError where
-  reportS (General msg) = formatError "Other unformatted inference errors" [pretty msg] []
-  reportS (ChannelAppearInside term chan) =
-    formatError "Channel not allowed"
-      [ "channel "
-          <> highlight chan <> " is not allowed"
-          <> line
-          <> "to appear in the following term"
-      ] [locOf term, locOf chan]
-  reportS (ChannelNotComsumed term session) =
-    formatError "Channel not consumed"
-      [ "these channels should be comsumed"
-          <> line
-          <> line
-          <> indent 2 (report session)
-          <> line
-          <> line
-          <> "in the following term"
-      ] [locOf term]
-  reportS (TypeMismatch term expectedWhole actualWhole expected actual) =
-    formatError "Type mismatched"
-      (message ++
-      [   "when checking the following term"
-      ]) [locOf term]
-      where message = if expectedWhole == expected && actualWhole == actual
-              then
-                [      "expected: " <> highlight expected <> line
-                    <> "  actual: " <> highlight actual
-                ]
-              else
-                [      "expected: " <> highlight expected <> line
-                    <> "  actual: " <> highlight actual    <> line
-                    <> line
-                    <> "      in: " <> highlight expectedWhole <> line
-                    <> "     and: " <> highlight actualWhole
-                ]
+  reportS (General msg) = reportS [H1 "Other unformatted inference errors", P $ pretty msg]
+  reportS (ChannelAppearInside term chan) = reportS
+    [ H1 "Channel not allowed"
+    , P $ "channel " <> highlight chan
+    , CODE $ locOf chan
+    , P $ "is not allowed to appear in the following term"
+    , CODE $ locOf term
+    ]
+  reportS (ChannelNotComsumed term session) = reportS
+    [ H1 "Channel not consumed"
+    , P $ "these channels should be comsumed"
+        <> line
+        <> line
+        <> indent 2 (report session)
+        <> line
+        <> line
+        <> "in the following term"
+    , CODE $ locOf term
+    ]
+  reportS (TypeMismatch term expectedWhole actualWhole expected actual) = reportS $
+        [ H1 "Type mismatched" ]
+    ++  message
+    ++  [ P "when checking the following term"
+        , CODE $ locOf term
+        ]
+    where message = if expectedWhole == expected && actualWhole == actual
+            then
+              [ P $  "expected: " <> highlight expected <> line
+                  <> "  actual: " <> highlight actual
+              ]
+            else
+              [ P $  "expected: " <> highlight expected <> line
+                  <> "  actual: " <> highlight actual    <> line
+                  <> line
+                  <> "      in: " <> highlight expectedWhole <> line
+                  <> "     and: " <> highlight actualWhole
+              ]
 
-  reportS (SessionMismatch term expected actual) =
-    formatError "Session mismatched"
-      [
-            "expected: "
+  reportS (SessionMismatch term expected actual) = reportS
+    [ H1 "Session mismatched"
+    , P $ "expected: "
         <> line
         <> line
         <> indent 2 (report expected)
@@ -161,49 +145,51 @@ instance Report InferError where
         <> line
         <> line
         <>  "when checking the following term"
-      ] [locOf term]
+    , CODE $ locOf term
+    ]
 
-  reportS (SessionShouldAllBeRequesting term session) =
-    formatError "Channels should all be requesting"
-      [ "there are some channels"
-          <> line
-          <> "that are not requesting anything"
-          <> line
-          <> line
-          <> indent 2 (report session)
-          <> line
-          <> line
-          <> "when checking the following term"
-      ] [locOf term]
+  reportS (SessionShouldAllBeRequesting term session) = reportS
+    [ H1 "Channels should all be requesting"
+    , P $ "there are some channels"
+        <> line
+        <> "that are not requesting anything"
+        <> line
+        <> line
+        <> indent 2 (report session)
+        <> line
+        <> line
+        <> "when checking the following term"
+    , CODE $ locOf term
+    ]
 
-  reportS (DefnNotFound term name) =
-    formatError "Definition not found"
-      [ highlight name <> " is not in scope"
-          <> line
-          <> "when checking the following term"
-      ] [locOf term]
+  reportS (DefnNotFound term name) = reportS
+    [ H1 "Definition not found"
+    , P $ highlight name <> " is not in scope"
+        <> line
+        <> "when checking the following term"
+    , CODE $ locOf term
+    ]
 
-  reportS (SessionShouldBeDisjoint term session) =
-    formatError "Sessions not disjoint"
-      [ "these channels appear in both sides of the session" <> line
-          <> line
-          <> indent 2 (report session)
-          <> line
-          <> line
-          <> "when checking the following term"
-      ] [locOf term]
-
-  reportS e = formatError "" [pretty $ show $ e] []
+  reportS (SessionShouldBeDisjoint term session) = reportS
+    [ H1 "Sessions not disjoint"
+    , P $ "these channels appear in both sides of the session" <> line
+        <> line
+        <> indent 2 (report session)
+        <> line
+        <> line
+        <> "when checking the following term"
+    , CODE $ locOf term
+    ]
 
 instance Report RuntimeError where
-  report (Runtime_NotInScope name) =
-    formatError "Process not defined"
-      [ highlight name <+> "is not in scope"
-      ] [] Nothing
-  report Runtime_CodeNotLoaded =
-    formatError "Source not loaded yet"
-      [ "type " <> highlight (":l FILEPATH" :: Text) <> " to load the source"
-      ] [] Nothing
+  report (Runtime_NotInScope name) = report
+    [ H1 "Process not defined"
+    , P $ highlight name <+> "is not in scope"
+    ]
+  report Runtime_CodeNotLoaded = report
+    [ H1 "Source not loaded yet"
+    , P $ "type " <> highlight (":l FILEPATH" :: Text) <> " to load the source"
+    ]
 
 instance Report Error where
   reportS (ParseError err) = reportS err
