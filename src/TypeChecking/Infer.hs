@@ -11,11 +11,14 @@ import Prelude hiding (lookup)
 
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer hiding (Dual)
 import Control.Monad.Except
+import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- | InferM
@@ -65,11 +68,11 @@ sessionShouldAllBeRequesting term session = do
 
 inferTerm :: Process -> TCM Session
 inferTerm term = do
-  ((result, substitutions), freeChannels) <- runInferM Map.empty (inferWith term Map.empty)
+  ((result, substitutions), freeChannels) <- runInferM Map.empty (inferWith term Map.empty Set.empty)
   return $ Map.union (substitute substitutions result) (substitute substitutions (fmap Var freeChannels))
 
-typeCheck :: Name -> Session -> Process -> TCM ()
-typeCheck name annotated term = do
+check :: Name -> Session -> Process -> TCM ()
+check name annotated term = do
   inferred <- inferTerm term
   let notInferred = Map.difference annotated inferred
   let notAnnotated = Map.difference inferred annotated
@@ -113,16 +116,19 @@ type InferM = WriterT [Substitution] (StateT TypeVars TCM)
 
 inferWith :: Process        -- the term to infer
           -> Session        -- channels that we know exist in the session
+          -> Set Chan       -- channels that we know SHOULDNT exist in the session
           -> InferM Session -- other channels that we didn't know before
-inferWith term input = do
+inferWith term exhibit prohibit = do
 
   result <- case term of
     Call x _ -> do
       definition <- lift $ lift $ gets stDefinitions
+      -- traceShow definition (return ())
+      -- traceShow x (return ())
       case Map.lookup x definition of
         Nothing -> throwError $ InferError $ DefnNotFound term x
         Just (Annotated _ _ t) -> return t
-        Just (Unannotated _ p) -> inferWith p input
+        Just (Unannotated _ p) -> inferWith p exhibit prohibit
 
     -- {A}
     -- {B}
@@ -194,10 +200,10 @@ inferWith term input = do
             Just t  -> return (toAbstract t)
 
       -- infer P
-      sessionP <- inferWith p $ pairs [(x, t)]
+      sessionP <- infer p [(x, t)] []
 
       -- infer Q
-      sessionQ <- inferWith q $ pairs [(x, dual t)]
+      sessionQ <- infer q [(x, dual t)] []
 
 
       return (Map.union sessionP sessionQ)
@@ -251,11 +257,11 @@ inferWith term input = do
 
       -- infer P
       a <- freshType
-      sessionP <- inferWith p $ pairs [(y, a)]
+      sessionP <- infer p [(y, a)] [x]
 
       -- infer Q
       b <- freshType
-      sessionQ <- inferWith q $ pairs [(x, b)]
+      sessionQ <- infer q [(x, b)] []
 
       c <- extract x
       unify c (Times a b)
@@ -277,7 +283,7 @@ inferWith term input = do
 
       a <- freshType  -- y : a
       b <- freshType  -- x : b
-      session <- inferWith p $ pairs [(y, a), (x, b)]
+      session <- infer p [(y, a), (x, b)] []
 
       c <- extract x
       unify c (Par a b)
@@ -298,7 +304,7 @@ inferWith term input = do
       -- infer P
       a <- freshType
       b <- freshType
-      session <- inferWith p $ pairs [(x, a)]
+      session <- infer p [(x, a)] []
 
       c <- extract x
       unify c (Plus a b)
@@ -319,7 +325,7 @@ inferWith term input = do
       -- infer P
       b <- freshType
       a <- freshType
-      session <- inferWith p $ pairs [(x, b)]
+      session <- infer p [(x, b)] []
 
       c <- extract x
       unify c (Plus a b)
@@ -374,10 +380,10 @@ inferWith term input = do
     Choice x p q _ -> do
 
       a <- freshType
-      sessionP <- inferWith p $ pairs [(x, a)]
+      sessionP <- infer p [(x, a)] []
 
       b <- freshType
-      sessionQ <- inferWith q $ pairs [(x, b)]
+      sessionQ <- infer q [(x, b)] []
 
       c <- extract x
       unify c (With a b)
@@ -398,7 +404,7 @@ inferWith term input = do
     Accept x y p _ -> do
 
       a <- freshType
-      session <- inferWith p $ pairs [(y, a)]
+      session <- infer p [(y, a)] [x]
 
       sessionShouldAllBeRequesting term session
 
@@ -418,7 +424,7 @@ inferWith term input = do
     Request x y p _ -> do
 
       a <- freshType
-      session <- inferWith p $ pairs [(y, a)]
+      session <- infer p [(y, a)] [x]
 
       a' <- extract x
       unify a' (Req a)
@@ -462,7 +468,7 @@ inferWith term input = do
 
 
       afterSubstitution <- freshType    -- B {A / X}
-      session <- inferWith p $ pairs [(x, afterSubstitution)]
+      session <- infer p [(x, afterSubstitution)] []
 
       beforeSubstitution <- freshType   -- B
       t <- extract x
@@ -490,7 +496,7 @@ inferWith term input = do
     InputT x var p _ -> do
 
       b <- freshType
-      session <- inferWith p $ pairs [(x, b)]
+      session <- infer p [(x, b)] []
 
       t <- extract x
       unify t (Forall (toAbstract var) b)
@@ -518,7 +524,7 @@ inferWith term input = do
 
     EmptyInput x p _ -> do
 
-      sessionP <- inferWith p Map.empty
+      sessionP <- infer p [] [x]
 
       t <- extract x
       unify Bot t
@@ -552,24 +558,29 @@ inferWith term input = do
 
     Mix p q _ -> do
 
-      sessionP <- inferWith p Map.empty
-      sessionQ <- inferWith q Map.empty
+      sessionP <- infer p [] []
+      sessionQ <- infer q [] []
       return $ Map.union sessionP sessionQ
 
+  let prohibited = Set.toList $ prohibit `Set.union` Map.keysSet result
+  _ <- forM prohibited $ \n -> do
+    _ <- inferError $ ChannelAppearInside term n
+    return ()
 
-  -- free variables may be bound by variables from `input`
+
+  -- free variables may be bound by variables from `exhibit`
   freeVars <- get
 
-  let boundVars = Map.mapMaybe id $ Map.intersectionWith bind input freeVars
+  let boundVars = Map.mapMaybe id $ Map.intersectionWith bind exhibit freeVars
   -- remove bound vars from free vars
   modify (flip Map.difference boundVars)
-  -- substitute free variables thrown by the sub clauses with the ones from `input`
+  -- substitute free variables thrown by the sub clauses with the ones from `exhibit`
   tell $ Map.elems boundVars
 
   return result
 
   where
-    -- binding variables from `input` with free variables
+    -- binding variables from `exhibit` with free variables
     bind  :: Type -- binder
           -> TypeVar -- free variable
           -> Maybe Substitution
@@ -577,10 +588,10 @@ inferWith term input = do
     bind (Dual var) t = bind var (dual t)
     bind _          _ = Nothing
 
-    -- from the input session
+    -- from the `exhibit` session
     extract :: Chan -> InferM Type
     extract chan = do
-      case Map.lookup chan input of
+      case Map.lookup chan exhibit of
         Nothing -> do
           t <- freshTypeVar
           -- emitting free variable
@@ -615,9 +626,9 @@ inferWith term input = do
     freshType :: InferM Type
     freshType = Var <$> freshTypeVar
 
-    pairs :: [(Chan, Type)] -> Session
-    pairs = Map.fromList
 
+    infer :: Process -> [(Chan, Type)] -> [Chan] -> InferM Session
+    infer p m s = inferWith p (Map.fromList m) (Set.fromList s)
 
   -- where
   --   execSubstituton :: Session -> [Substitution] -> Session

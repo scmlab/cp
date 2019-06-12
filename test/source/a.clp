@@ -1,1 +1,2 @@
-main = \x . (x[y] . (y() . end | x[] . end) | x(y) . y[] . end)
+main = y() . end
+-- main = \x . (x[y] . (y() . end | x[] . end) | x(y) . y[] . end)

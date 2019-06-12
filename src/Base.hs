@@ -30,7 +30,7 @@ data Error = ParseError ParseError
            | Panic String
            deriving (Show)
 
-type M = ExceptT Error (StateT MState IO)
+type M = ExceptT Error Core
 
 
 initialState :: MState

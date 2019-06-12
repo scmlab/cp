@@ -90,13 +90,13 @@ prettySession = pretty . Map.mapKeys toAbstract
 
 prettyInferError :: InferError -> Maybe ByteString -> Doc AnsiStyle
 prettyInferError (General msg) = formatError "Other unformatted inference errors" [pretty msg] []
-prettyInferError (CannotAppearInside term chan) =
+prettyInferError (ChannelAppearInside term chan) =
   formatError "Channel not allowed"
     [ "channel "
         <> highlight chan <> " is not allowed"
         <> line
         <> "to appear in the following term"
-    ] [locOf term]
+    ] [locOf term, locOf chan]
 prettyInferError (ChannelNotComsumed term session) =
   formatError "Channel not consumed"
     [ "these channels should be comsumed"
@@ -159,6 +159,7 @@ prettyInferError (SessionShouldAllBeRequesting term session) =
 prettyInferError (DefnNotFound term name) =
   formatError "Definition not found"
     [ highlight name <> " is not in scope"
+        <> line
         <> "when checking the following term"
     ] [locOf term]
 

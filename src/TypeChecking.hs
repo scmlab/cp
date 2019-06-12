@@ -38,21 +38,28 @@ checkDuplications (Program declarations _) = do
       let dup = filter ((> 1) . length) $ List.group $ List.sort names
       in if null dup then Nothing else Just (head dup !! 0, head dup !! 1)
 
-
-checkAll :: Program -> TCM (Map Name Session)
-checkAll program = do
+scopeCheck :: Program -> TCM ()
+scopeCheck program = do
   -- checking the definitions
   checkDuplications program
   -- store the definitions
   putDefiniotions program
 
+typeCheck :: TCM (Map Name Session)
+typeCheck = do
   -- return the inferred definitions
   definitions <- gets stDefinitions
   Map.traverseMaybeWithKey typeCheckOrInfer definitions
 
+checkAll :: Program -> TCM (Map Name Session)
+checkAll program = do
+
+  scopeCheck program
+  typeCheck
+
 typeCheckOrInfer :: Name -> Definition -> TCM (Maybe Session)
 typeCheckOrInfer _ (Annotated name term session) = do
-  _ <- typeCheck name session term
+  _ <- check name session term
   return Nothing
 typeCheckOrInfer _ (Unannotated _ term) =
   inferTerm term >>= return . Just

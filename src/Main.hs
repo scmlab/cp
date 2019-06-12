@@ -90,11 +90,12 @@ handleM program = do
     Right value -> return (Just value)
 
 runTCM :: TCM a -> M (a, TCState)
-runTCM program = do
-    let (result, s) = runState (runExceptT program) initialTCState
-    case result of
-      Left err -> throwError $ TypeError err
-      Right val -> return (val, s)
+runTCM f = do
+  definitions <- gets replDefinitions
+  let (result, s) = runState (runExceptT f) (TCState 0 definitions)
+  case result of
+    Left err -> throwError $ TypeError err
+    Right val -> return (val, s)
 
 main :: IO ()
 main = do
@@ -182,7 +183,7 @@ parseOpts argv =
 --------------------------------------------------------------------------------
 -- | REPL
 
-data Command = Load FilePath | TypeOf ByteString | Eval ByteString | Quit | Help | Noop
+data Command = Load FilePath | Reload | TypeOf ByteString | Eval ByteString | Quit | Help | Noop
   deriving (Show)
 
 trim :: String -> String
@@ -192,6 +193,8 @@ parseCommand :: String -> Command
 parseCommand key
   | ":load" `isPrefixOf` key = (Load . trim . drop 5) key
   | ":l"    `isPrefixOf` key = (Load . trim . drop 2) key
+  | ":reload" `isPrefixOf` key = Reload
+  | ":r"    `isPrefixOf` key = Reload
   | ":type" `isPrefixOf` key = (TypeOf . BS8.pack . trim . drop 5) key
   | ":t"    `isPrefixOf` key = (TypeOf . BS8.pack . trim . drop 2) key
   | otherwise = case trim key of
@@ -222,10 +225,16 @@ handleCommand (Load filePath) = do
     return ()
     -- liftIO $ putStrLn $ "loaded: " ++ filePath
   return True
+handleCommand Reload = do
+  result <- handleM $ gets replSource
+  case result of
+    Just (Just (filePath, _)) -> handleCommand (Load filePath)
+    _ -> handleCommand Noop
+
 handleCommand (TypeOf s) = do
   void $ handleM $ do
     term <- parseProcess s
-    (session, _) <- runTCM (inferTerm term)
+    (session, _) <- runTCM $ (inferTerm term)
     liftIO $ putDoc $ prettySession session <> line
     return ()
 

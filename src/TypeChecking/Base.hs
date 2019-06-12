@@ -49,10 +49,10 @@ data InferError
   = General Text
   | TypeMismatch Process Type Type Type Type
   | SessionMismatch Name Session Session
-  | CannotAppearInside Process Chan
   | SessionShouldBeTheSame Process Session
   | SessionShouldBeDisjoint Process Session
   | SessionShouldAllBeRequesting Process Session
+  | ChannelAppearInside Process Chan
   | ChannelNotFound Process Chan Session
   | ChannelNotComsumed Process Session
   | DefnNotFound Process Name
