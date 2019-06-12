@@ -104,7 +104,7 @@ main = do
     ModeHelp -> putStrLn $ usageInfo usage options
     ModeREPL -> void $ runREPL settings loop
     ModeDev -> void $ runREPL settings $ do
-      _ <- handleCommand $ parseCommand ":l test/source/buy-sell.clp"
+      _ <- handleCommand $ parseCommand ":l test/source/a.clp"
       loop
       -- void $ runInputT settings loop
   where

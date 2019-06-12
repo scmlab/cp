@@ -6,6 +6,8 @@ import Syntax.Base
 import qualified TypeChecking.Unification as U
 import TypeChecking.Unification (Substitution(..))
 import TypeChecking.Base
+import Pretty.Syntax.Concrete ()
+import Data.Text.Prettyprint.Doc hiding (line)
 --
 import Prelude hiding (lookup)
 
@@ -529,6 +531,11 @@ inferWith term exhibit prohibit = do
       t <- extract x
       unify Bot t
 
+
+      -- traceShow (pretty p) (return ())
+      -- traceShow (Map.keysSet exhibit) (return ())
+      -- traceShow (Map.keysSet $ sessionP) (return ())
+
       return sessionP
 
     -- TODO: fix that spurious Map.empty
@@ -562,15 +569,17 @@ inferWith term exhibit prohibit = do
       sessionQ <- infer q [] []
       return $ Map.union sessionP sessionQ
 
-  let prohibited = Set.toList $ prohibit `Set.union` Map.keysSet result
+
+  freeVars <- get
+
+  -- rule out channels that are not prohibited from the resulting session
+  let resultSession = result `Map.union` exhibit `Map.union` fmap Var freeVars
+  let prohibited = Set.toList $ prohibit `Set.intersection` Map.keysSet resultSession
   _ <- forM prohibited $ \n -> do
     _ <- inferError $ ChannelAppearInside term n
     return ()
 
-
   -- free variables may be bound by variables from `exhibit`
-  freeVars <- get
-
   let boundVars = Map.mapMaybe id $ Map.intersectionWith bind exhibit freeVars
   -- remove bound vars from free vars
   modify (flip Map.difference boundVars)
