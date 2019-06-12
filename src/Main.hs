@@ -72,8 +72,8 @@ parseProcess raw = case parseConcreteProcess raw of
 
 printErrorIO :: MState -> Error -> IO ()
 printErrorIO state err = case replSource state of
-  Nothing -> putDoc $ prettyError err Nothing
-  Just (_, source) -> putDoc $ prettyError err (Just source)
+  Nothing -> putDoc $ report err
+  Just (_, source) -> putDoc $ reportS err (Just source)
 
 printError :: Error -> REPL ()
 printError err = do
@@ -235,7 +235,7 @@ handleCommand (TypeOf s) = do
   void $ handleM $ do
     term <- parseProcess s
     (session, _) <- runTCM $ (inferTerm term)
-    liftIO $ putDoc $ prettySession session <> line
+    liftIO $ putDoc $ report session <> line
     return ()
 
   -- whenLoaded $ do
