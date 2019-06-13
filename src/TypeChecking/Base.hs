@@ -52,7 +52,7 @@ data InferError
   | SessionShouldBeTheSame Process Session
   | SessionShouldBeDisjoint Process Session
   | SessionShouldAllBeRequesting Process Session
-  | ChannelAppearInside Process Chan
+  | CannotCloseChannel Process Chan
   | ChannelNotFound Process Chan Session
   | ChannelNotComsumed Process Session
   | DefnNotFound Process Name

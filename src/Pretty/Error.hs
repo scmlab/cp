@@ -93,11 +93,11 @@ instance Report Session where
 
 instance Report InferError where
   reportS (General msg) = reportS [H1 "Other unformatted inference errors", P $ pretty msg]
-  reportS (ChannelAppearInside term chan) = reportS
-    [ H1 "Channel not allowed"
-    , P $ "channel " <> highlight chan
+  reportS (CannotCloseChannel term chan) = reportS
+    [ H1 "Channel cannot be closed"
+    , P $ "channel" <+> highlight chan <+> "cannot be closed"
     , CODE $ locOf chan
-    , P $ "is not allowed to appear in the following term"
+    , P $ "because it is being used in the following term"
     , CODE $ locOf term
     ]
   reportS (ChannelNotComsumed term session) = reportS

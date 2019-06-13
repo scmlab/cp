@@ -39,9 +39,8 @@ toAnsiStyle HighlightedArea = color Red
 prettySourceCode :: SourceCode -> Doc SourceCodeAnnotation
 prettySourceCode (SourceCode source NoLoc _) = pretty $ BS.unpack source
 prettySourceCode (SourceCode source (Loc from to) spread) =
-  vsep $  [softline']
-      ++  zipWith (<+>) lineNos lines'
-      ++  [softline', softline']
+  vsep $ zipWith (<+>) lineNos lines'
+      ++ [softline']
 
   where   sourceLines = lines (BS.unpack source)
 
@@ -49,7 +48,7 @@ prettySourceCode (SourceCode source (Loc from to) spread) =
           end   = (posLine to   + spread) `min` length sourceLines
 
           -- max width of the greatest line number
-          lineNoColumnWidth = 4 * ceiling (fromIntegral (lineNoWidth end) / 4.0 :: Double)
+          lineNoColumnWidth = 2 * ceiling (fromIntegral (lineNoWidth end) / 2.0 :: Double)
 
           -- measures the width of a number (decimal)
           lineNoWidth :: Int -> Int

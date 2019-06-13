@@ -576,7 +576,7 @@ inferWith term exhibit prohibit = do
   let resultSession = result `Map.union` exhibit `Map.union` fmap Var freeVars
   let prohibited = Set.toList $ prohibit `Set.intersection` Map.keysSet resultSession
   _ <- forM prohibited $ \n -> do
-    _ <- inferError $ ChannelAppearInside term n
+    _ <- inferError $ CannotCloseChannel term n
     return ()
 
   -- free variables may be bound by variables from `exhibit`
