@@ -120,7 +120,7 @@ inferWith :: Process        -- the term to infer
           -> Session        -- channels that we know exist in the session
           -> Set Chan       -- channels that we know SHOULDNT exist in the session
           -> InferM Session -- other channels that we didn't know before
-inferWith term exhibit prohibit = do
+inferWith term binders exclusions = do
 
   result <- case term of
     Call x _ -> do
@@ -130,7 +130,7 @@ inferWith term exhibit prohibit = do
       case Map.lookup x definition of
         Nothing -> throwError $ InferError $ DefnNotFound term x
         Just (Annotated _ _ t) -> return t
-        Just (Unannotated _ p) -> inferWith p exhibit prohibit
+        Just (Unannotated _ p) -> inferWith p binders exclusions
 
     -- {A}
     -- {B}
@@ -533,7 +533,7 @@ inferWith term exhibit prohibit = do
 
 
       -- traceShow (pretty p) (return ())
-      -- traceShow (Map.keysSet exhibit) (return ())
+      -- traceShow (Map.keysSet binders) (return ())
       -- traceShow (Map.keysSet $ sessionP) (return ())
 
       return sessionP
@@ -571,25 +571,27 @@ inferWith term exhibit prohibit = do
 
 
   freeVars <- get
-
-  -- rule out channels that are not prohibited from the resulting session
-  let resultSession = result `Map.union` exhibit `Map.union` fmap Var freeVars
-  let prohibited = Set.toList $ prohibit `Set.intersection` Map.keysSet resultSession
-  _ <- forM prohibited $ \n -> do
-    _ <- inferError $ CannotCloseChannel term n
-    return ()
-
-  -- free variables may be bound by variables from `exhibit`
-  let boundVars = Map.mapMaybe id $ Map.intersectionWith bind exhibit freeVars
+  -- free variables may be bound by variables from `binders`
+  let boundVars = Map.mapMaybe id $ Map.intersectionWith bind binders freeVars
   -- remove bound vars from free vars
   modify (flip Map.difference boundVars)
-  -- substitute free variables thrown by the sub clauses with the ones from `exhibit`
+  -- substitute free variables thrown by the sub clauses with the ones from `binders`
   tell $ Map.elems boundVars
+
+
+
+  freeVars' <- get
+  -- rule out channels that are not excluded from the resulting session
+  let resultSession = result `Map.union` binders `Map.union` fmap Var freeVars'
+  let excluded = Set.toList $ exclusions `Set.intersection` Map.keysSet resultSession
+  _ <- forM excluded $ \n -> do
+    _ <- inferError $ CannotCloseChannel term n
+    return ()
 
   return result
 
   where
-    -- binding variables from `exhibit` with free variables
+    -- binding variables from `binders` with free variables
     bind  :: Type -- binder
           -> TypeVar -- free variable
           -> Maybe Substitution
@@ -597,10 +599,10 @@ inferWith term exhibit prohibit = do
     bind (Dual var) t = bind var (dual t)
     bind _          _ = Nothing
 
-    -- from the `exhibit` session
+    -- from the `binders` session
     extract :: Chan -> InferM Type
     extract chan = do
-      case Map.lookup chan exhibit of
+      case Map.lookup chan binders of
         Nothing -> do
           t <- freshTypeVar
           -- emitting free variable
@@ -631,13 +633,23 @@ inferWith term exhibit prohibit = do
         lift $ lift $ modify $ \ st -> st { stTypeCount = i + 1 }
         return $ Nameless i
 
-
     freshType :: InferM Type
     freshType = Var <$> freshTypeVar
 
 
     infer :: Process -> [(Chan, Type)] -> [Chan] -> InferM Session
-    infer p m s = inferWith p (Map.fromList m) (Set.fromList s)
+    infer p m s = do
+      -- save the existing free variables
+      existingFreeVars <- get
+      -- clear existing free variables and run
+      put Map.empty
+      result <- inferWith p (Map.fromList m) (Set.fromList s)
+      -- add the existing free variables back
+      modify (Map.union existingFreeVars)
+
+      return result
+
+
 
   -- where
   --   execSubstituton :: Session -> [Substitution] -> Session

@@ -10,17 +10,6 @@ sell = x(u) . x(v) . x[w] . (compute | x[] . end)
 runBuy2 = \ x . (buy | sell)
 
 
-
-
-
-
-
-
-
-
-
-
-
 -- shop/quote
 
 getPrice = v() . end
@@ -40,7 +29,7 @@ runBuy = \ x . (selectBuy | choice)
 
 runShop = \ x . (selectShop | choice)
 
-client = ?x[y].selectBuy | ?x[y].selectShop
+client = ?z[y].selectBuy | ?z[y].selectShop
 server = !x(y).choice
 
 run = \x. (client | server)
