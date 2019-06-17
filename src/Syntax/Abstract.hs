@@ -78,7 +78,7 @@ data Process
     -- mix: P | Q
     | Mix Process Process
 
-    deriving (Eq, Show)
+    deriving (Eq, Show, Ord)
 
 --------------------------------------------------------------------------------
 -- | Type level

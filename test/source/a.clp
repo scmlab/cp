@@ -1,1 +1,3 @@
-main = x(). y() . x() . end
+a = x() . end
+b = x[] . end
+main = x() . \x . (a | b)

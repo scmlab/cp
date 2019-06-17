@@ -69,5 +69,6 @@ instance (MonadException m) => MonadException (ExceptT e m) where
 data RuntimeError
   = Runtime_NotInScope A.Name
   | Runtime_CodeNotLoaded
+  | Runtime_PoolIsEmpty
   deriving (Show)
 -- data Rule = AxCut Chan
