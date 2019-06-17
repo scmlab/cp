@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 5100db4294e45c246d284eb4af05db25350b53ba4b7136b60d366daffb935a96
+-- hash: da4a2af5222e99b9b604dee78d281c00cd0011d620dc3fe0d0409f76ef56ea3b
 
 name:           cp
 version:        0.1.0.0
@@ -30,6 +30,7 @@ executable cp
       Runtime
       Syntax.Abstract
       Syntax.Base
+      Syntax.Binding
       Syntax.Concrete
       Syntax.Parser
       Syntax.Parser.Lexer
@@ -77,6 +78,7 @@ test-suite cp-test
       Runtime
       Syntax.Abstract
       Syntax.Base
+      Syntax.Binding
       Syntax.Concrete
       Syntax.Parser
       Syntax.Parser.Lexer

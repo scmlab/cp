@@ -6,13 +6,19 @@ module Syntax.Concrete where
 
 import Syntax.Base
 import qualified Syntax.Abstract as A
+import Syntax.Binding (Var(..))
+import qualified Syntax.Binding as B
 
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
 import Data.Map (Map)
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Function (on)
 import qualified Data.Map as Map
 import Prelude hiding (LT, EQ, GT)
+
+import Control.Monad.State
 
 --------------------------------------------------------------------------------
 -- | Concrete Syntax Tree
@@ -20,7 +26,7 @@ import Prelude hiding (LT, EQ, GT)
 -- variables and names
 data Name     = Name      Text Loc deriving (Show)
 data Chan     = Chan      Text Loc deriving (Show)
-data TypeVar  = Named     Text Loc deriving (Show)
+data TypeVar  = TypeVar   Text Loc deriving (Show)
 data TypeName = TypeName  Text Loc deriving (Show)
 
 
@@ -203,7 +209,7 @@ instance ToAbstract Declaration A.Declaration where
         A.TermDefn (toAbstract name) (toAbstract process)
 
 instance ToAbstract TypeVar A.TypeVar where
-    toAbstract (Named var _) =
+    toAbstract (TypeVar var _) =
         A.Named var
 
 instance ToAbstract TypeName A.TypeName where
@@ -341,3 +347,96 @@ instance ToAbstract Type A.Type where
     toAbstract (Bot _) = A.Bot
     toAbstract (Zero _) = A.Zero
     toAbstract (Top _) = A.Top
+
+--------------------------------------------------------------------------------
+-- | Converting to Concrete Binding Tree
+
+data Binding = Binding
+  { bindingBound :: Int
+  , bindingFree :: Set Text
+  } deriving (Show)
+
+data BindingState = BindingState
+  { bsChannel :: Binding
+  , bsTypeVar :: Binding
+  } deriving (Show)
+
+type BindingM = State BindingState
+
+class ToBinding a b | a -> b where
+  toBindingM :: a -> BindingM b
+
+toBinding :: ToBinding a b => a -> b
+toBinding x =
+  evalState
+    (toBindingM x)
+    (BindingState (Binding 0 Set.empty) (Binding 0 Set.empty))
+
+boundTypeVar :: TypeVar -> BindingM (B.TypeVar, B.Type -> B.Type)
+boundTypeVar (TypeVar name loc) = do
+  Binding idx ns <- gets bsTypeVar
+  modify $ \ st -> st { bsTypeVar = Binding (idx + 1) ns }
+  let var = B.TypeVar (Bound idx) name loc
+  return (var, B.subsituteTypeVar name idx)
+
+freeTypeVar :: TypeVar -> BindingM B.TypeVar
+freeTypeVar (TypeVar name loc) = do
+  Binding idx ns <- gets bsTypeVar
+  modify $ \ st -> st { bsTypeVar = Binding idx (Set.insert name ns) }
+  return $ B.TypeVar (Free name) name loc
+
+instance ToBinding Type B.Type where
+  toBindingM (Var i loc) =
+    B.Var
+      <$> freeTypeVar i
+      <*> pure loc
+  toBindingM (Dual t loc) =
+    B.Dual
+      <$> toBindingM t
+      <*> pure loc
+  toBindingM (Times t u loc) =
+    B.Times
+      <$> toBindingM t
+      <*> toBindingM u
+      <*> pure loc
+  toBindingM (Par t u loc) =
+    B.Par
+      <$> toBindingM t
+      <*> toBindingM u
+      <*> pure loc
+  toBindingM (Plus t u loc) =
+    B.Plus
+      <$> toBindingM t
+      <*> toBindingM u
+      <*> pure loc
+  toBindingM (With t u loc) =
+    B.With
+      <$> toBindingM t
+      <*> toBindingM u
+      <*> pure loc
+  toBindingM (Acc t loc) =
+    B.Acc
+      <$> toBindingM t
+      <*> pure loc
+  toBindingM (Req t loc) =
+    B.Req
+      <$> toBindingM t
+      <*> pure loc
+  toBindingM (Exists x t loc) = do
+    (var, bindFreeVars) <- boundTypeVar x
+    t' <- bindFreeVars <$> toBindingM t
+    B.Exists
+      <$> pure var
+      <*> pure t'
+      <*> pure loc
+  toBindingM (Forall x t loc) = do
+    (var, bindFreeVars) <- boundTypeVar x
+    t' <- bindFreeVars <$> toBindingM t
+    B.Forall
+      <$> pure var
+      <*> pure t'
+      <*> pure loc
+  toBindingM (One loc) = B.One <$> pure loc
+  toBindingM (Bot loc) = B.Bot <$> pure loc
+  toBindingM (Zero loc) = B.Zero <$> pure loc
+  toBindingM (Top loc) = B.Top <$> pure loc

@@ -152,6 +152,6 @@ TypeName :: {TypeName}
     : typeName                                  {% locate $ TypeName $1 }
 
 TypeVar :: {TypeVar}
-    : typeName                                  {% locate $ Named $1 }
+    : typeName                                  {% locate $ TypeVar $1 }
 
 {}

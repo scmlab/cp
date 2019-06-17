@@ -12,7 +12,7 @@ import Data.Text.Prettyprint.Doc hiding (line)
 -- |
 
 instance Pretty TypeVar where
-  pretty (Named i _)      = pretty i
+  pretty (TypeVar i _)      = pretty i
 
 instance Pretty Name where
   pretty = pretty . toAbstract
@@ -41,6 +41,6 @@ instance Pretty Type where
   pretty (Bot _)          = "⊥"
   pretty (Zero _)         = "𝟘"
   pretty (Top _)          = "⊤"
-  
+
 instance Pretty Session where
   pretty = pretty . toAbstract
