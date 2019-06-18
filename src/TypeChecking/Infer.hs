@@ -1,7 +1,9 @@
 module TypeChecking.Infer where
 
-import Syntax.Concrete hiding (Session, Type(..), TypeVar(..))
-import Syntax.Abstract (Type(..), TypeVar(..))
+-- import Syntax.Concrete hiding (Type(..), TypeVar(..))
+import Syntax.Binding
+ -- hiding (Type(..), TypeVar(..))
+-- import Syntax.Abstract (Type(..), TypeVar(..))
 import Syntax.Base
 import qualified TypeChecking.Unification as U
 import TypeChecking.Unification (Substitution(..))
@@ -10,6 +12,7 @@ import Pretty.Syntax.Concrete ()
 --
 import Prelude hiding (lookup)
 
+import Data.Loc (Loc(..), locOf)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
@@ -64,13 +67,13 @@ sessionShouldAllBeRequesting term session = do
     outliers = Map.filter (not . isRequesting) session
 
     isRequesting :: Type -> Bool
-    isRequesting (Req _) = True
-    isRequesting _       = False
+    isRequesting (Req _ _) = True
+    isRequesting _         = False
 
 inferTerm :: Process -> TCM Session
 inferTerm term = do
   ((result, substitutions), freeChannels) <- runInferM Map.empty (inferWith term Map.empty Set.empty)
-  return $ Map.union (substitute substitutions result) (substitute substitutions (fmap Var freeChannels))
+  return $ Map.union (substitute substitutions result) (substitute substitutions (fmap (\c -> Var c (locOf c)) freeChannels))
 
 check :: Name -> Session -> Process -> TCM ()
 check name annotated term = do
@@ -88,11 +91,11 @@ check name annotated term = do
 
 -- weaken everything that has not been weakened
 weaken :: Session -> Session
-weaken = Map.map (\t -> if weakened t then t else Req t)
+weaken = Map.map (\t -> if weakened t then t else Req t (locOf t))
   where
     weakened :: Type -> Bool
-    weakened (Req _) = True
-    weakened _       = False
+    weakened (Req _ _) = True
+    weakened _         = False
 
 
 checkIfEqual :: Process -> Type -> Type -> TCM ()
@@ -198,7 +201,7 @@ inferWith term binders exclusions = do
       -- generate fresh type for if not annotated
       t <- case annotation of
             Nothing -> freshType
-            Just t  -> return (toAbstract t)
+            Just t  -> return t
 
       -- infer P
       sessionP <- infer p [(x, t)] []
@@ -265,7 +268,7 @@ inferWith term binders exclusions = do
       sessionQ <- infer q [(x, b)] []
 
       c <- extract x
-      unify c (Times a b)
+      unify c (Times a b NoLoc)
 
       sessionShouldBeDisjoint term sessionP sessionQ
 
@@ -287,7 +290,7 @@ inferWith term binders exclusions = do
       session <- infer p [(y, a), (x, b)] []
 
       c <- extract x
-      unify c (Par a b)
+      unify c (Par a b NoLoc)
 
       return session
 
@@ -308,7 +311,7 @@ inferWith term binders exclusions = do
       session <- infer p [(x, a)] []
 
       c <- extract x
-      unify c (Plus a b)
+      unify c (Plus a b NoLoc)
 
       return session
 
@@ -329,7 +332,7 @@ inferWith term binders exclusions = do
       session <- infer p [(x, b)] []
 
       c <- extract x
-      unify c (Plus a b)
+      unify c (Plus a b NoLoc)
 
       return session
 
@@ -387,7 +390,7 @@ inferWith term binders exclusions = do
       sessionQ <- infer q [(x, b)] []
 
       c <- extract x
-      unify c (With a b)
+      unify c (With a b NoLoc)
 
       sessionShouldBeTheSame term sessionP sessionQ
 
@@ -410,7 +413,7 @@ inferWith term binders exclusions = do
       sessionShouldAllBeRequesting term session
 
       a' <- extract x
-      unify a' (Acc a)
+      unify a' (Acc a NoLoc)
 
       return session
 
@@ -428,7 +431,7 @@ inferWith term binders exclusions = do
       session <- infer p [(y, a)] [x]
 
       a' <- extract x
-      unify a' (Req a)
+      unify a' (Req a NoLoc)
 
       return session
 
@@ -479,9 +482,11 @@ inferWith term binders exclusions = do
                   Unknown                     -- the type variable to be substituted
                   beforeSubstitution          -- the type before substitution
                   (Just
-                    ( toAbstract outputType   -- the type to be substituted with
+                    ( outputType   -- the type to be substituted with
                     , afterSubstitution       -- the resulting type after substitution
-                    )))
+                    ))
+                  NoLoc
+                    )
 
       return session
 
@@ -500,7 +505,7 @@ inferWith term binders exclusions = do
       session <- infer p [(x, b)] []
 
       t <- extract x
-      unify t (Forall (toAbstract var) b)
+      unify t (Forall var b NoLoc)
 
       return session
 
@@ -513,7 +518,7 @@ inferWith term binders exclusions = do
     EmptyOutput x _ -> do
 
       t <- extract x
-      unify One t
+      unify (One NoLoc) t
 
       return Map.empty
 
@@ -528,7 +533,7 @@ inferWith term binders exclusions = do
       sessionP <- infer p [] [x]
 
       t <- extract x
-      unify Bot t
+      unify (Bot NoLoc) t
 
 
       -- traceShow (pretty p) (return ())
@@ -547,7 +552,7 @@ inferWith term binders exclusions = do
     EmptyChoice x _ -> do
 
       t <- extract x
-      unify Top t
+      unify (Top NoLoc) t
 
       return Map.empty
 
@@ -581,7 +586,7 @@ inferWith term binders exclusions = do
 
   freeVars' <- get
   -- rule out channels that are not excluded from the resulting session
-  let resultSession = result `Map.union` binders `Map.union` fmap Var freeVars'
+  let resultSession = result `Map.union` binders `Map.union` fmap (\v -> Var v NoLoc) freeVars'
   let excluded = Set.toList $ exclusions `Set.intersection` Map.keysSet resultSession
   _ <- forM excluded $ \n -> do
     _ <- inferError $ CannotCloseChannel term n
@@ -594,9 +599,9 @@ inferWith term binders exclusions = do
     bind  :: Type -- binder
           -> TypeVar -- free variable
           -> Maybe Substitution
-    bind (Var var)  t = Just $ Substitute var (Var t)
-    bind (Dual var) t = bind var (dual t)
-    bind _          _ = Nothing
+    bind (Var  var l) t = Just $ Substitute var (Var t l)
+    bind (Dual var _) t = bind var (dual t)
+    bind _            _ = Nothing
 
     -- from the `binders` session
     extract :: Chan -> InferM Type
@@ -606,15 +611,15 @@ inferWith term binders exclusions = do
           t <- freshTypeVar
           -- emitting free variable
           modify (Map.insert chan t)
-          return $ Var t
+          return $ Var t NoLoc
         Just t  -> return t
 
     -- taking extra care when unifying two opposite types
     -- because we might will lose something when taking the dual of (Exists _ _ _)
     unifyOpposite :: Type -> Type -> InferM ()
-    unifyOpposite a@(Exists _ _ _) b@(Forall _ _) = unify a (dual b)
-    unifyOpposite a@(Forall _ _) b@(Exists _ _ _) = unify (dual a) b
-    unifyOpposite a b                             = unify a (dual b)
+    unifyOpposite a@(Exists _ _ _ _) b@(Forall _ _ _) = unify a (dual b)
+    unifyOpposite a@(Forall _ _ _) b@(Exists _ _ _ _) = unify (dual a) b
+    unifyOpposite a b                                 = unify a (dual b)
 
     -- unify the two given types, and update the give session.
     -- for better error message, make the former type be the expecting type
@@ -630,10 +635,10 @@ inferWith term binders exclusions = do
     freshTypeVar = do
         i <- lift $ lift $ gets stTypeCount
         lift $ lift $ modify $ \ st -> st { stTypeCount = i + 1 }
-        return $ Nameless i
+        return $ TypeVar (Bound i) "_" NoLoc
 
     freshType :: InferM Type
-    freshType = Var <$> freshTypeVar
+    freshType = Var <$> freshTypeVar <*> pure NoLoc
 
 
     infer :: Process -> [(Chan, Type)] -> [Chan] -> InferM Session

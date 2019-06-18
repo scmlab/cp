@@ -4,7 +4,7 @@ module Pretty.Syntax.Concrete where
 
 import Syntax.Base
 import Syntax.Concrete
-import Pretty.Syntax.Abstract ()
+import Pretty.Syntax.Binding ()
 
 import Data.Monoid ((<>))
 import Data.Text.Prettyprint.Doc hiding (line)
@@ -16,16 +16,16 @@ instance Pretty TypeVar where
   pretty (TypeVar i _)      = pretty i
 
 instance Pretty Name where
-  pretty = pretty . toAbstract
+  pretty = pretty . toBinding
 
 instance Pretty Chan where
-  pretty = pretty . toAbstract
+  pretty = pretty . toBinding
 
 instance Pretty TypeName where
-  pretty = pretty . toAbstract
+  pretty = pretty . toBinding
 
 instance Pretty Process where
-  pretty = pretty . toAbstract
+  pretty = pretty . toBinding
 
 instance Pretty Type where
   pretty (Var i _)        = "$" <> pretty i
@@ -43,5 +43,5 @@ instance Pretty Type where
   pretty (Zero _)         = "𝟘"
   pretty (Top _)          = "⊤"
 
-instance Pretty Session where
-  pretty = pretty . toAbstract
+instance Pretty SessionSyntax where
+  pretty = pretty . toBinding

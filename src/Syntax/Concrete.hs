@@ -5,7 +5,7 @@
 module Syntax.Concrete where
 
 import Syntax.Base
-import qualified Syntax.Abstract as A
+-- import qualified Syntax.Abstract as A
 import qualified Syntax.Binding as B
 
 import Data.Loc (Loc(..), Located(..))
@@ -30,11 +30,11 @@ data TypeName = TypeName  Text Loc deriving (Show)
 
 data Program = Program [Declaration] Loc deriving (Show)
 
-data Declaration = TypeSig  Name Session Loc
+data Declaration = TypeSig  Name SessionSyntax Loc
                  | TermDefn Name Process Loc
                  deriving (Show)
 
-data Session = Session (Map Chan Type) Loc deriving (Show)
+data SessionSyntax = SessionSyntax (Map Chan Type) Loc deriving (Show)
 
 data Process  = Call      Name                              Loc
               | Link      Chan Chan                         Loc
@@ -55,15 +55,15 @@ data Process  = Call      Name                              Loc
               | Mix       Process   Process                 Loc
               deriving (Show)
 
-insertSession :: Chan -> Type -> Session -> Session
-insertSession x t (Session pairs m) =
-    Session (Map.insert x t pairs) m
+insertSessionSyntax :: Chan -> Type -> SessionSyntax -> SessionSyntax
+insertSessionSyntax x t (SessionSyntax pairs m) =
+    SessionSyntax (Map.insert x t pairs) m
 
-emptySession :: Loc -> Session
-emptySession l = Session Map.empty l
+emptySessionSyntax :: Loc -> SessionSyntax
+emptySessionSyntax l = SessionSyntax Map.empty l
 
-singletonSession :: Chan -> Type -> Loc -> Session
-singletonSession x t l = Session (Map.insert x t Map.empty) l
+singletonSessionSyntax :: Chan -> Type -> Loc -> SessionSyntax
+singletonSessionSyntax x t l = SessionSyntax (Map.insert x t Map.empty) l
 
 data Type = Var     TypeVar         Loc
           | Dual    Type            Loc
@@ -97,40 +97,32 @@ instance HasDual Type where
   dual (Zero l)         = Top l
   dual (Top l)          = Zero l
 
-typeSigName :: Declaration -> Maybe Name
-typeSigName (TypeSig n _ _) = Just n
-typeSigName _               = Nothing
-
-termDefnName :: Declaration -> Maybe Name
-termDefnName (TermDefn n _ _) = Just n
-termDefnName _                = Nothing
-
 --------------------------------------------------------------------------------
 -- | Instances
 
-instance Eq Type where
-  (==) = (==) `on` toAbstract . dual
-
-instance Ord Type where
-  compare = compare `on` toAbstract . dual
-
-instance Eq Name where
-  (==) = (==) `on` toAbstract
-
-instance Ord Name where
-  compare = compare `on` toAbstract
-
+-- instance Eq Type where
+--   (==) = (==) `on` toBinding . dual
+--
+-- instance Ord Type where
+--   compare = compare `on` toBinding . dual
+--
+-- instance Eq Name where
+--   (==) = (==) `on` toBinding
+--
+-- instance Ord Name where
+--   compare = compare `on` toBinding
+--
 instance Eq Chan where
-  (==) = (==) `on` toAbstract
+  (==) = (==) `on` toBinding
 
 instance Ord Chan where
-  compare = compare `on` toAbstract
-
-instance Eq TypeName where
-  (==) = (==) `on` toAbstract
-
-instance Ord TypeName where
-  compare = compare `on` toAbstract
+  compare = compare `on` toBinding
+--
+-- instance Eq TypeName where
+--   (==) = (==) `on` toBinding
+--
+-- instance Ord TypeName where
+--   compare = compare `on` toBinding
 
 --------------------------------------------------------------------------------
 -- | Instance of Located
@@ -187,35 +179,35 @@ instance Located Type where
   locOf (Top loc) = loc
 
 
---------------------------------------------------------------------------------
--- | Converting to Abstract Syntax Tree
-
-instance ToAbstract TypeVar A.TypeVar where
-  toAbstract = toAbstract . toBinding
-
-instance ToAbstract TypeName A.TypeName where
-  toAbstract = toAbstract . toBinding
-
-instance ToAbstract Name A.Name where
-  toAbstract = toAbstract . toBinding
-
-instance ToAbstract Chan A.Chan where
-  toAbstract = toAbstract . toBinding
-
-instance ToAbstract Program A.Program where
-  toAbstract = toAbstract . toBinding
-
-instance ToAbstract Declaration A.Declaration where
-  toAbstract = toAbstract . toBinding
-
-instance ToAbstract Session A.Session where
-  toAbstract = toAbstract . toBinding
-
-instance ToAbstract Process A.Process where
-  toAbstract = toAbstract . toBinding
-
-instance ToAbstract Type A.Type where
-  toAbstract = toAbstract . toBinding
+-- --------------------------------------------------------------------------------
+-- -- | Converting to Abstract Syntax Tree
+--
+-- instance ToAbstract TypeVar A.TypeVar where
+--   toAbstract = toAbstract . toBinding
+--
+-- instance ToAbstract TypeName A.TypeName where
+--   toAbstract = toAbstract . toBinding
+--
+-- instance ToAbstract Name A.Name where
+--   toAbstract = toAbstract . toBinding
+--
+-- instance ToAbstract Chan A.Chan where
+--   toAbstract = toAbstract . toBinding
+--
+-- instance ToAbstract Program A.Program where
+--   toAbstract = toAbstract . toBinding
+--
+-- instance ToAbstract Declaration A.Declaration where
+--   toAbstract = toAbstract . toBinding
+--
+-- instance ToAbstract Session A.Session where
+--   toAbstract = toAbstract . toBinding
+--
+-- instance ToAbstract Process A.Process where
+--   toAbstract = toAbstract . toBinding
+--
+-- instance ToAbstract Type A.Type where
+--   toAbstract = toAbstract . toBinding
 
 --------------------------------------------------------------------------------
 
@@ -272,17 +264,11 @@ instance ToBinding Type B.Type where
   toBindingM (Exists x t loc) = do
     (var, bindFreeVars) <- createBinderTypeVar x
     t' <- bindFreeVars <$> toBindingM t
-    B.Exists
-      <$> pure var
-      <*> pure t'
-      <*> pure loc
+    return $ B.Exists var t' Nothing loc
   toBindingM (Forall x t loc) = do
     (var, bindFreeVars) <- createBinderTypeVar x
     t' <- bindFreeVars <$> toBindingM t
-    B.Forall
-      <$> pure var
-      <*> pure t'
-      <*> pure loc
+    return $ B.Forall var t' loc
   toBindingM (One loc) = B.One <$> pure loc
   toBindingM (Bot loc) = B.Bot <$> pure loc
   toBindingM (Zero loc) = B.Zero <$> pure loc
@@ -436,10 +422,10 @@ instance ToBinding Declaration B.Declaration where
       <*> toBindingM process
       <*> pure loc
 
-instance ToBinding Session B.Session where
-  toBindingM (Session pairs loc) = do
+instance ToBinding SessionSyntax B.SessionSyntax where
+  toBindingM (SessionSyntax pairs loc) = do
     let (keys, elems) = unzip $ Map.toList pairs
     keys' <- mapM toBindingM keys
     elems' <- mapM toBindingM elems
     let pairs' = Map.fromList (zip keys' elems')
-    return $ B.Session pairs' loc
+    return $ B.SessionSyntax pairs' loc

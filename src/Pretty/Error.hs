@@ -5,54 +5,20 @@
 module Pretty.Error where
 
 import Syntax.Parser.Type
-import Syntax.Base
 import TypeChecking.Base
-import Pretty
+import Pretty.Base
+import Pretty.Syntax.Binding ()
 import Pretty.Syntax.Concrete ()
 import Base
 
 import Data.Monoid ((<>))
-import Data.ByteString.Lazy (ByteString)
 import Data.Text.Prettyprint.Doc hiding (line)
 import Data.Text (Text)
-import Data.Loc (Loc(..), locOf)
-import qualified Data.Loc as Loc
-import qualified Data.Map as Map
+import Data.Loc (locOf)
 
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
 
-
---------------------------------------------------------------------------------
--- | Report typeclass
-
-class Report a where
-  report :: a -> Doc AnsiStyle
-  report a = reportS a Nothing
-
-  reportS :: a -> Maybe ByteString -> Doc AnsiStyle
-  reportS a _ = report a
-
-data ReportMsg
-  = H1 Text       -- appears red
-  | P (Doc AnsiStyle)
-  | CODE Loc
-  deriving (Show)
-
-instance Report ReportMsg where
-  reportS (H1 s) _ = annotate (color Red) $ pretty s
-  reportS (P s) _ = s <> line
-  reportS (CODE loc) Nothing = annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
-  reportS (CODE loc) (Just src) = indent 2 $ vsep
-        [ annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
-        , reAnnotate toAnsiStyle $ prettySourceCode $ SourceCode src loc 1
-        ]
-
-instance Report [ReportMsg] where
-  reportS msgs src = vsep $
-          [ softline' ]
-      ++  map (\msg -> indent 2 $ reportS msg src <> line) msgs
-      ++  [ softline' ]
 
 --------------------------------------------------------------------------------
 -- |
@@ -87,9 +53,6 @@ instance Report TypeError where
 
 highlight :: Pretty a => a -> Doc AnsiStyle
 highlight = annotate (colorDull Blue) . pretty
-
-instance Report Session where
-  report = pretty . Map.mapKeys toAbstract
 
 instance Report InferError where
   reportS (General msg) = reportS [H1 "Other unformatted inference errors", P $ pretty msg]

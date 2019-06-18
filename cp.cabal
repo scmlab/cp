@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: da4a2af5222e99b9b604dee78d281c00cd0011d620dc3fe0d0409f76ef56ea3b
+-- hash: 184e12d71a5baffab6dcde2378b860b4fbba56907e1458f21ff04770f42d4a35
 
 name:           cp
 version:        0.1.0.0
@@ -24,11 +24,11 @@ executable cp
   other-modules:
       Base
       Pretty
+      Pretty.Base
       Pretty.Error
-      Pretty.Syntax.Abstract
+      Pretty.Syntax.Binding
       Pretty.Syntax.Concrete
       Runtime
-      Syntax.Abstract
       Syntax.Base
       Syntax.Binding
       Syntax.Concrete
@@ -72,11 +72,11 @@ test-suite cp-test
       Base
       Main
       Pretty
+      Pretty.Base
       Pretty.Error
-      Pretty.Syntax.Abstract
+      Pretty.Syntax.Binding
       Pretty.Syntax.Concrete
       Runtime
-      Syntax.Abstract
       Syntax.Base
       Syntax.Binding
       Syntax.Concrete

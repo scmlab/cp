@@ -2,11 +2,12 @@ module Runtime where
 
 
 -- import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
--- import qualified Syntax.Concrete  hiding (Session(..), Type(..), TypeVar(..))
+import Syntax.Binding hiding (Session(..))
 -- import qualified Syntax.Abstract as A
+import qualified Syntax.Concrete as C
 import Syntax.Base
 -- import Syntax.Abstract (Session, Type(..), TypeVar(..))
-import Syntax.Abstract hiding (Session)
+-- import Syntax.Abstract hiding (Session)
 
 import TypeChecking.Base
 import Base
@@ -19,13 +20,8 @@ import Control.Monad.State
 import Control.Monad.Except
 import Debug.Trace
 
-
-data Channel  = Free  Name
-              | Bound Int
-              deriving (Show, Eq)
-
 data RuntimeState = RuntimeState
-  { rsBlocked :: Map Channel Process
+  { rsBlocked :: Map Var Process
   -- , rsPool    :: Set Process
   , rsCount   :: Int
   }
@@ -37,7 +33,7 @@ type RuntimeM = ExceptT RuntimeError (StateT RuntimeState Core)
 reduce :: Process -> M Process
 reduce process = do
   result <- lift $ evalStateT
-              (runExceptT run)
+              (runExceptT (run process))
               $ RuntimeState
                   Map.empty
                   -- (Set.singleton process)
@@ -46,8 +42,10 @@ reduce process = do
     Left err -> throwError $ RuntimeError err
     Right p -> return p
 
-run :: RuntimeM Process
-run = undefined
+-- run :: RuntimeM Process
+run (Call name _) = lookupProcess name >>= run
+run (Compose chan _ p q _) = undefined
+run others = return others
   -- next <- Set.lookupMin <$> gets rsPool
   -- traceShow (next) (return ())
   -- case next of
@@ -59,8 +57,8 @@ run = undefined
   --       _ -> digest process
 
 
-digest :: Process -> RuntimeM Process
-digest = undefined
+-- digest :: Process -> RuntimeM Process
+-- digest = undefined
 -- digest (Call name) = do
 --   lookupProcess name >>= insertPool
 --   run
@@ -72,10 +70,10 @@ digest = undefined
 lookupProcess :: Name -> RuntimeM Process
 lookupProcess name = do
   definitions <- lift $ lift $ gets replDefinitions
-  case Map.lookup name (Map.mapKeys toAbstract definitions) of
+  case Map.lookup name definitions of
     Nothing -> throwError $ Runtime_NotInScope name
-    Just (Annotated _ p _) -> return (toAbstract p)
-    Just (Unannotated _ p) -> return (toAbstract p)
+    Just (Annotated _ p _) -> return p
+    Just (Unannotated _ p) -> return p
 
 
 

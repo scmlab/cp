@@ -1,8 +1,10 @@
 {-# LANGUAGE OverloadedStrings                  #-}
 module Base where
 
-import qualified Syntax.Abstract as A
-import qualified Syntax.Concrete as C
+-- import qualified Syntax.Abstract as A
+-- import qualified Syntax.Binding as B
+-- import qualified Syntax.Concrete as C
+import Syntax.Binding
 import Syntax.Parser
 import TypeChecking.Base
 
@@ -18,10 +20,10 @@ import System.Console.Haskeline
 -- | The M Monad
 
 data MState = MState
-  { replSource    :: Maybe (String, ByteString)
-  , replConcrete  :: Maybe C.Program
-  , replDefinitions :: Map C.Name Definition
-  , replInferred  :: Map C.Name Session
+  { replSource      :: Maybe (String, ByteString)
+  , replProgram     :: Maybe Program
+  , replDefinitions :: Map Name Definition
+  , replInferred    :: Map Name Session
   } deriving (Show)
 
 data Error = ParseError ParseError
@@ -67,7 +69,7 @@ instance (MonadException m) => MonadException (ExceptT e m) where
 -- | Runtime Error
 
 data RuntimeError
-  = Runtime_NotInScope A.Name
+  = Runtime_NotInScope Name
   | Runtime_CodeNotLoaded
   | Runtime_PoolIsEmpty
   deriving (Show)

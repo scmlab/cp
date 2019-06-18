@@ -2,12 +2,13 @@
 module Main where
 
 import Syntax.Base
-import qualified Syntax.Concrete as C
+import Syntax.Binding
 import Syntax.Parser
 import TypeChecking
 import TypeChecking.Infer
 import TypeChecking.Base
-import Pretty.Error
+import Pretty.Error ()
+import Pretty.Base
 import Base
 import Runtime
 
@@ -57,19 +58,20 @@ loadSource filePath = do
         -- store the source in the monad for later debugging use
         modify $ \ st -> st { replSource = Just (filePath, source) }
 
-parseSource :: M C.Program
+parseSource :: M Program
 parseSource = do
   (filePath, source) <- getSourceOrThrow
   case parseConcreteProgram filePath source of
       Left err -> throwError $ ParseError err
       Right cst -> do
-        modify $ \ st -> st { replConcrete = Just cst }
-        return cst
+        let cbt = toBinding cst
+        modify $ \ st -> st { replProgram = Just cbt }
+        return cbt
 
-parseProcess :: ByteString -> M (C.Process)
+parseProcess :: ByteString -> M (Process)
 parseProcess raw = case parseConcreteProcess raw of
   Left err -> throwError $ ParseError err
-  Right ast -> return ast
+  Right ast -> return $ toBinding ast
 
 printErrorIO :: MState -> Error -> IO ()
 printErrorIO state err = case replSource state of
@@ -130,7 +132,7 @@ main = do
     completeDefinitions :: String -> [String] -> Core (String, [Completion])
     completeDefinitions left partials = do
       -- get the names of all definitions
-      defns <- map (Text.unpack . toAbstract) <$> Map.keys <$> gets replDefinitions
+      defns <- map (Text.unpack . (\(Name name _) -> name)) <$> Map.keys <$> gets replDefinitions
       -- complete only the last chuck
       let partial = if null partials then "" else last partials
       let matched = case filter (isPrefixOf partial) defns of
@@ -184,7 +186,7 @@ parseOpts argv =
 --------------------------------------------------------------------------------
 -- | REPL
 
-data Command = Load FilePath | Reload | TypeOf ByteString | Eval ByteString | Quit | Help | Noop
+data Command = Load FilePath | Reload | TypeOf ByteString | Eval ByteString | Debug ByteString | Quit | Help | Noop
   deriving (Show)
 
 trim :: String -> String
@@ -198,6 +200,8 @@ parseCommand key
   | ":r"    `isPrefixOf` key = Reload
   | ":type" `isPrefixOf` key = (TypeOf . BS8.pack . trim . drop 5) key
   | ":t"    `isPrefixOf` key = (TypeOf . BS8.pack . trim . drop 2) key
+  | ":debug" `isPrefixOf` key = (Debug . BS8.pack . trim . drop 5) key
+  | ":d"    `isPrefixOf` key = (Debug . BS8.pack . trim . drop 2) key
   | otherwise = case trim key of
       ":q"    -> Quit
       ":quit" -> Quit
@@ -238,19 +242,22 @@ handleCommand (TypeOf s) = do
     (session, _) <- runTCM $ (inferTerm term)
     liftIO $ putDoc $ report session <> line
     return ()
-
-  -- whenLoaded $ do
-  --   inferred <- lift $ gets replInferred
-  --   case Map.lookup name inferred of
-  --     Nothing -> void $ handleM $ throwError $ RuntimeError $ Runtime_NotInScope name
-  --     Just s  -> liftIO $ putDoc $ pretty s <> line
   return True
+
+handleCommand (Debug s) = do
+  void $ handleM $ do
+    process <- parseProcess s
+    result <- reduce process
+    liftIO $ print result
+    return ()
+  return True
+
 handleCommand Quit = return False
 handleCommand Help = liftIO displayHelp >> return True
 handleCommand (Eval s) = do
   void $ handleM $ do
     process <- parseProcess s
-    result <- reduce (toAbstract process)
+    result <- reduce process
     liftIO $ putDoc $ pretty result <> line
     return ()
   return True

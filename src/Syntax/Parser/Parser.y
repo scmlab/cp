@@ -17,7 +17,7 @@ import Data.Text (Text)
 
 %name programParser Program
 %name processParser ProcessMix
-%name sessionParser Session
+%name sessionSyntaxParser SessionSyntax
 
 %tokentype { Token }
 %error { syntaticalError }
@@ -79,7 +79,7 @@ Declarations :: {[Declaration]}
     | Declarations Declaration                  { $2:$1 }
 
 Declaration :: {Declaration}
-    : s Name ':' Session                        {% locate' $1 $ TypeSig $2 $4 }
+    : s Name ':' SessionSyntax                  {% locate' $1 $ TypeSig $2 $4 }
     | s Name '=' ProcessMix                     {% locate' $1 $ TermDefn $2 $4 }
 
 -- left recursive
@@ -107,10 +107,10 @@ Process :: {Process}
     | s 'end'                                               {% locate' $1 $ End }
     | s '(' ProcessMix ')'                                  { $3 }
 
-Session :: {Session}
-    : s '{}'                                      {% locate' $1 $ emptySession }
-    | s Chan ':' Type                             {% locate' $1 $ singletonSession $2 $4 }
-    | Session ',' Chan ':' Type                   { insertSession $3 $5 $1 }
+SessionSyntax :: {SessionSyntax}
+    : s '{}'                                                {% locate' $1 $ emptySessionSyntax }
+    | s Chan ':' Type                                       {% locate' $1 $ singletonSessionSyntax $2 $4 }
+    | SessionSyntax ',' Chan ':' Type                       { insertSessionSyntax $3 $5 $1 }
 
 Type :: {Type}
     : s Type1                                   { $2 }

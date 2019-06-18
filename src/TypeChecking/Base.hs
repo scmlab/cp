@@ -1,9 +1,6 @@
 module TypeChecking.Base where
 
-import Syntax.Base
-import qualified Syntax.Concrete as C
-import Syntax.Concrete hiding (Session, Type(..), TypeVar(..))
-import Syntax.Abstract (Type(..))
+import Syntax.Binding
 --
 import Prelude hiding (lookup)
 
@@ -17,12 +14,6 @@ import Control.Monad.Except
 
 --------------------------------------------------------------------------------
 -- | State
-
--- concrete channels with abstract types
-type Session = Map Chan Type
-
-convert :: C.Session -> Session
-convert (C.Session pairs _) = Map.map toAbstract pairs
 
 data Definition = Annotated   Name Process Session
                 | Unannotated Name Process

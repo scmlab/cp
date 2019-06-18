@@ -2,16 +2,17 @@ module Syntax.Parser
   ( parseProgram
   , parseConcreteProcess
   , parseAbstractProcess
-  , parseAbstraceSession
+  , parseAbstraceSessionSyntax
   , parseConcreteProgram
   , ParseError(..)
   )
   where
 
 import Syntax.Base
-import qualified Syntax.Abstract as A
+import qualified Syntax.Binding as B
+-- import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
-import Syntax.Parser.Parser (programParser, processParser, sessionParser)
+import Syntax.Parser.Parser (programParser, processParser, sessionSyntaxParser)
 import Syntax.Parser.Lexer (lexer)
 import Syntax.Parser.Type
 
@@ -28,19 +29,19 @@ parseConcreteProcess src = runExcept (evalStateT processParser initState)
         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
-parseAbstractProcess :: ByteString -> Either ParseError A.Process
-parseAbstractProcess src = toAbstract <$> parseConcreteProcess src
+parseAbstractProcess :: ByteString -> Either ParseError B.Process
+parseAbstractProcess src = toBinding <$> parseConcreteProcess src
 
-parseAbstraceSession :: ByteString -> Either ParseError A.Session
-parseAbstraceSession src = toAbstract <$> runExcept (evalStateT sessionParser initState)
+parseAbstraceSessionSyntax :: ByteString -> Either ParseError B.SessionSyntax
+parseAbstraceSessionSyntax src = toBinding <$> runExcept (evalStateT sessionSyntaxParser initState)
   where filePath = "<interactive>"
         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
-        startingLoc = Loc (startPos filePath) (startPos  filePath)
+        startingLoc = Loc (startPos filePath) (startPos filePath)
 
 parseConcreteProgram :: FilePath -> ByteString -> Either ParseError C.Program
 parseConcreteProgram filePath src = runExcept (evalStateT programParser initState)
   where initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
-parseProgram :: FilePath -> ByteString -> Either ParseError A.Program
-parseProgram filePath src = toAbstract <$> parseConcreteProgram filePath src
+parseProgram :: FilePath -> ByteString -> Either ParseError B.Program
+parseProgram filePath src = toBinding <$> parseConcreteProgram filePath src
