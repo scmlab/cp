@@ -5,7 +5,7 @@
 module Pretty.Error where
 
 import Syntax.Parser.Type
-import Syntax.Concrete (ToAbstract(..))
+import Syntax.Base
 import TypeChecking.Base
 import Pretty
 import Pretty.Syntax.Concrete ()

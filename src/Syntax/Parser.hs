@@ -8,6 +8,7 @@ module Syntax.Parser
   )
   where
 
+import Syntax.Base
 import qualified Syntax.Abstract as A
 import qualified Syntax.Concrete as C
 import Syntax.Parser.Parser (programParser, processParser, sessionParser)
@@ -28,10 +29,10 @@ parseConcreteProcess src = runExcept (evalStateT processParser initState)
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
 parseAbstractProcess :: ByteString -> Either ParseError A.Process
-parseAbstractProcess src = C.toAbstract <$> parseConcreteProcess src
+parseAbstractProcess src = toAbstract <$> parseConcreteProcess src
 
 parseAbstraceSession :: ByteString -> Either ParseError A.Session
-parseAbstraceSession src = C.toAbstract <$> runExcept (evalStateT sessionParser initState)
+parseAbstraceSession src = toAbstract <$> runExcept (evalStateT sessionParser initState)
   where filePath = "<interactive>"
         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
         startingLoc = Loc (startPos filePath) (startPos  filePath)
@@ -42,4 +43,4 @@ parseConcreteProgram filePath src = runExcept (evalStateT programParser initStat
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
 parseProgram :: FilePath -> ByteString -> Either ParseError A.Program
-parseProgram filePath src = C.toAbstract <$> parseConcreteProgram filePath src
+parseProgram filePath src = toAbstract <$> parseConcreteProgram filePath src

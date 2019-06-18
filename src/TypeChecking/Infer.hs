@@ -7,7 +7,6 @@ import qualified TypeChecking.Unification as U
 import TypeChecking.Unification (Substitution(..))
 import TypeChecking.Base
 import Pretty.Syntax.Concrete ()
-import Data.Text.Prettyprint.Doc hiding (line)
 --
 import Prelude hiding (lookup)
 
@@ -20,7 +19,7 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer hiding (Dual)
 import Control.Monad.Except
-import Debug.Trace
+-- import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- | InferM

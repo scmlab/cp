@@ -35,7 +35,8 @@ instance Eq TypeVar where
 type TypeName = Text
 
 type Name = Text
-type Chan = Text
+
+data Chan = Chan Var Text deriving (Show, Eq, Ord)
 
 data Program = Program [Declaration]
     deriving (Show)

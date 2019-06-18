@@ -1,5 +1,6 @@
 module TypeChecking.Base where
 
+import Syntax.Base
 import qualified Syntax.Concrete as C
 import Syntax.Concrete hiding (Session, Type(..), TypeVar(..))
 import Syntax.Abstract (Type(..))

@@ -1,6 +1,44 @@
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE DeriveFunctor, FlexibleInstances #-}
+
 module Syntax.Base where
 
 import Data.Text (Text)
+import qualified Data.Set as Set
+import Data.Set (Set)
+
+import Control.Monad.State
+
+--------------------------------------------------------------------------------
+-- | Converting to Concrete Binding Tree
+
+data Binding = Binding
+  { bindingBound :: Int
+  , bindingFree :: Set Text
+  } deriving (Show)
+
+data BindingState = BindingState
+  { bsChannel :: Binding
+  , bsTypeVar :: Binding
+  } deriving (Show)
+
+type BindingM = State BindingState
+
+class ToBinding a b | a -> b where
+  toBindingM :: a -> BindingM b
+
+toBinding :: ToBinding a b => a -> b
+toBinding x =
+  evalState
+    (toBindingM x)
+    (BindingState (Binding 0 Set.empty) (Binding 0 Set.empty))
+
+--------------------------------------------------------------------------------
+-- | Converting to Abstract Binding Tree
+
+class ToAbstract a b | a -> b where
+  toAbstract :: a -> b
 
 --------------------------------------------------------------------------------
 -- | Duality

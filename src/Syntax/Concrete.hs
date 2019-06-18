@@ -11,7 +11,6 @@ import qualified Syntax.Binding as B
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
 import Data.Map (Map)
-import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Function (on)
 import qualified Data.Map as Map
@@ -191,202 +190,52 @@ instance Located Type where
 --------------------------------------------------------------------------------
 -- | Converting to Abstract Syntax Tree
 
-class ToAbstract a b | a -> b where
-    toAbstract :: a -> b
-
-instance ToAbstract Program A.Program where
-    toAbstract (Program declarations _) =
-        A.Program (map toAbstract declarations)
-
-instance ToAbstract Declaration A.Declaration where
-    toAbstract (TypeSig name session _) =
-        A.TypeSig (toAbstract name) (toAbstract session)
-    toAbstract (TermDefn name process _) =
-        A.TermDefn (toAbstract name) (toAbstract process)
-
 instance ToAbstract TypeVar A.TypeVar where
-    toAbstract (TypeVar var _) =
-        A.Named var
+  toAbstract = toAbstract . toBinding
 
 instance ToAbstract TypeName A.TypeName where
-    toAbstract (TypeName name    _) = name
+  toAbstract = toAbstract . toBinding
 
 instance ToAbstract Name A.Name where
-  toAbstract (Name name _) = name
+  toAbstract = toAbstract . toBinding
 
 instance ToAbstract Chan A.Chan where
-    toAbstract (Chan name _) = name
+  toAbstract = toAbstract . toBinding
 
-instance ToAbstract Process A.Process where
-    toAbstract (Call name _) =
-        A.Call
-            (toAbstract name)
-    toAbstract (Link nameA nameB _) =
-        A.Link
-            (toAbstract nameA)
-            (toAbstract nameB)
-    toAbstract (Compose name Nothing procA procB _) =
-        A.Compose
-            (toAbstract name)
-            Nothing
-            (toAbstract procA)
-            (toAbstract procB)
-    toAbstract (Compose name (Just t) procA procB _) =
-        A.Compose
-            (toAbstract name)
-            (Just (toAbstract t))
-            (toAbstract procA)
-            (toAbstract procB)
-    toAbstract (Output nameA nameB procA procB _) =
-        A.Output
-            (toAbstract nameA)
-            (toAbstract nameB)
-            (toAbstract procA)
-            (toAbstract procB)
-    toAbstract (Input nameA nameB proc _) =
-        A.Input
-            (toAbstract nameA)
-            (toAbstract nameB)
-            (toAbstract proc)
-    toAbstract (SelectL name proc _) =
-        A.SelectL
-            (toAbstract name)
-            (toAbstract proc)
-    toAbstract (SelectR name proc _) =
-        A.SelectR
-            (toAbstract name)
-            (toAbstract proc)
-    toAbstract (Choice name procA procB _) =
-        A.Choice
-            (toAbstract name)
-            (toAbstract procA)
-            (toAbstract procB)
-    toAbstract (Accept nameA nameB proc _) =
-        A.Accept
-            (toAbstract nameA)
-            (toAbstract nameB)
-            (toAbstract proc)
-    toAbstract (Request nameA nameB proc _) =
-        A.Request
-            (toAbstract nameA)
-            (toAbstract nameB)
-            (toAbstract proc)
-    toAbstract (OutputT name typ proc _) =
-        A.OutputT
-            (toAbstract name)
-            (toAbstract typ)
-            (toAbstract proc)
-    toAbstract (InputT name typ proc _) =
-        A.InputT
-            (toAbstract name)
-            (toAbstract typ)
-            (toAbstract proc)
-    toAbstract (EmptyOutput name _) =
-        A.EmptyOutput
-            (toAbstract name)
-    toAbstract (EmptyInput name proc _) =
-        A.EmptyInput
-            (toAbstract name)
-            (toAbstract proc)
-    toAbstract (EmptyChoice name _) =
-        A.EmptyChoice
-            (toAbstract name)
-    toAbstract (End _) =
-        A.End
-    toAbstract (Mix p q _) =
-        A.Mix
-            (toAbstract p)
-            (toAbstract q)
+instance ToAbstract Program A.Program where
+  toAbstract = toAbstract . toBinding
+
+instance ToAbstract Declaration A.Declaration where
+  toAbstract = toAbstract . toBinding
 
 instance ToAbstract Session A.Session where
-    toAbstract (Session pairs _) = Map.mapKeys toAbstract $ Map.map toAbstract $ pairs
+  toAbstract = toAbstract . toBinding
+
+instance ToAbstract Process A.Process where
+  toAbstract = toAbstract . toBinding
 
 instance ToAbstract Type A.Type where
-    toAbstract (Var i _) =
-        A.Var
-            (toAbstract i)
-    toAbstract (Dual t _) =
-        A.Dual
-            (toAbstract t)
-    toAbstract (Times t u _) =
-        A.Times
-            (toAbstract t)
-            (toAbstract u)
-    toAbstract (Par t u _) =
-        A.Par
-            (toAbstract t)
-            (toAbstract u)
-    toAbstract (Plus t u _) =
-        A.Plus
-            (toAbstract t)
-            (toAbstract u)
-    toAbstract (With t u _) =
-        A.With
-            (toAbstract t)
-            (toAbstract u)
-    toAbstract (Acc t _) =
-        A.Acc
-            (toAbstract t)
-    toAbstract (Req t _) =
-        A.Req
-            (toAbstract t)
-    toAbstract (Exists x t _) =
-        A.Exists
-            (toAbstract x)
-            (toAbstract t)
-            Nothing
-    toAbstract (Forall x t _) =
-        A.Forall
-            (toAbstract x)
-            (toAbstract t)
-    toAbstract (One _) = A.One
-    toAbstract (Bot _) = A.Bot
-    toAbstract (Zero _) = A.Zero
-    toAbstract (Top _) = A.Top
-
---------------------------------------------------------------------------------
--- | Converting to Concrete Binding Tree
-
-data Binding = Binding
-  { bindingBound :: Int
-  , bindingFree :: Set Text
-  } deriving (Show)
-
-data BindingState = BindingState
-  { bsChannel :: Binding
-  , bsTypeVar :: Binding
-  } deriving (Show)
-
-type BindingM = State BindingState
-
-class ToBinding a b | a -> b where
-  toBindingM :: a -> BindingM b
-
-toBinding :: ToBinding a b => a -> b
-toBinding x =
-  evalState
-    (toBindingM x)
-    (BindingState (Binding 0 Set.empty) (Binding 0 Set.empty))
+  toAbstract = toAbstract . toBinding
 
 --------------------------------------------------------------------------------
 
-boundTypeVar :: TypeVar -> BindingM (B.TypeVar, B.Type -> B.Type)
-boundTypeVar (TypeVar name loc) = do
+createBinderTypeVar :: TypeVar -> BindingM (B.TypeVar, B.Type -> B.Type)
+createBinderTypeVar (TypeVar name loc) = do
   Binding idx ns <- gets bsTypeVar
   modify $ \ st -> st { bsTypeVar = Binding (idx + 1) ns }
   let var = B.TypeVar (Bound idx) name loc
   return (var, B.subsituteType name idx)
 
-freeTypeVar :: TypeVar -> BindingM B.TypeVar
-freeTypeVar (TypeVar name loc) = do
-  Binding idx ns <- gets bsTypeVar
-  modify $ \ st -> st { bsTypeVar = Binding idx (Set.insert name ns) }
-  return $ B.TypeVar (Free name) name loc
+instance ToBinding TypeVar B.TypeVar where
+  toBindingM (TypeVar name loc) = do
+    Binding idx ns <- gets bsTypeVar
+    modify $ \ st -> st { bsTypeVar = Binding idx (Set.insert name ns) }
+    return $ B.TypeVar (Free name) name loc
 
 instance ToBinding Type B.Type where
   toBindingM (Var i loc) =
     B.Var
-      <$> freeTypeVar i
+      <$> toBindingM i
       <*> pure loc
   toBindingM (Dual t loc) =
     B.Dual
@@ -421,14 +270,14 @@ instance ToBinding Type B.Type where
       <$> toBindingM t
       <*> pure loc
   toBindingM (Exists x t loc) = do
-    (var, bindFreeVars) <- boundTypeVar x
+    (var, bindFreeVars) <- createBinderTypeVar x
     t' <- bindFreeVars <$> toBindingM t
     B.Exists
       <$> pure var
       <*> pure t'
       <*> pure loc
   toBindingM (Forall x t loc) = do
-    (var, bindFreeVars) <- boundTypeVar x
+    (var, bindFreeVars) <- createBinderTypeVar x
     t' <- bindFreeVars <$> toBindingM t
     B.Forall
       <$> pure var
@@ -449,6 +298,9 @@ createBinderChan (Chan name loc) = do
   let var = B.Chan (Bound idx) name loc
   return (var, B.subsituteProcess name idx)
 
+
+instance ToBinding TypeName B.TypeName where
+  toBindingM (TypeName name loc) = return $ B.TypeName name loc
 
 instance ToBinding Name B.Name where
   toBindingM (Name name loc) = return $ B.Name name loc

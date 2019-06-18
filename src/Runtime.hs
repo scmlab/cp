@@ -4,7 +4,7 @@ module Runtime where
 -- import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
 -- import qualified Syntax.Concrete  hiding (Session(..), Type(..), TypeVar(..))
 -- import qualified Syntax.Abstract as A
-import Syntax.Concrete (ToAbstract(..))
+import Syntax.Base
 -- import Syntax.Abstract (Session, Type(..), TypeVar(..))
 import Syntax.Abstract hiding (Session)
 

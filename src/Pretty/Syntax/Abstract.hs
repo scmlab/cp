@@ -18,6 +18,9 @@ instance Pretty TypeVar where
   pretty Unknown        = "$_"
   pretty (DualOf i)     = "^" <> pretty i
 
+instance Pretty Chan where
+  pretty (Chan _ name) = pretty name
+
 instance Pretty Process where
   pretty (Call x) = pretty x
   pretty (Link x y) = pretty x <> " ↔ " <> pretty y

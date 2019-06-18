@@ -11,7 +11,6 @@ import Data.Loc (Loc(..))
 import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Set (Set)
 import Data.Function (on)
 
 
@@ -141,11 +140,9 @@ subsituteProcess free bound process = case process of
 --------------------------------------------------------------------------------
 -- | Converting to Abstract Binding Tree
 
-class ToAbstract a b | a -> b where
-  toAbstract :: a -> b
-
 instance ToAbstract TypeVar A.TypeVar where
-    toAbstract (TypeVar var name _) = A.Named name
+    toAbstract (TypeVar (Free _) name _) = A.Named name
+    toAbstract (TypeVar (Bound index) _ _) = A.Nameless index
 
 instance ToAbstract TypeName A.TypeName where
     toAbstract (TypeName name _) = name
@@ -154,7 +151,7 @@ instance ToAbstract Name A.Name where
   toAbstract (Name name _) = name
 
 instance ToAbstract Chan A.Chan where
-  toAbstract (Chan var name _) = name
+  toAbstract (Chan var name _) = A.Chan var name
 
 instance ToAbstract Program A.Program where
   toAbstract (Program declarations _) =

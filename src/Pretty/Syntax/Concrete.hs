@@ -2,6 +2,7 @@
 
 module Pretty.Syntax.Concrete where
 
+import Syntax.Base
 import Syntax.Concrete
 import Pretty.Syntax.Abstract ()
 

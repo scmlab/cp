@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings                  #-}
 module Main where
 
+import Syntax.Base
 import qualified Syntax.Concrete as C
 import Syntax.Parser
 import TypeChecking
@@ -129,7 +130,7 @@ main = do
     completeDefinitions :: String -> [String] -> Core (String, [Completion])
     completeDefinitions left partials = do
       -- get the names of all definitions
-      defns <- map (Text.unpack . C.toAbstract) <$> Map.keys <$> gets replDefinitions
+      defns <- map (Text.unpack . toAbstract) <$> Map.keys <$> gets replDefinitions
       -- complete only the last chuck
       let partial = if null partials then "" else last partials
       let matched = case filter (isPrefixOf partial) defns of
@@ -249,7 +250,7 @@ handleCommand Help = liftIO displayHelp >> return True
 handleCommand (Eval s) = do
   void $ handleM $ do
     process <- parseProcess s
-    result <- reduce (C.toAbstract process)
+    result <- reduce (toAbstract process)
     liftIO $ putDoc $ pretty result <> line
     return ()
   return True
