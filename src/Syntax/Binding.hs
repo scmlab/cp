@@ -69,10 +69,49 @@ data Type = Var     TypeVar         Loc
           | Top                     Loc
           deriving (Show)
 
+subsituteTypeVar :: Text -> Int -> TypeVar -> TypeVar
+subsituteTypeVar free bound (TypeVar var name loc)
+  | Free free == var = TypeVar (Bound bound) name loc
+  | otherwise        = TypeVar var name loc
 
-subsituteTypeVar :: Text -> Int -> Type -> Type
-subsituteTypeVar name binder t = case t of
-  Var (TypeVar var n l) loc -> if (Free name) == var
-                      then Var (TypeVar (Bound binder) n l) loc
-                      else Var (TypeVar var n l) loc
-  _ -> t
+-- subsituteTypeVar
+subsituteType :: Text -> Int -> Type -> Type
+subsituteType free bound (Var var loc) = Var (subsituteTypeVar free bound var) loc
+subsituteType _    _     others        = others
+
+subsituteChannel :: Text -> Int -> Chan -> Chan
+subsituteChannel free bound (Chan var name loc)
+  | Free free == var = Chan (Bound bound) name loc
+  | otherwise        = Chan var name loc
+
+subsituteProcess :: Text -> Int -> Process -> Process
+subsituteProcess free bound process = case process of
+  Link x y loc -> Link (subst x) (subst y) loc
+  Compose x t a b loc -> Compose (subst x) t a b loc
+  Output x y a b loc -> Output (subst x) (subst y) a b loc
+  Input x y a loc -> Input (subst x) (subst y) a loc
+  SelectL x a loc -> SelectL (subst x) a loc
+  SelectR x a loc -> SelectR (subst x) a loc
+  Choice x a b loc -> Choice (subst x) a b loc
+  Accept x y a loc -> Accept (subst x) (subst y) a loc
+  Request x y a loc -> Request (subst x) (subst y) a loc
+  OutputT x t a loc -> OutputT (subst x) t a loc
+  InputT x t a loc -> InputT (subst x) t a loc
+  EmptyOutput x loc -> EmptyOutput (subst x) loc
+  EmptyInput x a loc -> EmptyInput (subst x) a loc
+  EmptyChoice x loc -> EmptyChoice (subst x) loc
+  others -> others
+  where
+    subst = subsituteChannel free bound
+
+-- subsituteChannel :: Text -> Int -> Process -> Process
+-- subsituteChannel free bound p = case p of
+--   (Link a b l) ->
+
+
+-- subsituteChannel :: Text -> Int -> Process -> Process
+-- subsituteChannel name binder t = case t of
+--   Var (Chan var n l) m loc -> if (Free name) == var
+--                       then Var (Chan (Bound binder) n l) m loc
+--                       else Var (Chan var n l) m loc
+--   _ -> t
