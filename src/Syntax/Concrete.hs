@@ -6,7 +6,6 @@ module Syntax.Concrete where
 
 import Syntax.Base
 import qualified Syntax.Abstract as A
-import Syntax.Binding (Var(..))
 import qualified Syntax.Binding as B
 
 import Data.Loc (Loc(..), Located(..))
@@ -36,6 +35,8 @@ data Declaration = TypeSig  Name Session Loc
                  | TermDefn Name Process Loc
                  deriving (Show)
 
+data Session = Session (Map Chan Type) Loc deriving (Show)
+
 data Process  = Call      Name                              Loc
               | Link      Chan Chan                         Loc
               | Compose   Chan (Maybe Type) Process Process Loc
@@ -54,11 +55,6 @@ data Process  = Call      Name                              Loc
               | End                                         Loc
               | Mix       Process   Process                 Loc
               deriving (Show)
-
-data Session = Session (Map Chan Type) Loc deriving (Show)
-
--- instance Functor Session where
---   fmap f (Session p x) = Session (Map.mapKeys (fmap f) $ Map.map (fmap f) p) (f x)
 
 insertSession :: Chan -> Type -> Session -> Session
 insertSession x t (Session pairs m) =
@@ -567,3 +563,31 @@ instance ToBinding Process B.Process where
       <$> toBindingM p
       <*> toBindingM q
       <*> pure loc
+
+--------------------------------------------------------------------------------
+
+instance ToBinding Program B.Program where
+  toBindingM (Program declarations loc) =
+    B.Program
+      <$> mapM toBindingM declarations
+      <*> pure loc
+
+instance ToBinding Declaration B.Declaration where
+  toBindingM (TypeSig name session loc) =
+    B.TypeSig
+      <$> toBindingM name
+      <*> toBindingM session
+      <*> pure loc
+  toBindingM (TermDefn name process loc) =
+    B.TermDefn
+      <$> toBindingM name
+      <*> toBindingM process
+      <*> pure loc
+
+instance ToBinding Session B.Session where
+  toBindingM (Session pairs loc) = do
+    let (keys, elems) = unzip $ Map.toList pairs
+    keys' <- mapM toBindingM keys
+    elems' <- mapM toBindingM elems
+    let pairs' = Map.fromList (zip keys' elems')
+    return $ B.Session pairs' loc
