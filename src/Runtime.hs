@@ -2,50 +2,141 @@ module Runtime where
 
 
 -- import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
-import Syntax.Binding hiding (Session(..))
+import Syntax.Binding
 -- import qualified Syntax.Abstract as A
-import qualified Syntax.Concrete as C
-import Syntax.Base
+-- import qualified Syntax.Concrete as C
+-- import Syntax.Base
+import Pretty
 -- import Syntax.Abstract (Session, Type(..), TypeVar(..))
 -- import Syntax.Abstract hiding (Session)
 
 import TypeChecking.Base
 import Base
 
+import Data.Loc (Loc(..))
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Monad.State
 import Control.Monad.Except
-import Debug.Trace
+-- import Debug.Trace
 
 data RuntimeState = RuntimeState
-  { rsBlocked :: Map Var Process
-  -- , rsPool    :: Set Process
-  , rsCount   :: Int
+  { rsBlocked :: Map Chan Process
+  , rsPool :: Set Process
   }
 type RuntimeM = ExceptT RuntimeError (StateT RuntimeState Core)
 
--- insertPool :: Process -> RuntimeM ()
--- insertPool process = modify $ \st -> st { rsPool = Set.insert process (rsPool st) }
+addBlocked :: Chan -> Process -> RuntimeM ()
+addBlocked chan process = modify $ \st -> st { rsBlocked = Map.insert chan process (rsBlocked st) }
 
-reduce :: Process -> M Process
-reduce process = do
+removeBlocked :: Chan -> RuntimeM ()
+removeBlocked chan = modify $ \st -> st { rsBlocked = Map.delete chan (rsBlocked st) }
+
+putBack :: Process -> RuntimeM ()
+putBack (End _) = return ()
+putBack others  = modify $ \st -> st { rsPool = Set.insert others (rsPool st) }
+
+draw :: RuntimeM (Maybe Process)
+draw = do
+  result <- Set.lookupMin <$> gets rsPool
+  modify $ \st -> st { rsPool = Set.deleteMin (rsPool st) }
+  return result
+
+evaluate :: Process -> M Process
+evaluate process = do
   result <- lift $ evalStateT
-              (runExceptT (run process))
+              (runExceptT run)
               $ RuntimeState
                   Map.empty
-                  -- (Set.singleton process)
-                  0
+                  (Set.singleton process)
   case result of
     Left err -> throwError $ RuntimeError err
     Right p -> return p
 
--- run :: RuntimeM Process
-run (Call name _) = lookupProcess name >>= run
-run (Compose chan _ p q _) = undefined
-run others = return others
+run :: RuntimeM Process
+run = do
+  next <- draw
+  case next of
+    Nothing -> do
+      -- blockedSize <- Map.size <$> gets rsBlocked
+      -- poolSize <- Set.size <$> gets rsPool
+      -- liftIO $ putStrLn $ show (blockedSize, poolSize) ++ " ================="
+      -- liftIO $ print $ pretty next
+      --
+      -- blocked <- Map.toList <$> gets rsBlocked
+      -- forM_ blocked $ \(c, p) -> do
+      --   liftIO $ print $ pretty (c, p)
+      -- liftIO $ putStrLn "===================="
+
+      -- gets rsBlocked >>= error . show
+      return $ End NoLoc
+    Just process -> do
+      digest process
+      run
+
+  -- x[u] . u[] . end
+  -- x[u] . x[v] . v[] . end
+  -- x[u] . x[v] . x(w) . x() . w() . end
+  -- x(u) . x(v) . x[w] . u() . v() . w[] . end
+  -- x(u) . x(v) . x[w] . u() . x[] . end
+
+
+digest :: Process -> RuntimeM ()
+digest process = case process of
+  (Call name _) -> do
+    lookupProcess name >>= putBack
+  (Link _ _ _) -> undefined
+  (Compose _ _ p q _) -> do
+    putBack p
+    putBack q
+  (Output x y p q _) -> do
+    blocked <- Map.lookup x <$> gets rsBlocked
+    case blocked of
+      Nothing -> addBlocked x process
+      Just (Input _ y' r _) -> do
+        if y == y'
+          then do
+            removeBlocked x
+            putBack p
+            putBack q
+            putBack r
+          else throwError $ Runtime_CannotMatch x y y'
+      _ -> throwError $ Runtime_Stuck process
+  (Input x y p _) -> do
+    blocked <- Map.lookup x <$> gets rsBlocked
+    case blocked of
+      Nothing -> addBlocked x process
+      Just (Output _ y' q r _) -> do
+        if y == y'
+          then do
+            removeBlocked x
+            putBack p
+            putBack q
+            putBack r
+          else throwError $ Runtime_CannotMatch x y y'
+      _ -> throwError $ Runtime_Stuck process
+  (EmptyOutput x _) -> do
+    blocked <- Map.lookup x <$> gets rsBlocked
+    case blocked of
+      Nothing -> addBlocked x process
+      Just (EmptyInput _ p _) -> do
+        removeBlocked x
+        putBack p
+      _ -> throwError $ Runtime_Stuck process
+  (EmptyInput x p _) -> do
+    blocked <- Map.lookup x <$> gets rsBlocked
+    case blocked of
+      Nothing -> addBlocked x process
+      Just (EmptyOutput _ _) -> do
+        removeBlocked x
+        putBack p
+      _ -> throwError $ Runtime_Stuck process
+  others -> error $ show others
+
+-- -- run (Compose chan _ p q _) =
+-- run others = return others
   -- next <- Set.lookupMin <$> gets rsPool
   -- traceShow (next) (return ())
   -- case next of

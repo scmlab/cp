@@ -153,6 +153,16 @@ instance Report RuntimeError where
     [ H1 "Source not loaded yet"
     , P $ "type " <> highlight (":l FILEPATH" :: Text) <> " to load the source"
     ]
+  report (Runtime_CannotMatch comm x y) = report
+    [ H1 "Unmatched channels"
+    , P $ pretty x <+> "doesn't match with" <+> pretty y
+    , CODE $ locOf comm
+    ]
+  report (Runtime_Stuck process) = report
+    [ H1 "Stuck"
+    , CODE $ locOf process
+    ]
+
 
 instance Report Error where
   reportS (ParseError err) = reportS err

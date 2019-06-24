@@ -22,7 +22,7 @@ import Control.Monad
 import Control.Monad.State
 import Control.Monad.Writer hiding (Dual)
 import Control.Monad.Except
--- import Debug.Trace
+import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- | InferM
@@ -591,6 +591,9 @@ inferWith term binders exclusions = do
   _ <- forM excluded $ \n -> do
     _ <- inferError $ CannotCloseChannel term n
     return ()
+
+  -- traceShow binders (return ())
+  -- traceShow result (return ())
 
   return result
 

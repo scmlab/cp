@@ -71,6 +71,8 @@ instance (MonadException m) => MonadException (ExceptT e m) where
 data RuntimeError
   = Runtime_NotInScope Name
   | Runtime_CodeNotLoaded
-  | Runtime_PoolIsEmpty
+  -- | Runtime_PoolIsEmpty
+  | Runtime_CannotMatch Chan Chan Chan
+  | Runtime_Stuck Process
   deriving (Show)
 -- data Rule = AxCut Chan

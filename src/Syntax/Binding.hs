@@ -10,7 +10,6 @@ import Syntax.Base
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
 import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Function (on)
 
 --------------------------------------------------------------------------------
@@ -36,6 +35,16 @@ instance Eq TypeVar where
     DualOf m == DualOf n = m == n
     --
     _ == _ = False
+
+instance Ord TypeVar where
+    Unknown `compare` Unknown = EQ
+    Unknown `compare` _       = LT
+    _       `compare` Unknown = GT
+    --
+    TypeVar i _ _ `compare` TypeVar j _ _ = i `compare` j
+    DualOf m `compare` DualOf n = m `compare` n
+    -- whatever ???
+    _ `compare` _ = EQ
 
 --------------------------------------------------------------------------------
 -- | Concrete Binding Tree
@@ -85,7 +94,7 @@ data Process  = Call      Name                              Loc
               | EmptyChoice Chan                            Loc
               | End                                         Loc
               | Mix       Process   Process                 Loc
-              deriving (Show)
+              deriving (Eq, Ord, Show)
 
 data Type
     = Var TypeVar Loc
@@ -154,11 +163,13 @@ instance Eq Name where
 instance Ord Name where
   (Name a _) `compare` (Name b _) = a `compare` b
 
+-- TODO: FIX THIS
 instance Eq Chan where
-  (Chan varA _ _) == (Chan varB _ _) = varA == varB
+  -- (Chan varA _ _) == (Chan varB _ _) = varA == varB
+  (Chan _ nameA _) == (Chan _ nameB _) = nameA == nameB
 
 instance Ord Chan where
-  (Chan varA _ _) `compare` (Chan varB _ _) = varA `compare` varB
+  (Chan _ nameA _) `compare` (Chan _ nameB _) = nameA `compare` nameB
 
 -- instance Eq TypeName where
 --   (==) = (==) `on` toAbstract
@@ -172,6 +183,8 @@ subsituteTypeVar :: Text -> Int -> TypeVar -> TypeVar
 subsituteTypeVar free bound (TypeVar var name loc)
   | Free free == var = TypeVar (Bound bound) name loc
   | otherwise        = TypeVar var name loc
+subsituteTypeVar _ _ Unknown = Unknown
+subsituteTypeVar free bound (DualOf var) = DualOf (subsituteTypeVar free bound var)
 
 subsituteType :: Text -> Int -> Type -> Type
 subsituteType free bound (Var var loc) = Var (subsituteTypeVar free bound var) loc

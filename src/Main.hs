@@ -247,7 +247,7 @@ handleCommand (TypeOf s) = do
 handleCommand (Debug s) = do
   void $ handleM $ do
     process <- parseProcess s
-    result <- reduce process
+    result <- evaluate process
     liftIO $ print result
     return ()
   return True
@@ -257,7 +257,7 @@ handleCommand Help = liftIO displayHelp >> return True
 handleCommand (Eval s) = do
   void $ handleM $ do
     process <- parseProcess s
-    result <- reduce process
+    result <- evaluate process
     liftIO $ putDoc $ pretty result <> line
     return ()
   return True
