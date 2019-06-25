@@ -17,30 +17,6 @@ instance Ord Loc where
   NoLoc   `compare` Loc _ _ = LT
   NoLoc   `compare` NoLoc   = EQ
 
---------------------------------------------------------------------------------
--- | Converting to Concrete Binding Tree
-
-data Binding = Binding
-  { bindingBound :: Int
-  , bindingFree :: Set Text
-  } deriving (Show)
-
-data BindingState = BindingState
-  { bsChannel :: Binding
-  , bsTypeVar :: Binding
-  } deriving (Show)
-
-type BindingM = State BindingState
-
-class ToBinding a b | a -> b where
-  toBindingM :: a -> BindingM b
-
-toBinding :: ToBinding a b => a -> b
-toBinding x =
-  evalState
-    (toBindingM x)
-    (BindingState (Binding 0 Set.empty) (Binding 0 Set.empty))
-
 -- --------------------------------------------------------------------------------
 -- -- | Converting to Abstract Binding Tree
 --

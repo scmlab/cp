@@ -15,6 +15,7 @@ import qualified Syntax.Concrete as C
 import Syntax.Parser.Parser (programParser, processParser, sessionSyntaxParser)
 import Syntax.Parser.Lexer (lexer)
 import Syntax.Parser.Type
+import TypeChecking.Binding
 
 import Control.Monad.Except
 import Control.Monad.State
