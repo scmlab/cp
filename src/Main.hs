@@ -2,6 +2,7 @@
 module Main where
 
 -- import Syntax.Base
+import qualified Syntax.Concrete as C
 import Syntax.Binding
 import Syntax.Parser
 import TypeChecking
@@ -59,23 +60,23 @@ loadSource filePath = do
         -- store the source in the monad for later debugging use
         modify $ \ st -> st { replSource = Just (filePath, source) }
 
-parseSource :: M Program
+parseSource :: M C.Program
 parseSource = do
   definitions <- gets replDefinitions
   (filePath, source) <- getSourceOrThrow
   case parseProgram filePath source of
       Left err -> throwError $ ParseError err
-      Right cst -> do
-        let cbt = bind definitions cst
-        modify $ \ st -> st { replProgram = Just cbt }
-        return cbt
+      Right program -> do
+        modify $ \ st -> st { replProgram = Just program }
+        return program
 
-parseProcessM :: ByteString -> M Process
+parseProcessM :: ByteString -> M C.Process
 parseProcessM raw = do
   definitions <- gets replDefinitions
   case parseProcess raw of
     Left err -> throwError $ ParseError err
-    Right ast -> return $ bind definitions ast
+    Right ast -> undefined
+      -- return $ bind definitions ast
 
 printErrorIO :: MState -> Error -> IO ()
 printErrorIO state err = case replSource state of
@@ -226,7 +227,8 @@ handleCommand (Load filePath) = do
   void $ handleM $ do
     loadSource filePath
     program <- parseSource
-    (inferred, tcmState) <- runTCM $ checkAll program
+    definitions <- scopeCheck program
+    (inferred, tcmState) <- runTCM $ typeCheck definitions
     modify $ \ st -> st
       { replInferred = inferred
       , replDefinitions = stDefinitions tcmState
@@ -240,10 +242,15 @@ handleCommand Reload = do
     Just (Just (filePath, _)) -> handleCommand (Load filePath)
     _ -> handleCommand Noop
 
-handleCommand (TypeOf s) = do
+handleCommand (TypeOf expr) = do
   void $ handleM $ do
-    term <- parseProcessM s
-    (session, _) <- runTCM $ (inferTerm term)
+    -- global environment setup
+    program <- gets replProgram
+    -- local expression parsing
+    process <- parseProcessM expr
+    let process' = bind program process
+
+    (session, _) <- runTCM $ (inferTerm process')
     liftIO $ putDoc $ report session <> line
     return ()
   return True
@@ -251,7 +258,7 @@ handleCommand (TypeOf s) = do
 handleCommand (Debug s) = do
   void $ handleM $ do
     process <- parseProcessM s
-    _ <- runTCM $ bindingCheck process
+    -- _ <- runTCM $ bindingCheck process
     return ()
   return True
 

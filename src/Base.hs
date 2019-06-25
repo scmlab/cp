@@ -3,7 +3,7 @@ module Base where
 
 -- import qualified Syntax.Abstract as A
 -- import qualified Syntax.Binding as B
--- import qualified Syntax.Concrete as C
+import qualified Syntax.Concrete as C
 import Syntax.Binding
 import Syntax.Parser
 import TypeChecking.Base
@@ -20,15 +20,20 @@ import System.Console.Haskeline
 -- | The M Monad
 
 data MState = MState
-  { replSource      :: Maybe (String, ByteString)
-  , replProgram     :: Maybe Program
-  , replDefinitions :: Map Name Definition
-  , replInferred    :: Map Name Session
+    -- filepath and the source  (for parsing)
+  { replSource        :: Maybe (String, ByteString)
+    -- parsed program           (for scope checking)
+  , replProgram       :: Maybe C.Program
+    -- scoped checked program   (for type checking)
+  , replDefinitions   :: Map Name Definition
+    -- inferred program         (for runtime execution)
+  , replInferred      :: Map Name Session
   } deriving (Show)
 
 data Error = ParseError ParseError
            | RuntimeError RuntimeError
            | TypeError TypeError
+           | ScopeError ScopeError
            | Panic String
            deriving (Show)
 

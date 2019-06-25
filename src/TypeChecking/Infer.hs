@@ -36,24 +36,24 @@ runInferM freeVars program = runStateT (runWriterT program) freeVars
 evalInferM :: TypeVars -> InferM a -> TCM (a, [Substitution])
 evalInferM freeVars program = evalStateT (runWriterT program) freeVars
 
-inferError :: InferError -> InferM a
-inferError = lift . throwError . InferError
+typeError :: TypeError -> InferM a
+typeError = lift . throwError
 
 sessionShouldBeEmpty :: Process -> Session -> InferM ()
 sessionShouldBeEmpty term session = do
   unless (Map.null session) $
-    inferError $ ChannelNotComsumed term session
+    typeError $ ChannelNotComsumed term session
 
 sessionShouldBeDisjoint :: Process -> Session -> Session -> InferM ()
 sessionShouldBeDisjoint term a b = do
   let intersection = Map.intersection a b
   unless (Map.null intersection) $
-    inferError $ SessionShouldBeDisjoint term intersection
+    typeError $ SessionShouldBeDisjoint term intersection
 
 sessionShouldBeTheSame :: Process -> Session -> Session -> InferM ()
 sessionShouldBeTheSame term a b = do
   unless (a == b) $
-    inferError $ SessionShouldBeTheSame term $
+    typeError $ SessionShouldBeTheSame term $
       Map.union
         (Map.difference a b)
         (Map.difference b a)
@@ -61,7 +61,7 @@ sessionShouldBeTheSame term a b = do
 sessionShouldAllBeRequesting :: Process -> Session -> InferM ()
 sessionShouldAllBeRequesting term session = do
   unless (Map.null outliers) $
-    inferError $ SessionShouldAllBeRequesting term outliers
+    typeError $ SessionShouldAllBeRequesting term outliers
   where
     outliers :: Session
     outliers = Map.filter (not . isRequesting) session
@@ -84,7 +84,7 @@ check name annotated term = do
 
   -- see if the keys of two Maps look the same
   unless (Map.null difference) $
-    throwError $ InferError $ SessionMismatch name notInferred notAnnotated
+    throwError $ SessionMismatch name notInferred notAnnotated
 
   -- look into the types and see if they are also the same
   forM_ (Map.intersectionWith (,) annotated inferred) (uncurry (checkIfEqual term))
@@ -102,7 +102,7 @@ checkIfEqual :: Process -> Type -> Type -> TCM ()
 checkIfEqual term expected given = do
     let (result, _) = U.unify expected given
     case result of
-      Left (a, b) -> throwError $ InferError $ TypeMismatch term expected given a b
+      Left (a, b) -> throwError $ TypeMismatch term expected given a b
       Right _ -> return ()
 
 
@@ -125,12 +125,10 @@ inferWith :: Process        -- the term to infer
 inferWith term binders exclusions = do
 
   result <- case term of
-    Call x _ -> do
+    Call (Callee name _) _ -> do
       definition <- lift $ lift $ gets stDefinitions
-      -- traceShow definition (return ())
-      -- traceShow x (return ())
-      case Map.lookup x definition of
-        Nothing -> throwError $ InferError $ DefnNotFound term x
+      case Map.lookup name definition of
+        Nothing -> throwError $ DefnNotFound term name
         Just (Annotated _ _ t) -> return t
         Just (Unannotated _ p) -> inferWith p binders exclusions
 
@@ -589,7 +587,7 @@ inferWith term binders exclusions = do
   let resultSession = result `Map.union` binders `Map.union` fmap (\v -> Var v NoLoc) freeVars'
   let excluded = Set.toList $ exclusions `Set.intersection` Map.keysSet resultSession
   _ <- forM excluded $ \n -> do
-    _ <- inferError $ CannotCloseChannel term n
+    _ <- typeError $ CannotCloseChannel term n
     return ()
 
   -- traceShow binders (return ())
@@ -631,7 +629,7 @@ inferWith term binders exclusions = do
     unify expected given = do
       let (result, subst) = U.unify expected given
       case result of
-        Left (t, u) -> throwError $ InferError $ TypeMismatch term expected given t u
+        Left (t, u) -> throwError $ TypeMismatch term expected given t u
         Right _ -> tell subst
 
     freshTypeVar :: InferM TypeVar

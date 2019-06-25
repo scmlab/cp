@@ -31,6 +31,9 @@ instance Pretty Name where
 instance Pretty Chan where
   pretty (Chan _ name _) = pretty name
 
+instance Pretty Callee where
+  pretty (Callee name _) = pretty name
+  
 instance Pretty Process where
   pretty (Call x _) = pretty x
   pretty (Link x y _) = pretty x <> " ↔ " <> pretty y

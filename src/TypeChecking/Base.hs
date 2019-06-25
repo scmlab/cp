@@ -1,5 +1,6 @@
 module TypeChecking.Base where
 
+import qualified Syntax.Concrete as C
 import Syntax.Binding
 --
 import Prelude hiding (lookup)
@@ -14,10 +15,6 @@ import Control.Monad.Except
 
 --------------------------------------------------------------------------------
 -- | State
-
-data Definition = Annotated   Name Process Session
-                | Unannotated Name Process
-                deriving (Show)
 
 isAnnotated :: Definition -> Bool
 isAnnotated (Annotated _ _ _) = True
@@ -37,7 +34,7 @@ initialTCState = TCState 0 Map.empty
 --------------------------------------------------------------------------------
 -- | Error
 
-data InferError
+data TypeError
   = General Text
   | TypeMismatch Process Type Type Type Type
   | SessionMismatch Name Session Session
@@ -50,10 +47,9 @@ data InferError
   | DefnNotFound Process Name
   deriving (Show)
 
-data TypeError
-  = TypeSigDuplicated Name Name
-  | TermDefnDuplicated Name Name
-  | InferError InferError
+data ScopeError
+  = TypeSigDuplicated C.Name C.Name
+  | TermDefnDuplicated C.Name C.Name
   | Others Text
   deriving (Show)
 

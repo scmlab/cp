@@ -9,6 +9,9 @@ import Syntax.Base
 
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
+import qualified Data.Set as Set
+import Data.Set (Set)
+import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Function (on)
 
@@ -57,27 +60,30 @@ data TypeName = TypeName  Text Loc deriving (Show)
 data Chan     = Chan Var Text Loc
               deriving (Show)
 
+data Definition = Annotated   Name Process Session
+                | Unannotated Name Process
+                deriving (Show)
+
 data Program = Program [Declaration] Loc deriving (Show)
 
 data Declaration = TypeSig  Name SessionSyntax Loc
                  | TermDefn Name Process Loc
                  deriving (Show)
 
-typeSigName :: Declaration -> Maybe Name
-typeSigName (TypeSig n _ _) = Just n
-typeSigName _               = Nothing
-
-termDefnName :: Declaration -> Maybe Name
-termDefnName (TermDefn n _ _) = Just n
-termDefnName _                = Nothing
+-- typeSigName :: Declaration -> Maybe Name
+-- typeSigName (TypeSig n _ _) = Just n
+-- typeSigName _               = Nothing
+--
+-- termDefnName :: Declaration -> Maybe Name
+-- termDefnName (TermDefn n _ _) = Just n
+-- termDefnName _                = Nothing
 
 type Session = Map Chan Type
 data SessionSyntax = SessionSyntax Session Loc deriving (Show)
 
-convert :: SessionSyntax -> Session
-convert (SessionSyntax xs _) = xs
-
-data Process  = Call      Name                              Loc
+data Callee = Callee Name (Set Chan)
+    deriving (Eq, Ord, Show)
+data Process  = Call      Callee                            Loc
               | Link      Chan Chan                         Loc
               | Compose   Chan (Maybe Type) Process Process Loc
               | Output    Chan Chan Process Process         Loc
@@ -177,7 +183,13 @@ instance Ord Chan where
 -- instance Ord TypeName where
 --   compare = compare `on` toAbstract
 --------------------------------------------------------------------------------
--- | subsitution
+-- | Make free variables bounded
+
+subsituteVar :: Text -> Int -> Var -> Var
+subsituteVar free bound var@(Free name)
+  | free == name = Bound bound
+  | otherwise    = var
+subsituteVar free bound var = var
 
 subsituteTypeVar :: Text -> Int -> TypeVar -> TypeVar
 subsituteTypeVar free bound (TypeVar var name loc)
@@ -195,9 +207,14 @@ subsituteChannel free bound (Chan var name loc)
   | Free free == var = Chan (Bound bound) name loc
   | otherwise        = Chan var name loc
 
+subsituteCallee :: Text -> Int -> Callee -> Callee
+subsituteCallee free bound (Callee name vars) =
+  Callee name $ Set.map (subsituteChannel free bound) vars
+    -- Map.adjust (subsituteVar free bound) name vars
+
 subsituteProcess :: Text -> Int -> Process -> Process
 subsituteProcess free bound process = case process of
-  Call name loc -> Call name loc
+  Call callee loc -> Call (subsituteCallee free bound callee) loc
   Link x y loc -> Link (subst x) (subst y) loc
   Compose x t a b loc -> Compose (subst x) t a b loc
   Output x y a b loc -> Output (subst x) (subst y) a b loc

@@ -34,7 +34,7 @@ instance Report ParseError where
     ] (Just src)
 
 
-instance Report TypeError where
+instance Report ScopeError where
   reportS (TypeSigDuplicated a b) = reportS
     [ H1 "Duplicating type signature"
     , CODE $ locOf a
@@ -45,7 +45,6 @@ instance Report TypeError where
     , CODE $ locOf a
     , CODE $ locOf b
     ]
-  reportS (InferError a) = reportS a
   reportS (Others msg) = reportS
     [ H1 "Other unformatted type errors"
     , P $ pretty msg
@@ -54,7 +53,7 @@ instance Report TypeError where
 highlight :: Pretty a => a -> Doc AnsiStyle
 highlight = annotate (colorDull Blue) . pretty
 
-instance Report InferError where
+instance Report TypeError where
   reportS (General msg) = reportS [H1 "Other unformatted inference errors", P $ pretty msg]
   reportS (CannotCloseChannel term chan) = reportS
     [ H1 "Channel cannot be closed"

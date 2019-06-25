@@ -79,8 +79,8 @@ run = do
 
 digest :: Process -> RuntimeM ()
 digest process = case process of
-  (Call name _) -> do
-    lookupProcess name >>= putBack
+  (Call callee _) -> do
+    lookupCallee callee >>= putBack
   (Link _ _ _) -> undefined
   (Compose _ _ p q _) -> do
     putBack p
@@ -152,8 +152,8 @@ digest process = case process of
 
 
 
-lookupProcess :: Name -> RuntimeM Process
-lookupProcess name = do
+lookupCallee :: Callee -> RuntimeM Process
+lookupCallee (Callee name _) = do
   definitions <- lift $ lift $ gets replDefinitions
   case Map.lookup name definitions of
     Nothing -> throwError $ Runtime_NotInScope name

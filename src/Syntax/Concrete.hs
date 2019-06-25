@@ -11,9 +11,10 @@ import qualified Syntax.Binding as B
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
 import Data.Map (Map)
+import qualified Data.Map as Map
+import Data.Maybe (mapMaybe)
 import qualified Data.Set as Set
 import Data.Function (on)
-import qualified Data.Map as Map
 import Prelude hiding (LT, EQ, GT)
 
 import Control.Monad.State
@@ -22,7 +23,7 @@ import Control.Monad.State
 -- | Concrete Syntax Tree
 
 -- variables and names
-data Name     = Name      Text Loc deriving (Show)
+data Name     = Name      Text Loc deriving (Show, Eq, Ord)
 data Chan     = Chan      Text Loc deriving (Show, Eq, Ord)
 data TypeVar  = TypeVar   Text Loc deriving (Show)
 data TypeName = TypeName  Text Loc deriving (Show)
@@ -30,6 +31,9 @@ data TypeName = TypeName  Text Loc deriving (Show)
 
 data Program = Program [Declaration] Loc deriving (Show)
 
+data Definition = Annotated   Name Process Session
+                | Unannotated Name Process
+                deriving (Show)
 data Declaration = TypeSig  Name SessionSyntax Loc
                  | TermDefn Name Process Loc
                  deriving (Show)
@@ -55,16 +59,6 @@ data Process  = Call      Name                              Loc
               | End                                         Loc
               | Mix       Process   Process                 Loc
               deriving (Show)
-
-insertSessionSyntax :: Chan -> Type -> SessionSyntax -> SessionSyntax
-insertSessionSyntax x t (SessionSyntax pairs m) =
-    SessionSyntax (Map.insert x t pairs) m
-
-emptySessionSyntax :: Loc -> SessionSyntax
-emptySessionSyntax l = SessionSyntax Map.empty l
-
-singletonSessionSyntax :: Chan -> Type -> Loc -> SessionSyntax
-singletonSessionSyntax x t l = SessionSyntax (Map.insert x t Map.empty) l
 
 data Type = Var     TypeVar         Loc
           | Dual    Type            Loc
@@ -99,26 +93,56 @@ instance HasDual Type where
   dual (Top l)          = Zero l
 
 --------------------------------------------------------------------------------
--- | Instances
+-- | Helper functions
 
--- instance Eq Type where
---   (==) = (==) `on` bind . dual
---
--- instance Ord Type where
---   compare = compare `on` bind . dual
---
--- instance Eq Name where
---   (==) = (==) `on` bind
---
--- instance Ord Name where
---   compare = compare `on` bind
---
---
--- instance Eq TypeName where
---   (==) = (==) `on` bind
---
--- instance Ord TypeName where
---   compare = compare `on` bind
+typeSigName :: Declaration -> Maybe Name
+typeSigName (TypeSig n _ _) = Just n
+typeSigName _               = Nothing
+
+termDefnName :: Declaration -> Maybe Name
+termDefnName (TermDefn n _ _) = Just n
+termDefnName _                = Nothing
+
+extractProcess :: Definition -> Process
+extractProcess (Annotated _ term _) = term
+extractProcess (Unannotated _ term) = term
+
+convert :: SessionSyntax -> Session
+convert (SessionSyntax xs _) = xs
+
+insertSessionSyntax :: Chan -> Type -> SessionSyntax -> SessionSyntax
+insertSessionSyntax x t (SessionSyntax pairs m) =
+    SessionSyntax (Map.insert x t pairs) m
+
+emptySessionSyntax :: Loc -> SessionSyntax
+emptySessionSyntax l = SessionSyntax Map.empty l
+
+singletonSessionSyntax :: Chan -> Type -> Loc -> SessionSyntax
+singletonSessionSyntax x t l = SessionSyntax (Map.insert x t Map.empty) l
+
+toDefinitions :: Program -> Map Name Definition
+toDefinitions (Program declarations _) = definitions
+  where
+    toTypeSigPair (TypeSig n s _) = Just (n, convert s)
+    toTypeSigPair _                 = Nothing
+
+    toTermDefnPair (TermDefn n t _) = Just (n, (n, t))
+    toTermDefnPair _                  = Nothing
+
+    typeSigs :: Map Name Session
+    typeSigs  = Map.fromList $ mapMaybe toTypeSigPair declarations
+
+    termDefns :: Map Name (Name, Process)
+    termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
+
+    termsWithTypes :: Map Name Definition
+    termsWithTypes = Map.map (\ ((n, t), s) -> Annotated n t s) $ Map.intersectionWith (,) termDefns typeSigs
+
+    termsWithoutTypes :: Map Name Definition
+    termsWithoutTypes = Map.map (\ (n, t) -> Unannotated n t) $ Map.difference termDefns typeSigs
+
+    definitions :: Map Name Definition
+    definitions = Map.union termsWithTypes termsWithoutTypes
 
 --------------------------------------------------------------------------------
 -- | Instance of Located

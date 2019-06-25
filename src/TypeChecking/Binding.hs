@@ -21,15 +21,25 @@ import Control.Monad.Reader
 import Control.Monad.State
 -- import Control.Monad.Except
 
---
--- freeChannels :: Process -> Set Chan
--- freeChannels (Call ) = freeChannels p `Set.union` freeChannels q
--- freeChannels (Compose x _ p q _) = freeChannels p `Set.union` freeChannels q
+
+freeChannels :: Process -> BindM (Set B.Chan)
+freeChannels (Call name _) = do
+  result <- Map.lookup name <$> gets bsCallees
+  case result of
+    Nothing -> do
+      lookupResult <- Map.lookup name <$> ask
+      case lookupResult of
+        Nothing -> undefined
+        Just defn -> freeChannels (extractProcess defn)
+    Just (B.Callee _ s) -> return s
+freeChannels (Compose x _ p q _) =
+  Set.union
+    <$> freeChannels p
+    <*> freeChannels q
 
 
-
-bindingCheck :: B.Process -> TCM ()
-bindingCheck process = error $ show process
+bindProgram :: Program -> Map B.Name B.Definition
+bindProgram = undefined . toDefinitions
 
 --------------------------------------------------------------------------------
 -- | Converting to Concrete Binding Tree
@@ -42,22 +52,22 @@ data Binding = Binding
 data BindingState = BindingState
   { bsChannel :: Binding
   , bsTypeVar :: Binding
-  , bsProfile :: Map Name (Set Text)
+  , bsCallees :: Map Name B.Callee
   } deriving (Show)
 
-type Definitions = Map B.Name Definition
+type Definitions = Map Name Definition
 type BindM = StateT BindingState (Reader Definitions)
 
 class Bind a b | a -> b where
   bindM :: a -> BindM b
 
-bind :: Bind a b => Definitions -> a -> b
-bind definitions x =
+bind :: Bind a b => Maybe Program -> a -> b
+bind program x =
   runReader
     (evalStateT
       (bindM x)
       initialBindingState)
-    definitions
+    (maybe Map.empty toDefinitions program)
   where
     initialBindingState :: BindingState
     initialBindingState =
@@ -65,6 +75,8 @@ bind definitions x =
         (Binding 0 Set.empty)
         (Binding 0 Set.empty)
         Map.empty
+
+-- lookupCallee :: Name -> Maybe
 
 --------------------------------------------------------------------------------
 
@@ -141,12 +153,11 @@ createBinderChan (Chan name loc) = do
   let var = B.Chan (Bound idx) name loc
   return (var, B.subsituteProcess name idx)
 
+instance Bind Name B.Name where
+  bindM (Name name loc) = return $ B.Name name loc
 
 instance Bind TypeName B.TypeName where
   bindM (TypeName name loc) = return $ B.TypeName name loc
-
-instance Bind Name B.Name where
-  bindM (Name name loc) = return $ B.Name name loc
 
 instance Bind Chan B.Chan where
   bindM (Chan name loc) = do
@@ -154,11 +165,37 @@ instance Bind Chan B.Chan where
     modify $ \ st -> st { bsChannel = Binding idx (Set.insert name ns) }
     return $ B.Chan (Free name) name loc
 
+-- instance Bind Name B.Callee where
+--   bindM (Name name loc) = do
+--     B.Callee
+--       <$> pure name
+--       <*> pure loc
+
+-- throwBack :: B.Name -> Name
+-- throwBack (B.Name name loc) = Name name loc
+
 instance Bind Process B.Process where
-  bindM (Call name loc) =
-    B.Call
-      <$> bindM name
-      <*> pure loc
+  bindM (Call name loc) = do
+    -- lookup the existing callees
+    result <- Map.lookup name <$> gets bsCallees
+    callee <- case result of
+      -- register a new calee
+      Nothing -> do
+        lookupResult <- Map.lookup name <$> ask
+        case lookupResult of
+          Nothing -> undefined
+            -- throwError $ InferError $ DefnNotFound (Call name loc) name
+          Just definition -> do
+            xs <- freeChannels $ extractProcess definition
+            B.Callee
+              <$> bindM name
+              <*> pure xs
+              -- (Map.fromList $ map (\n -> (n, Free n)) $ Set.toList xs)
+      -- return
+      Just c -> return c
+
+
+    return $ B.Call callee loc
   bindM (Link nameA nameB loc) =
     B.Link
       <$> bindM nameA
