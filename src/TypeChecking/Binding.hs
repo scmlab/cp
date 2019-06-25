@@ -42,6 +42,7 @@ data Binding = Binding
 data BindingState = BindingState
   { bsChannel :: Binding
   , bsTypeVar :: Binding
+  , bsProfile :: Map Name (Set Text)
   } deriving (Show)
 
 type Definitions = Map B.Name Definition
@@ -55,8 +56,15 @@ bind definitions x =
   runReader
     (evalStateT
       (bindM x)
-      (BindingState (Binding 0 Set.empty) (Binding 0 Set.empty)))
+      initialBindingState)
     definitions
+  where
+    initialBindingState :: BindingState
+    initialBindingState =
+      BindingState
+        (Binding 0 Set.empty)
+        (Binding 0 Set.empty)
+        Map.empty
 
 --------------------------------------------------------------------------------
 
