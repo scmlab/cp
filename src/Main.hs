@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings                  #-}
 module Main where
 
-import Syntax.Base
+-- import Syntax.Base
 import Syntax.Binding
 import Syntax.Parser
 import TypeChecking
@@ -11,7 +11,7 @@ import TypeChecking.Base
 import Pretty.Error ()
 import Pretty.Base
 import Base
-import Runtime
+-- import Runtime
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
@@ -66,7 +66,7 @@ parseSource = do
   case parseProgram filePath source of
       Left err -> throwError $ ParseError err
       Right cst -> do
-        let cbt = toBinding definitions cst
+        let cbt = bind definitions cst
         modify $ \ st -> st { replProgram = Just cbt }
         return cbt
 
@@ -75,7 +75,7 @@ parseProcessM raw = do
   definitions <- gets replDefinitions
   case parseProcess raw of
     Left err -> throwError $ ParseError err
-    Right ast -> return $ toBinding definitions ast
+    Right ast -> return $ bind definitions ast
 
 printErrorIO :: MState -> Error -> IO ()
 printErrorIO state err = case replSource state of
@@ -257,7 +257,7 @@ handleCommand (Debug s) = do
 
 handleCommand Quit = return False
 handleCommand Help = liftIO displayHelp >> return True
-handleCommand (Eval s) = do
+handleCommand (Eval _) = do
   void $ handleM $ do
     -- process <- parseProcess s
     -- result <- evaluate process

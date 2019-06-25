@@ -39,10 +39,10 @@ parseProcess src = runExcept (evalStateT processParser initState)
 --         startingLoc = Loc (startPos filePath) (startPos filePath)
 --
 -- parseAbstractProcess :: ByteString -> Either ParseError B.Process
--- parseAbstractProcess src = toBinding <$> parseConcreteProcess src
+-- parseAbstractProcess src = bind <$> parseConcreteProcess src
 
 -- parseAbstraceSessionSyntax :: ByteString -> Either ParseError B.SessionSyntax
--- parseAbstraceSessionSyntax src = toBinding <$> runExcept (evalStateT sessionSyntaxParser initState)
+-- parseAbstraceSessionSyntax src = bind <$> runExcept (evalStateT sessionSyntaxParser initState)
 --   where filePath = "<interactive>"
 --         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
 --         startingLoc = Loc (startPos filePath) (startPos filePath)
@@ -53,4 +53,4 @@ parseProgram filePath src = runExcept (evalStateT programParser initState)
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
 -- parseProgram :: FilePath -> ByteString -> Either ParseError B.Program
--- parseProgram filePath src = toBinding <$> parseConcreteProgram filePath src
+-- parseProgram filePath src = bind <$> parseConcreteProgram filePath src

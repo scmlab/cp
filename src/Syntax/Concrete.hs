@@ -102,23 +102,23 @@ instance HasDual Type where
 -- | Instances
 
 -- instance Eq Type where
---   (==) = (==) `on` toBinding . dual
+--   (==) = (==) `on` bind . dual
 --
 -- instance Ord Type where
---   compare = compare `on` toBinding . dual
+--   compare = compare `on` bind . dual
 --
 -- instance Eq Name where
---   (==) = (==) `on` toBinding
+--   (==) = (==) `on` bind
 --
 -- instance Ord Name where
---   compare = compare `on` toBinding
+--   compare = compare `on` bind
 --
 --
 -- instance Eq TypeName where
---   (==) = (==) `on` toBinding
+--   (==) = (==) `on` bind
 --
 -- instance Ord TypeName where
---   compare = compare `on` toBinding
+--   compare = compare `on` bind
 
 --------------------------------------------------------------------------------
 -- | Instance of Located

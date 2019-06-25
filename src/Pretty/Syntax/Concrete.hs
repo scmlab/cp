@@ -103,4 +103,4 @@ instance Pretty SessionSyntax where
   pretty (SessionSyntax pairs _) = pretty pairs
 --
 -- instance Pretty SessionSyntax where
---   pretty = pretty . toBinding
+--   pretty = pretty . bind
