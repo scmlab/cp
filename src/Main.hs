@@ -20,6 +20,7 @@ import qualified Data.ByteString.Lazy.Char8 as BS8
 import Data.Text.Prettyprint.Doc.Render.Terminal
 
 import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Maybe (isNothing)
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd, isPrefixOf)
@@ -31,6 +32,7 @@ import Data.Text.Prettyprint.Doc
 import Control.Exception (IOException, try)
 import Control.Monad.State hiding (state)
 import Control.Monad.Except
+import Control.Monad.Reader
 
 import System.Console.Haskeline
 import System.Console.GetOpt
@@ -62,7 +64,6 @@ loadSource filePath = do
 
 parseSource :: M C.Program
 parseSource = do
-  definitions <- gets replDefinitions
   (filePath, source) <- getSourceOrThrow
   case parseProgram filePath source of
       Left err -> throwError $ ParseError err
@@ -72,11 +73,9 @@ parseSource = do
 
 parseProcessM :: ByteString -> M C.Process
 parseProcessM raw = do
-  definitions <- gets replDefinitions
   case parseProcess raw of
     Left err -> throwError $ ParseError err
-    Right ast -> undefined
-      -- return $ bind definitions ast
+    Right process -> return process
 
 printErrorIO :: MState -> Error -> IO ()
 printErrorIO state err = case replSource state of
@@ -104,6 +103,24 @@ runTCM f = do
   case result of
     Left err -> throwError $ TypeError err
     Right val -> return (val, s)
+
+runBindM :: Maybe C.Program -> BindM a -> M a
+runBindM program f = do
+  let result = runReader
+        (evalStateT
+          (runExceptT f)
+          initialBindingState)
+        (maybe Map.empty C.toDefinitions program)
+  case result of
+    Left err -> throwError $ ScopeError err
+    Right val -> return val
+  where
+    initialBindingState :: BindingState
+    initialBindingState =
+      BindingState
+        (Binding 0 Set.empty)
+        (Binding 0 Set.empty)
+        Map.empty
 
 main :: IO ()
 main = do
@@ -248,16 +265,21 @@ handleCommand (TypeOf expr) = do
     program <- gets replProgram
     -- local expression parsing
     process <- parseProcessM expr
-    let process' = bind program process
-
+    process' <- runBindM program (bindM process)
     (session, _) <- runTCM $ (inferTerm process')
     liftIO $ putDoc $ report session <> line
     return ()
   return True
 
-handleCommand (Debug s) = do
+handleCommand (Debug expr) = do
   void $ handleM $ do
-    process <- parseProcessM s
+    -- global environment setup
+    program <- gets replProgram
+    -- local expression parsing
+    process <- parseProcessM expr
+    process' <- runBindM program (bindM process)
+    liftIO $ putDoc $ pretty process' <> line
+
     -- _ <- runTCM $ bindingCheck process
     return ()
   return True

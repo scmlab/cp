@@ -45,6 +45,13 @@ instance Report ScopeError where
     , CODE $ locOf a
     , CODE $ locOf b
     ]
+  reportS (DefnNotFound term name) = reportS
+    [ H1 "Definition not found"
+    , P $ highlight name <> " is not in scope"
+        <> line
+        <> "when checking the following term"
+    , CODE $ locOf term
+    ]
   reportS (Others msg) = reportS
     [ H1 "Other unformatted type errors"
     , P $ pretty msg
@@ -124,13 +131,7 @@ instance Report TypeError where
     , CODE $ locOf term
     ]
 
-  reportS (DefnNotFound term name) = reportS
-    [ H1 "Definition not found"
-    , P $ highlight name <> " is not in scope"
-        <> line
-        <> "when checking the following term"
-    , CODE $ locOf term
-    ]
+
 
   reportS (SessionShouldBeDisjoint term session) = reportS
     [ H1 "Sessions not disjoint"

@@ -44,12 +44,12 @@ data TypeError
   | CannotCloseChannel Process Chan
   | ChannelNotFound Process Chan Session
   | ChannelNotComsumed Process Session
-  | DefnNotFound Process Name
   deriving (Show)
 
 data ScopeError
   = TypeSigDuplicated C.Name C.Name
   | TermDefnDuplicated C.Name C.Name
+  | DefnNotFound C.Process C.Name
   | Others Text
   deriving (Show)
 

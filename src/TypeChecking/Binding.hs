@@ -19,17 +19,17 @@ import Prelude hiding (LT, EQ, GT)
 
 import Control.Monad.Reader
 import Control.Monad.State
--- import Control.Monad.Except
+import Control.Monad.Except
 
 
 freeChannels :: Process -> BindM (Set B.Chan)
-freeChannels (Call name _) = do
+freeChannels (Call name loc) = do
   result <- Map.lookup name <$> gets bsCallees
   case result of
     Nothing -> do
       lookupResult <- Map.lookup name <$> ask
       case lookupResult of
-        Nothing -> undefined
+        Nothing -> throwError $ DefnNotFound (Call name loc) name
         Just defn -> freeChannels (extractProcess defn)
     Just (B.Callee _ s) -> return s
 freeChannels (Compose x _ p q _) =
@@ -56,25 +56,26 @@ data BindingState = BindingState
   } deriving (Show)
 
 type Definitions = Map Name Definition
-type BindM = StateT BindingState (Reader Definitions)
+type BindM = ExceptT ScopeError (StateT BindingState (Reader Definitions))
 
 class Bind a b | a -> b where
   bindM :: a -> BindM b
 
-bind :: Bind a b => Maybe Program -> a -> b
-bind program x =
-  runReader
-    (evalStateT
-      (bindM x)
-      initialBindingState)
-    (maybe Map.empty toDefinitions program)
-  where
-    initialBindingState :: BindingState
-    initialBindingState =
-      BindingState
-        (Binding 0 Set.empty)
-        (Binding 0 Set.empty)
-        Map.empty
+-- bind :: Bind a b => Maybe Program -> a -> (Either ScopeError b)
+-- bind program x =
+--   runReader
+--     (evalStateT
+--       (runExceptT
+--         (bindM x))
+--       initialBindingState)
+--     (maybe Map.empty toDefinitions program)
+--   where
+--     initialBindingState :: BindingState
+--     initialBindingState =
+--       BindingState
+--         (Binding 0 Set.empty)
+--         (Binding 0 Set.empty)
+--         Map.empty
 
 -- lookupCallee :: Name -> Maybe
 
@@ -183,8 +184,7 @@ instance Bind Process B.Process where
       Nothing -> do
         lookupResult <- Map.lookup name <$> ask
         case lookupResult of
-          Nothing -> undefined
-            -- throwError $ InferError $ DefnNotFound (Call name loc) name
+          Nothing -> throwError $ DefnNotFound (Call name loc) name
           Just definition -> do
             xs <- freeChannels $ extractProcess definition
             B.Callee
