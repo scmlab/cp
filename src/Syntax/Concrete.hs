@@ -178,37 +178,6 @@ instance Located Type where
   locOf (Zero loc) = loc
   locOf (Top loc) = loc
 
-
--- --------------------------------------------------------------------------------
--- -- | Converting to Abstract Syntax Tree
---
--- instance ToAbstract TypeVar A.TypeVar where
---   toAbstract = toAbstract . toBinding
---
--- instance ToAbstract TypeName A.TypeName where
---   toAbstract = toAbstract . toBinding
---
--- instance ToAbstract Name A.Name where
---   toAbstract = toAbstract . toBinding
---
--- instance ToAbstract Chan A.Chan where
---   toAbstract = toAbstract . toBinding
---
--- instance ToAbstract Program A.Program where
---   toAbstract = toAbstract . toBinding
---
--- instance ToAbstract Declaration A.Declaration where
---   toAbstract = toAbstract . toBinding
---
--- instance ToAbstract Session A.Session where
---   toAbstract = toAbstract . toBinding
---
--- instance ToAbstract Process A.Process where
---   toAbstract = toAbstract . toBinding
---
--- instance ToAbstract Type A.Type where
---   toAbstract = toAbstract . toBinding
-
 --------------------------------------------------------------------------------
 
 createBinderTypeVar :: TypeVar -> BindingM (B.TypeVar, B.Type -> B.Type)

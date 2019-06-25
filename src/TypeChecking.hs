@@ -3,6 +3,7 @@ module TypeChecking where
 import Syntax.Binding
 -- import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
 import TypeChecking.Infer
+import TypeChecking.Binding
 import TypeChecking.Base
 --
 import Prelude hiding (lookup)
@@ -17,8 +18,14 @@ import Control.Monad.State
 import Control.Monad.Except
 
 
+checkAll :: Program -> TCM (Map Name Session)
+checkAll program = do
+  scopeCheckAll program
+  bindingCheckAll
+  typeCheckAll
+
+
 --------------------------------------------------------------------------------
--- | TCM
 
 -- there should be only at most one type signature or term definition
 checkDuplications :: Program -> TCM ()
@@ -39,24 +46,29 @@ checkDuplications (Program declarations _) = do
       let dup = filter ((> 1) . length) $ List.group $ List.sort names
       in if null dup then Nothing else Just (head dup !! 0, head dup !! 1)
 
-scopeCheck :: Program -> TCM ()
-scopeCheck program = do
+scopeCheckAll :: Program -> TCM ()
+scopeCheckAll program = do
   -- checking the definitions
   checkDuplications program
   -- store the definitions
   putDefiniotions program
 
-typeCheck :: TCM (Map Name Session)
-typeCheck = do
+extractProcess :: Definition -> Process
+extractProcess (Annotated _ term _) = term
+extractProcess (Unannotated _ term) = term
+
+bindingCheckAll :: TCM ()
+bindingCheckAll = do
+  definitions <- Map.elems <$> gets stDefinitions
+  forM_ definitions (bindingCheck . extractProcess)
+  -- Map.traverseWithKey (const $ bindingCheck . extractProcess) definitions
+
+typeCheckAll :: TCM (Map Name Session)
+typeCheckAll = do
   -- return the inferred definitions
   definitions <- gets stDefinitions
   Map.traverseMaybeWithKey typeCheckOrInfer definitions
 
-checkAll :: Program -> TCM (Map Name Session)
-checkAll program = do
-
-  scopeCheck program
-  typeCheck
 
 typeCheckOrInfer :: Name -> Definition -> TCM (Maybe Session)
 typeCheckOrInfer _ (Annotated name term session) = do

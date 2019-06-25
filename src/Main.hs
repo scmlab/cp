@@ -5,6 +5,7 @@ import Syntax.Base
 import Syntax.Binding
 import Syntax.Parser
 import TypeChecking
+import TypeChecking.Binding
 import TypeChecking.Infer
 import TypeChecking.Base
 import Pretty.Error ()
@@ -247,8 +248,7 @@ handleCommand (TypeOf s) = do
 handleCommand (Debug s) = do
   void $ handleM $ do
     process <- parseProcess s
-    result <- evaluate process
-    liftIO $ print result
+    _ <- runTCM $ bindingCheck process
     return ()
   return True
 

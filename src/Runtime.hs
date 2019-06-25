@@ -1,14 +1,8 @@
 module Runtime where
 
 
--- import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
 import Syntax.Binding
--- import qualified Syntax.Abstract as A
--- import qualified Syntax.Concrete as C
--- import Syntax.Base
 import Pretty
--- import Syntax.Abstract (Session, Type(..), TypeVar(..))
--- import Syntax.Abstract hiding (Session)
 
 import TypeChecking.Base
 import Base
