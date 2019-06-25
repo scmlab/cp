@@ -1,17 +1,16 @@
 module Syntax.Parser
   ( parseProgram
-  , parseConcreteProcess
-  , parseAbstractProcess
-  , parseAbstraceSessionSyntax
-  , parseConcreteProgram
+  , parseProcess
+  -- , parseConcreteProcess
+  -- , parseAbstractProcess
+  -- , parseAbstraceSessionSyntax
+  -- , parseConcreteProgram
   , ParseError(..)
   )
   where
 
 import Syntax.Base
-import qualified Syntax.Binding as B
--- import qualified Syntax.Abstract as A
-import qualified Syntax.Concrete as C
+import Syntax.Concrete
 import Syntax.Parser.Parser (programParser, processParser, sessionSyntaxParser)
 import Syntax.Parser.Lexer (lexer)
 import Syntax.Parser.Type
@@ -24,25 +23,34 @@ import qualified Data.ByteString.Lazy.Char8 as BS
 import Data.Loc
 import Language.Lexer.Applicative
 
-parseConcreteProcess :: ByteString -> Either ParseError C.Process
-parseConcreteProcess src = runExcept (evalStateT processParser initState)
+
+
+parseProcess :: ByteString -> Either ParseError Process
+parseProcess src = runExcept (evalStateT processParser initState)
   where filePath = "<interactive>"
         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
-parseAbstractProcess :: ByteString -> Either ParseError B.Process
-parseAbstractProcess src = toBinding <$> parseConcreteProcess src
 
-parseAbstraceSessionSyntax :: ByteString -> Either ParseError B.SessionSyntax
-parseAbstraceSessionSyntax src = toBinding <$> runExcept (evalStateT sessionSyntaxParser initState)
-  where filePath = "<interactive>"
-        initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
-        startingLoc = Loc (startPos filePath) (startPos filePath)
+-- parseConcreteProcess :: ByteString -> Either ParseError Process
+-- parseConcreteProcess src = runExcept (evalStateT processParser initState)
+--   where filePath = "<interactive>"
+--         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
+--         startingLoc = Loc (startPos filePath) (startPos filePath)
+--
+-- parseAbstractProcess :: ByteString -> Either ParseError B.Process
+-- parseAbstractProcess src = toBinding <$> parseConcreteProcess src
 
-parseConcreteProgram :: FilePath -> ByteString -> Either ParseError C.Program
-parseConcreteProgram filePath src = runExcept (evalStateT programParser initState)
+-- parseAbstraceSessionSyntax :: ByteString -> Either ParseError B.SessionSyntax
+-- parseAbstraceSessionSyntax src = toBinding <$> runExcept (evalStateT sessionSyntaxParser initState)
+--   where filePath = "<interactive>"
+--         initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
+--         startingLoc = Loc (startPos filePath) (startPos filePath)
+
+parseProgram :: FilePath -> ByteString -> Either ParseError Program
+parseProgram filePath src = runExcept (evalStateT programParser initState)
   where initState = ParserState startingLoc startingLoc (runLexer lexer filePath (BS.unpack src)) src
         startingLoc = Loc (startPos filePath) (startPos filePath)
 
-parseProgram :: FilePath -> ByteString -> Either ParseError B.Program
-parseProgram filePath src = toBinding <$> parseConcreteProgram filePath src
+-- parseProgram :: FilePath -> ByteString -> Either ParseError B.Program
+-- parseProgram filePath src = toBinding <$> parseConcreteProgram filePath src

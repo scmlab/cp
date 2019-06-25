@@ -61,18 +61,21 @@ loadSource filePath = do
 
 parseSource :: M Program
 parseSource = do
+  definitions <- gets replDefinitions
   (filePath, source) <- getSourceOrThrow
-  case parseConcreteProgram filePath source of
+  case parseProgram filePath source of
       Left err -> throwError $ ParseError err
       Right cst -> do
-        let cbt = toBinding cst
+        let cbt = toBinding definitions cst
         modify $ \ st -> st { replProgram = Just cbt }
         return cbt
 
-parseProcess :: ByteString -> M (Process)
-parseProcess raw = case parseConcreteProcess raw of
-  Left err -> throwError $ ParseError err
-  Right ast -> return $ toBinding ast
+parseProcessM :: ByteString -> M Process
+parseProcessM raw = do
+  definitions <- gets replDefinitions
+  case parseProcess raw of
+    Left err -> throwError $ ParseError err
+    Right ast -> return $ toBinding definitions ast
 
 printErrorIO :: MState -> Error -> IO ()
 printErrorIO state err = case replSource state of
@@ -239,7 +242,7 @@ handleCommand Reload = do
 
 handleCommand (TypeOf s) = do
   void $ handleM $ do
-    term <- parseProcess s
+    term <- parseProcessM s
     (session, _) <- runTCM $ (inferTerm term)
     liftIO $ putDoc $ report session <> line
     return ()
@@ -247,7 +250,7 @@ handleCommand (TypeOf s) = do
 
 handleCommand (Debug s) = do
   void $ handleM $ do
-    process <- parseProcess s
+    process <- parseProcessM s
     _ <- runTCM $ bindingCheck process
     return ()
   return True
@@ -256,9 +259,9 @@ handleCommand Quit = return False
 handleCommand Help = liftIO displayHelp >> return True
 handleCommand (Eval s) = do
   void $ handleM $ do
-    process <- parseProcess s
-    result <- evaluate process
-    liftIO $ putDoc $ pretty result <> line
+    -- process <- parseProcess s
+    -- result <- evaluate process
+    -- liftIO $ putDoc $ pretty result <> line
     return ()
   return True
 handleCommand Noop = return True

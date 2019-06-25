@@ -11,11 +11,13 @@ import TypeChecking.Base
 
 -- import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Prelude hiding (LT, EQ, GT)
 
+import Control.Monad.Reader
 import Control.Monad.State
 -- import Control.Monad.Except
 
@@ -42,16 +44,18 @@ data BindingState = BindingState
   , bsTypeVar :: Binding
   } deriving (Show)
 
-type BindingM = State BindingState
+type BindingM = StateT BindingState (Reader (Map B.Name Definition))
 
 class ToBinding a b | a -> b where
   toBindingM :: a -> BindingM b
 
-toBinding :: ToBinding a b => a -> b
-toBinding x =
-  evalState
-    (toBindingM x)
-    (BindingState (Binding 0 Set.empty) (Binding 0 Set.empty))
+toBinding :: ToBinding a b => Map B.Name Definition -> a -> b
+toBinding definitions x =
+  runReader
+    (evalStateT
+      (toBindingM x)
+      (BindingState (Binding 0 Set.empty) (Binding 0 Set.empty)))
+    definitions
 
 --------------------------------------------------------------------------------
 

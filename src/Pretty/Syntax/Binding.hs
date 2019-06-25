@@ -13,6 +13,7 @@ import Data.Text.Prettyprint.Doc hiding (line)
 
 --------------------------------------------------------------------------------
 -- |
+
 instance Pretty TypeName where
   pretty (TypeName name _) = pretty name
 

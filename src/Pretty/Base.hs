@@ -15,6 +15,7 @@ import qualified Data.Loc as Loc
 
 import Data.Loc
 import qualified Data.Set as Set
+import qualified Data.Map as Map
 import Data.Monoid (mempty, (<>))
 import System.IO
 
@@ -137,3 +138,6 @@ prettySourceCode (SourceCode source (Loc from to) spread) =
 
 instance Pretty a => Pretty (Set.Set a) where
   pretty s = encloseSep "{" "}" ", " (map pretty $ Set.toList s)
+
+-- instance (Pretty k, Pretty v) => Pretty (Map.Map k v) where
+--   pretty m = encloseSep "{" "}" ", " (map (\(k, v) -> pretty k <+> ":" <+> pretty v) $ Map.toList m)

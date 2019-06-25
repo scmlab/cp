@@ -34,7 +34,8 @@ data Declaration = TypeSig  Name SessionSyntax Loc
                  | TermDefn Name Process Loc
                  deriving (Show)
 
-data SessionSyntax = SessionSyntax (Map Chan Type) Loc deriving (Show)
+type Session = Map Chan Type
+data SessionSyntax = SessionSyntax Session Loc deriving (Show)
 
 data Process  = Call      Name                              Loc
               | Link      Chan Chan                         Loc
