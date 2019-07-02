@@ -353,7 +353,7 @@ convert (SessionSyntax xs _) = xs
 freeVariables :: Process -> Set Text
 freeVariables process = case process of
   Call (Callee _ p) loc -> freeVariables p
-  Link x y loc -> Set.empty
+  Link x y loc -> Set.fromList [toVar x, toVar y]
   Compose x t p q loc -> Set.delete (toVar x) $ Set.union (freeVariables p) (freeVariables q)
   Output x y p q loc -> Set.insert (toVar x) $ Set.delete (toVar y) $ Set.union (freeVariables p) (freeVariables q)
   Input x y p loc -> Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)

@@ -1,6 +1,4 @@
--- putName = u[] . end
--- compute = u() . v() . w[] . end
+zero = x(X).x(s).x(z).z<->x
+one = x(X).x(s).x(z).?s[f].f[a].(a<->z|f<->x)
 
-compose0 = \x . (x[] . end | x() . end)
-output0 = x[y] . (y[] . end | x() . end)
-input = x(y) . x() . y() . end
+-- count = x[1].x[s].(!s(f).f(a).incr|x[z].(nought|x<->y))
