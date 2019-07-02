@@ -16,7 +16,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe)
 
--- import Control.Monad.State
+import Control.Monad.State
 import Control.Monad.Except
 
 bind :: Bind a b => Maybe C.Program -> a -> M b
@@ -31,7 +31,11 @@ scopeCheck program = do
   -- check the program for duplicated definitions
   checkDuplications program
   -- form the binding structure
-  B.toDefinitions <$> bind (Just program) program
+  definitions <- B.toDefinitions <$> bind (Just program) program
+  modify $ \ st -> st { replDefinitions = definitions }
+
+  return definitions
+
 
 typeCheck :: Map B.Name B.Definition -> TCM (Map B.Name B.Session)
 typeCheck definitions = do

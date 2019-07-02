@@ -126,8 +126,8 @@ inferWith term binders exclusions = do
 
   result <- case term of
     Call (Callee name _) _ -> do
-      definition <- lift $ lift $ gets stDefinitions
-      case Map.lookup name definition of
+      definitions <- lift $ lift $ gets stDefinitions
+      case Map.lookup name definitions of
         Nothing -> error "[panic] Definition not found, this shouldn't happen at the type checking state"
         Just (Annotated _ _ t) -> return t
         Just (Unannotated _ p) -> inferWith p binders exclusions
