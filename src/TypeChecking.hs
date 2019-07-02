@@ -31,7 +31,7 @@ scopeCheck program = do
   -- check the program for duplicated definitions
   checkDuplications program
   -- form the binding structure
-  definitions <- B.toDefinitions <$> bind (Just program) program
+  B.Program definitions _ <- bind (Just program) program
   modify $ \ st -> st { replDefinitions = definitions }
 
   return definitions

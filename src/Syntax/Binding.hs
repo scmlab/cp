@@ -63,11 +63,11 @@ data Definition = Annotated   Name Process Session
                 | Unannotated Name Process
                 deriving (Show)
 type Definitions = Map Name Definition
-data Program = Program [Declaration] Loc deriving (Show)
+data Program = Program Definitions Loc deriving (Show)
 
-data Declaration = TypeSig  Name SessionSyntax Loc
-                 | TermDefn Name Process Loc
-                 deriving (Show)
+-- data Declaration = TypeSig  Name SessionSyntax Loc
+--                  | TermDefn Name Process Loc
+--                  deriving (Show)
 
 -- typeSigName :: Declaration -> Maybe Name
 -- typeSigName (TypeSig n _ _) = Just n
@@ -254,9 +254,9 @@ instance Located Chan where
 instance Located Program where
   locOf (Program _ loc) = loc
 
-instance Located Declaration where
-  locOf (TypeSig _ _ loc) = loc
-  locOf (TermDefn _ _ loc) = loc
+-- instance Located Declaration where
+--   locOf (TypeSig _ _ loc) = loc
+--   locOf (TermDefn _ _ loc) = loc
 
 instance Located Process where
   locOf (Call _ loc) = loc
@@ -321,26 +321,26 @@ instance HasDual Type where
 convert :: SessionSyntax -> Session
 convert (SessionSyntax xs _) = xs
 
-toDefinitions :: Program -> Definitions
-toDefinitions (Program declarations _) = definitions
-  where
-    toTypeSigPair (TypeSig n s _) = Just (n, convert s)
-    toTypeSigPair _                 = Nothing
-
-    toTermDefnPair (TermDefn n t _) = Just (n, (n, t))
-    toTermDefnPair _                  = Nothing
-
-    typeSigs :: Map Name Session
-    typeSigs  = Map.fromList $ mapMaybe toTypeSigPair declarations
-
-    termDefns :: Map Name (Name, Process)
-    termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
-
-    termsWithTypes :: Definitions
-    termsWithTypes = Map.map (\ ((n, t), s) -> Annotated n t s) $ Map.intersectionWith (,) termDefns typeSigs
-
-    termsWithoutTypes :: Definitions
-    termsWithoutTypes = Map.map (\ (n, t) -> Unannotated n t) $ Map.difference termDefns typeSigs
-
-    definitions :: Definitions
-    definitions = Map.union termsWithTypes termsWithoutTypes
+-- toDefinitions :: Program -> Definitions
+-- toDefinitions (Program declarations _) = definitions
+--   where
+--     toTypeSigPair (TypeSig n s _) = Just (n, convert s)
+--     toTypeSigPair _                 = Nothing
+--
+--     toTermDefnPair (TermDefn n t _) = Just (n, (n, t))
+--     toTermDefnPair _                  = Nothing
+--
+--     typeSigs :: Map Name Session
+--     typeSigs  = Map.fromList $ mapMaybe toTypeSigPair declarations
+--
+--     termDefns :: Map Name (Name, Process)
+--     termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
+--
+--     termsWithTypes :: Definitions
+--     termsWithTypes = Map.map (\ ((n, t), s) -> Annotated n t s) $ Map.intersectionWith (,) termDefns typeSigs
+--
+--     termsWithoutTypes :: Definitions
+--     termsWithoutTypes = Map.map (\ (n, t) -> Unannotated n t) $ Map.difference termDefns typeSigs
+--
+--     definitions :: Definitions
+--     definitions = Map.union termsWithTypes termsWithoutTypes

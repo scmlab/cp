@@ -52,6 +52,11 @@ instance Report ScopeError where
         <> "when checking the following term"
     , CODE $ locOf term
     ]
+  reportS (RecursiveCall term name) = reportS
+    [ H1 "Recursive call detected"
+    , P $ highlight name <> " is calling itself"
+    , CODE $ locOf term
+    ]
   reportS (Others msg) = reportS
     [ H1 "Other unformatted type errors"
     , P $ pretty msg
@@ -166,6 +171,7 @@ instance Report RuntimeError where
 
 instance Report Error where
   reportS (ParseError err) = reportS err
+  reportS (ScopeError err) = reportS err
   reportS (TypeError err) = reportS err
   reportS (RuntimeError err) = reportS err
   reportS (Panic msg) = const (pretty msg)

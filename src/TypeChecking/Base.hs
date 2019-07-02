@@ -50,6 +50,7 @@ data ScopeError
   = TypeSigDuplicated C.Name C.Name
   | TermDefnDuplicated C.Name C.Name
   | DefnNotFound C.Process C.Name
+  | RecursiveCall C.Process C.Name
   | Others Text
   deriving (Show)
 
