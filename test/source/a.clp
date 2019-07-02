@@ -2,4 +2,4 @@
 -- compute = u() . v() . w[] . end
 
 -- test = \ q . (a() . end | b[] . end)
-test = x[y] . (y() . end | x[] . end)
+test = z(x) . x[y] . (y() . end | x[] . end)

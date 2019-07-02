@@ -20,57 +20,6 @@ import Prelude hiding (LT, EQ, GT)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
---
--- empty :: BindM (Set B.Chan)
--- empty = return Set.empty
---
--- union :: BindM (Set B.Chan) -> BindM (Set B.Chan) -> BindM (Set B.Chan)
--- union = liftM2 Set.union
---
--- insert :: BindM B.Chan -> BindM (Set B.Chan) -> BindM (Set B.Chan)
--- insert = liftM2 Set.insert
---
--- delete :: BindM B.Chan -> BindM (Set B.Chan) -> BindM (Set B.Chan)
--- delete = liftM2 Set.delete
---
--- freeChannels :: Process -> BindM (Set B.Chan)
--- freeChannels (Call name loc) = do
---   result <- Map.lookup name <$> gets bsCallees
---   case result of
---     Nothing -> do
---       lookupResult <- Map.lookup name <$> ask
---       case lookupResult of
---         Nothing -> throwError $ DefnNotFound (Call name loc) name
---         Just defn -> freeChannels (toProcess defn)
---     Just (B.Callee _ s) -> return s
--- freeChannels (Link x y _) =
---   insert (bindM x)
---     $ insert (bindM y)
---     $ empty
--- freeChannels (Compose x _ p q _) =
---   delete (bindM x)
---     $ union (freeChannels p) (freeChannels q)
--- freeChannels (Output x y p q _) =
---   insert (bindM x)
---     $ delete (bindM y)
---     $ union (freeChannels p) (freeChannels q)
--- freeChannels (Input x y p _) =
---   insert (bindM x)
---     $ delete (bindM y)
---     $ freeChannels p
--- freeChannels (SelectL x p _) =
---   insert (bindM x)
---     $ freeChannels p
--- freeChannels (SelectR x p _) =
---   insert (bindM x)
---     $ freeChannels p
--- freeChannels (Choice x p q _) =
---   insert (bindM x)
---     $ union (freeChannels p) (freeChannels q)
--- freeChannels (Accept x y p _) =
---   insert (bindM x)
---     $ delete (bindM y)
---     $ freeChannels p
 
 --------------------------------------------------------------------------------
 -- | Converting to Concrete Binding Tree
@@ -214,96 +163,96 @@ instance Bind Process B.Process where
           <*> bindM process
       Just c -> return c
     return $ B.Call callee loc
-  bindM (Link nameA nameB loc) =
+  bindM (Link x y loc) =
     B.Link
-      <$> bindM nameA
-      <*> bindM nameB
+      <$> bindM x
+      <*> bindM y
       <*> pure loc
-  bindM (Compose x Nothing procA procB loc) = do
+  bindM (Compose x Nothing p q loc) = do
     (var, bind) <- createBinderChan x
     B.Compose
       <$> pure var
       <*> pure Nothing
-      <*> (bind <$> bindM procA)
-      <*> (bind <$> bindM procB)
+      <*> (bind <$> bindM p)
+      <*> (bind <$> bindM q)
       <*> pure loc
-  bindM (Compose x (Just t) procA procB loc) = do
+  bindM (Compose x (Just t) p q loc) = do
     (var, bind) <- createBinderChan x
     B.Compose
       <$> pure var
       <*> (Just <$> bindM t)
-      <*> (bind <$> bindM procA)
-      <*> (bind <$> bindM procB)
+      <*> (bind <$> bindM p)
+      <*> (bind <$> bindM q)
       <*> pure loc
-  bindM (Output nameA nameB procB procA loc) = do
-    (varB, bindB) <- createBinderChan nameB
+  bindM (Output x y q p loc) = do
+    (varB, bindB) <- createBinderChan y
     B.Output
-      <$> bindM nameA
+      <$> bindM x
       <*> pure varB
-      <*> (bindB <$> bindM procB)
-      <*> bindM procA
+      <*> (bindB <$> bindM q)
+      <*> bindM p
       <*> pure loc
-  bindM (Input nameA nameB proc loc) = do
-    (varB, bindB) <- createBinderChan nameB
+  bindM (Input x y proc loc) = do
+    (varB, bindB) <- createBinderChan y
     B.Input
-      <$> bindM nameA
+      <$> bindM x
       <*> pure varB
       <*> (bindB <$> bindM proc)
       <*> pure loc
-  bindM (SelectL name proc loc) =
+  bindM (SelectL x proc loc) =
     B.SelectL
-      <$> bindM name
+      <$> bindM x
       <*> bindM proc
       <*> pure loc
-  bindM (SelectR name proc loc) =
+  bindM (SelectR x proc loc) =
     B.SelectR
-      <$> bindM name
+      <$> bindM x
       <*> bindM proc
       <*> pure loc
-  bindM (Choice name procA procB loc) =
+  bindM (Choice x p q loc) =
     B.Choice
-      <$> bindM name
-      <*> bindM procA
-      <*> bindM procB
+      <$> bindM x
+      <*> bindM p
+      <*> bindM q
       <*> pure loc
-  bindM (Accept nameA nameB proc loc) = do
-    (varB, bindB) <- createBinderChan nameB
+  bindM (Accept x y p loc) = do
+    (varB, bindB) <- createBinderChan y
     B.Accept
-      <$> bindM nameA
+      <$> bindM x
       <*> pure varB
-      <*> (bindB <$> bindM proc)
+      <*> (bindB <$> bindM p)
       <*> pure loc
-  bindM (Request nameA nameB proc loc) = do
-    (varB, bindB) <- createBinderChan nameB
+  bindM (Request x y p loc) = do
+    (varB, bindB) <- createBinderChan y
     B.Request
-      <$> bindM nameA
+      <$> bindM x
       <*> pure varB
-      <*> (bindB <$> bindM proc)
+      <*> (bindB <$> bindM p)
       <*> pure loc
-  bindM (OutputT name typ proc loc) =
+  bindM (OutputT x t p loc) =
     B.OutputT
-      <$> bindM name
-      <*> bindM typ
-      <*> bindM proc
+      <$> bindM x
+      <*> bindM t
+      <*> bindM p
       <*> pure loc
-  bindM (InputT name (TypeVar n l) proc loc) = do
+  bindM (InputT x (TypeVar n l) p loc) = do
     B.InputT
-      <$> bindM name
+      <$> bindM x
       <*> pure (B.TypeVar (Free n) n l)
-      <*> bindM proc
+      <*> bindM p
       <*> pure loc
-  bindM (EmptyOutput name loc) =
+  bindM (EmptyOutput x loc) =
     B.EmptyOutput
-      <$> bindM name
+      <$> bindM x
       <*> pure loc
-  bindM (EmptyInput name proc loc) =
+  bindM (EmptyInput x p loc) =
     B.EmptyInput
-      <$> bindM name
-      <*> bindM proc
+      <$> bindM x
+      <*> bindM p
       <*> pure loc
-  bindM (EmptyChoice name loc) =
+  bindM (EmptyChoice x loc) =
     B.EmptyChoice
-      <$> bindM name
+      <$> bindM x
       <*> pure loc
   bindM (End loc) =
     B.End
