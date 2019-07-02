@@ -9,9 +9,7 @@ import Syntax.Base
 
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
-import qualified Data.Set as Set
 import Data.Maybe (mapMaybe)
-import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Function (on)
@@ -190,7 +188,7 @@ subsituteVar :: Text -> Int -> Var -> Var
 subsituteVar free bound var@(Free name)
   | free == name = Bound bound
   | otherwise    = var
-subsituteVar free bound var = var
+subsituteVar _ _ var = var
 
 subsituteTypeVar :: Text -> Int -> TypeVar -> TypeVar
 subsituteTypeVar free bound (TypeVar var name loc)
@@ -216,23 +214,25 @@ subsituteCallee free bound (Callee name process) =
 subsituteProcess :: Text -> Int -> Process -> Process
 subsituteProcess free bound process = case process of
   Call callee loc -> Call (subsituteCallee free bound callee) loc
-  Link x y loc -> Link (subst x) (subst y) loc
-  Compose x t a b loc -> Compose (subst x) t a b loc
-  Output x y a b loc -> Output (subst x) (subst y) a b loc
-  Input x y a loc -> Input (subst x) (subst y) a loc
-  SelectL x a loc -> SelectL (subst x) a loc
-  SelectR x a loc -> SelectR (subst x) a loc
-  Choice x a b loc -> Choice (subst x) a b loc
-  Accept x y a loc -> Accept (subst x) (subst y) a loc
-  Request x y a loc -> Request (subst x) (subst y) a loc
-  OutputT x t a loc -> OutputT (subst x) t a loc
-  InputT x t a loc -> InputT (subst x) t a loc
-  EmptyOutput x loc -> EmptyOutput (subst x) loc
-  EmptyInput x a loc -> EmptyInput (subst x) a loc
-  EmptyChoice x loc -> EmptyChoice (subst x) loc
-  others -> others
+  Link x y loc -> Link (chan x) (chan y) loc
+  Compose x t a b loc -> Compose (chan x) t (proc a) (proc b) loc
+  Output x y a b loc -> Output (chan x) (chan y) (proc a) (proc b) loc
+  Input x y a loc -> Input (chan x) (chan y) (proc a) loc
+  SelectL x a loc -> SelectL (chan x) (proc a) loc
+  SelectR x a loc -> SelectR (chan x) (proc a) loc
+  Choice x a b loc -> Choice (chan x) (proc a) (proc b) loc
+  Accept x y a loc -> Accept (chan x) (chan y) (proc a) loc
+  Request x y a loc -> Request (chan x) (chan y) (proc a) loc
+  OutputT x t a loc -> OutputT (chan x) t (proc a) loc
+  InputT x t a loc -> InputT (chan x) t (proc a) loc
+  EmptyOutput x loc -> EmptyOutput (chan x) loc
+  EmptyInput x a loc -> EmptyInput (chan x) (proc a) loc
+  EmptyChoice x loc -> EmptyChoice (chan x) loc
+  End loc -> End loc
+  Mix p q loc -> Mix (proc p) (proc q) loc
   where
-    subst = subsituteChannel free bound
+    chan = subsituteChannel free bound
+    proc = subsituteProcess free bound
 
 --------------------------------------------------------------------------------
 -- | Instance of Located
@@ -302,10 +302,10 @@ instance HasDual TypeVar where
   dual (DualOf v)       = v
 
 instance HasDual Type where
-  dual (Var a l)        = Var (dual a) l
-  dual (Dual a l)       = a
-  dual (Times a b l)    = Par (dual a) (dual b) l
-  dual (Par a b l)      = Times (dual a) (dual b) l
+  dual (Var a l)          = Var (dual a) l
+  dual (Dual a _)         = a
+  dual (Times a b l)      = Par (dual a) (dual b) l
+  dual (Par a b l)        = Times (dual a) (dual b) l
   dual (Plus a b l)       = With (dual a) (dual b) l
   dual (With a b l)       = Plus (dual a) (dual b) l
   dual (Acc a l)          = Req (dual a) l
