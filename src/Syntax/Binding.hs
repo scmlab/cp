@@ -10,6 +10,7 @@ import Syntax.Base
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
 import qualified Data.Set as Set
+import Data.Maybe (mapMaybe)
 import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
@@ -63,7 +64,7 @@ data Chan     = Chan Var Text Loc
 data Definition = Annotated   Name Process Session
                 | Unannotated Name Process
                 deriving (Show)
-
+type Definitions = Map Name Definition
 data Program = Program [Declaration] Loc deriving (Show)
 
 data Declaration = TypeSig  Name SessionSyntax Loc
@@ -81,7 +82,7 @@ data Declaration = TypeSig  Name SessionSyntax Loc
 type Session = Map Chan Type
 data SessionSyntax = SessionSyntax Session Loc deriving (Show)
 
-data Callee = Callee Name (Set Chan)
+data Callee = Callee Name Process
     deriving (Eq, Ord, Show)
 data Process  = Call      Callee                            Loc
               | Link      Chan Chan                         Loc
@@ -208,8 +209,8 @@ subsituteChannel free bound (Chan var name loc)
   | otherwise        = Chan var name loc
 
 subsituteCallee :: Text -> Int -> Callee -> Callee
-subsituteCallee free bound (Callee name vars) =
-  Callee name $ Set.map (subsituteChannel free bound) vars
+subsituteCallee free bound (Callee name process) =
+  Callee name $ subsituteProcess free bound process
     -- Map.adjust (subsituteVar free bound) name vars
 
 subsituteProcess :: Text -> Int -> Process -> Process
@@ -315,3 +316,31 @@ instance HasDual Type where
   dual (Bot l)            = One l
   dual (Zero l)           = Top l
   dual (Top l)            = Zero l
+
+
+convert :: SessionSyntax -> Session
+convert (SessionSyntax xs _) = xs
+
+toDefinitions :: Program -> Definitions
+toDefinitions (Program declarations _) = definitions
+  where
+    toTypeSigPair (TypeSig n s _) = Just (n, convert s)
+    toTypeSigPair _                 = Nothing
+
+    toTermDefnPair (TermDefn n t _) = Just (n, (n, t))
+    toTermDefnPair _                  = Nothing
+
+    typeSigs :: Map Name Session
+    typeSigs  = Map.fromList $ mapMaybe toTypeSigPair declarations
+
+    termDefns :: Map Name (Name, Process)
+    termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
+
+    termsWithTypes :: Definitions
+    termsWithTypes = Map.map (\ ((n, t), s) -> Annotated n t s) $ Map.intersectionWith (,) termDefns typeSigs
+
+    termsWithoutTypes :: Definitions
+    termsWithoutTypes = Map.map (\ (n, t) -> Unannotated n t) $ Map.difference termDefns typeSigs
+
+    definitions :: Definitions
+    definitions = Map.union termsWithTypes termsWithoutTypes

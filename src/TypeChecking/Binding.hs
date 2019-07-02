@@ -9,7 +9,7 @@ import Syntax.Concrete
 import qualified Syntax.Binding as B
 import TypeChecking.Base
 
--- import Data.Loc (Loc(..), Located(..))
+import Data.Loc (Loc(..))
 import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -20,26 +20,57 @@ import Prelude hiding (LT, EQ, GT)
 import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
-
-
-freeChannels :: Process -> BindM (Set B.Chan)
-freeChannels (Call name loc) = do
-  result <- Map.lookup name <$> gets bsCallees
-  case result of
-    Nothing -> do
-      lookupResult <- Map.lookup name <$> ask
-      case lookupResult of
-        Nothing -> throwError $ DefnNotFound (Call name loc) name
-        Just defn -> freeChannels (extractProcess defn)
-    Just (B.Callee _ s) -> return s
-freeChannels (Compose x _ p q _) =
-  Set.union
-    <$> freeChannels p
-    <*> freeChannels q
-
-
-bindProgram :: Program -> Map B.Name B.Definition
-bindProgram = undefined . toDefinitions
+--
+-- empty :: BindM (Set B.Chan)
+-- empty = return Set.empty
+--
+-- union :: BindM (Set B.Chan) -> BindM (Set B.Chan) -> BindM (Set B.Chan)
+-- union = liftM2 Set.union
+--
+-- insert :: BindM B.Chan -> BindM (Set B.Chan) -> BindM (Set B.Chan)
+-- insert = liftM2 Set.insert
+--
+-- delete :: BindM B.Chan -> BindM (Set B.Chan) -> BindM (Set B.Chan)
+-- delete = liftM2 Set.delete
+--
+-- freeChannels :: Process -> BindM (Set B.Chan)
+-- freeChannels (Call name loc) = do
+--   result <- Map.lookup name <$> gets bsCallees
+--   case result of
+--     Nothing -> do
+--       lookupResult <- Map.lookup name <$> ask
+--       case lookupResult of
+--         Nothing -> throwError $ DefnNotFound (Call name loc) name
+--         Just defn -> freeChannels (toProcess defn)
+--     Just (B.Callee _ s) -> return s
+-- freeChannels (Link x y _) =
+--   insert (bindM x)
+--     $ insert (bindM y)
+--     $ empty
+-- freeChannels (Compose x _ p q _) =
+--   delete (bindM x)
+--     $ union (freeChannels p) (freeChannels q)
+-- freeChannels (Output x y p q _) =
+--   insert (bindM x)
+--     $ delete (bindM y)
+--     $ union (freeChannels p) (freeChannels q)
+-- freeChannels (Input x y p _) =
+--   insert (bindM x)
+--     $ delete (bindM y)
+--     $ freeChannels p
+-- freeChannels (SelectL x p _) =
+--   insert (bindM x)
+--     $ freeChannels p
+-- freeChannels (SelectR x p _) =
+--   insert (bindM x)
+--     $ freeChannels p
+-- freeChannels (Choice x p q _) =
+--   insert (bindM x)
+--     $ union (freeChannels p) (freeChannels q)
+-- freeChannels (Accept x y p _) =
+--   insert (bindM x)
+--     $ delete (bindM y)
+--     $ freeChannels p
 
 --------------------------------------------------------------------------------
 -- | Converting to Concrete Binding Tree
@@ -55,29 +86,33 @@ data BindingState = BindingState
   , bsCallees :: Map Name B.Callee
   } deriving (Show)
 
-type Definitions = Map Name Definition
 type BindM = ExceptT ScopeError (StateT BindingState (Reader Definitions))
 
 class Bind a b | a -> b where
   bindM :: a -> BindM b
 
--- bind :: Bind a b => Maybe Program -> a -> (Either ScopeError b)
--- bind program x =
---   runReader
---     (evalStateT
---       (runExceptT
---         (bindM x))
---       initialBindingState)
---     (maybe Map.empty toDefinitions program)
---   where
---     initialBindingState :: BindingState
---     initialBindingState =
---       BindingState
---         (Binding 0 Set.empty)
---         (Binding 0 Set.empty)
---         Map.empty
+runBindM :: Definitions -> BindM a -> Either ScopeError a
+runBindM defns f =
+  runReader
+    (evalStateT
+      (runExceptT
+        f)
+      initialBindingState)
+    defns
+  where
+    initialBindingState :: BindingState
+    initialBindingState =
+      BindingState
+        (Binding 0 Set.empty)
+        (Binding 0 Set.empty)
+        Map.empty
 
--- lookupCallee :: Name -> Maybe
+askDefn :: Name -> Loc -> BindM Definition
+askDefn name loc = do
+  result <- Map.lookup name <$> ask
+  case result of
+    Nothing -> throwError $ DefnNotFound (Call name loc) name
+    Just definition -> return definition
 
 --------------------------------------------------------------------------------
 
@@ -166,15 +201,6 @@ instance Bind Chan B.Chan where
     modify $ \ st -> st { bsChannel = Binding idx (Set.insert name ns) }
     return $ B.Chan (Free name) name loc
 
--- instance Bind Name B.Callee where
---   bindM (Name name loc) = do
---     B.Callee
---       <$> pure name
---       <*> pure loc
-
--- throwBack :: B.Name -> Name
--- throwBack (B.Name name loc) = Name name loc
-
 instance Bind Process B.Process where
   bindM (Call name loc) = do
     -- lookup the existing callees
@@ -182,19 +208,11 @@ instance Bind Process B.Process where
     callee <- case result of
       -- register a new calee
       Nothing -> do
-        lookupResult <- Map.lookup name <$> ask
-        case lookupResult of
-          Nothing -> throwError $ DefnNotFound (Call name loc) name
-          Just definition -> do
-            xs <- freeChannels $ extractProcess definition
-            B.Callee
-              <$> bindM name
-              <*> pure xs
-              -- (Map.fromList $ map (\n -> (n, Free n)) $ Set.toList xs)
-      -- return
+        process <- toProcess <$> askDefn name loc
+        B.Callee
+          <$> bindM name
+          <*> bindM process
       Just c -> return c
-
-
     return $ B.Call callee loc
   bindM (Link nameA nameB loc) =
     B.Link
@@ -316,10 +334,26 @@ instance Bind Declaration B.Declaration where
       <*> bindM process
       <*> pure loc
 
-instance Bind SessionSyntax B.SessionSyntax where
-  bindM (SessionSyntax pairs loc) = do
+instance Bind Definition B.Definition where
+  bindM (Annotated name process session) =
+    B.Annotated
+      <$> bindM name
+      <*> bindM process
+      <*> bindM session
+  bindM (Unannotated name process) =
+    B.Unannotated
+      <$> bindM name
+      <*> bindM process
+
+instance Bind Session B.Session where
+  bindM pairs = do
     let (keys, elems) = unzip $ Map.toList pairs
     keys' <- mapM bindM keys
     elems' <- mapM bindM elems
-    let pairs' = Map.fromList (zip keys' elems')
-    return $ B.SessionSyntax pairs' loc
+    return $ Map.fromList (zip keys' elems')
+
+instance Bind SessionSyntax B.SessionSyntax where
+  bindM (SessionSyntax pairs loc) =
+    B.SessionSyntax
+      <$> bindM pairs
+      <*> pure loc

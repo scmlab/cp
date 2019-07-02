@@ -6,7 +6,7 @@ import qualified Syntax.Concrete as C
 import Syntax.Binding
 import Syntax.Parser
 import TypeChecking
-import TypeChecking.Binding
+-- import TypeChecking.Binding
 import TypeChecking.Infer
 import TypeChecking.Base
 import Pretty.Error ()
@@ -20,7 +20,7 @@ import qualified Data.ByteString.Lazy.Char8 as BS8
 import Data.Text.Prettyprint.Doc.Render.Terminal
 
 import qualified Data.Map as Map
-import qualified Data.Set as Set
+-- import qualified Data.Set as Set
 import Data.Maybe (isNothing)
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd, isPrefixOf)
@@ -32,7 +32,6 @@ import Data.Text.Prettyprint.Doc
 import Control.Exception (IOException, try)
 import Control.Monad.State hiding (state)
 import Control.Monad.Except
-import Control.Monad.Reader
 
 import System.Console.Haskeline
 import System.Console.GetOpt
@@ -104,23 +103,6 @@ runTCM f = do
     Left err -> throwError $ TypeError err
     Right val -> return (val, s)
 
-runBindM :: Maybe C.Program -> BindM a -> M a
-runBindM program f = do
-  let result = runReader
-        (evalStateT
-          (runExceptT f)
-          initialBindingState)
-        (maybe Map.empty C.toDefinitions program)
-  case result of
-    Left err -> throwError $ ScopeError err
-    Right val -> return val
-  where
-    initialBindingState :: BindingState
-    initialBindingState =
-      BindingState
-        (Binding 0 Set.empty)
-        (Binding 0 Set.empty)
-        Map.empty
 
 main :: IO ()
 main = do
@@ -265,7 +247,7 @@ handleCommand (TypeOf expr) = do
     program <- gets replProgram
     -- local expression parsing
     process <- parseProcessM expr
-    process' <- runBindM program (bindM process)
+    process' <- bind program process
     (session, _) <- runTCM $ (inferTerm process')
     liftIO $ putDoc $ report session <> line
     return ()
@@ -277,7 +259,8 @@ handleCommand (Debug expr) = do
     program <- gets replProgram
     -- local expression parsing
     process <- parseProcessM expr
-    process' <- runBindM program (bindM process)
+    process' <- bind program process
+    -- liftIO $ print process'
     liftIO $ putDoc $ pretty process' <> line
 
     -- _ <- runTCM $ bindingCheck process

@@ -34,6 +34,7 @@ data Program = Program [Declaration] Loc deriving (Show)
 data Definition = Annotated   Name Process Session
                 | Unannotated Name Process
                 deriving (Show)
+type Definitions = Map Name Definition
 data Declaration = TypeSig  Name SessionSyntax Loc
                  | TermDefn Name Process Loc
                  deriving (Show)
@@ -103,9 +104,9 @@ termDefnName :: Declaration -> Maybe Name
 termDefnName (TermDefn n _ _) = Just n
 termDefnName _                = Nothing
 
-extractProcess :: Definition -> Process
-extractProcess (Annotated _ term _) = term
-extractProcess (Unannotated _ term) = term
+toProcess :: Definition -> Process
+toProcess (Annotated _ term _) = term
+toProcess (Unannotated _ term) = term
 
 convert :: SessionSyntax -> Session
 convert (SessionSyntax xs _) = xs
@@ -120,7 +121,7 @@ emptySessionSyntax l = SessionSyntax Map.empty l
 singletonSessionSyntax :: Chan -> Type -> Loc -> SessionSyntax
 singletonSessionSyntax x t l = SessionSyntax (Map.insert x t Map.empty) l
 
-toDefinitions :: Program -> Map Name Definition
+toDefinitions :: Program -> Definitions
 toDefinitions (Program declarations _) = definitions
   where
     toTypeSigPair (TypeSig n s _) = Just (n, convert s)
@@ -135,13 +136,13 @@ toDefinitions (Program declarations _) = definitions
     termDefns :: Map Name (Name, Process)
     termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
 
-    termsWithTypes :: Map Name Definition
+    termsWithTypes :: Definitions
     termsWithTypes = Map.map (\ ((n, t), s) -> Annotated n t s) $ Map.intersectionWith (,) termDefns typeSigs
 
-    termsWithoutTypes :: Map Name Definition
+    termsWithoutTypes :: Definitions
     termsWithoutTypes = Map.map (\ (n, t) -> Unannotated n t) $ Map.difference termDefns typeSigs
 
-    definitions :: Map Name Definition
+    definitions :: Definitions
     definitions = Map.union termsWithTypes termsWithoutTypes
 
 --------------------------------------------------------------------------------

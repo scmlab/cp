@@ -16,16 +16,22 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe)
 
-import Control.Monad.State
+-- import Control.Monad.State
 import Control.Monad.Except
 
+bind :: Bind a b => Maybe C.Program -> a -> M b
+bind program process = do
+  let result = runBindM (maybe Map.empty C.toDefinitions program) (bindM process)
+  case result of
+    Left err -> throwError $ ScopeError err
+    Right val -> return val
 
-scopeCheck :: C.Program -> M (Map B.Name B.Definition)
+scopeCheck :: C.Program -> M B.Definitions
 scopeCheck program = do
   -- check the program for duplicated definitions
   checkDuplications program
   -- form the binding structure
-  return $ bindProgram program
+  B.toDefinitions <$> bind (Just program) program
 
 typeCheck :: Map B.Name B.Definition -> TCM (Map B.Name B.Session)
 typeCheck definitions = do
@@ -70,6 +76,6 @@ checkDuplications (C.Program declarations _) = do
 -- bindingCheckAll :: TCM (Map Name Definition)
 -- bindingCheckAll = bindDefinitions <$> gets stConcreteDefns
    -- bind definitions
-  -- forM_ definitions (bindingCheck . C.extractProcess)
-  -- Map.traverseWithKey (const $ bindingCheck . extractProcess) definitions
+  -- forM_ definitions (bindingCheck . C.toProcess)
+  -- Map.traverseWithKey (const $ bindingCheck . toProcess) definitions
 --
