@@ -176,28 +176,6 @@ instance Bind Process B.Process where
         B.Callee
           <$> bindM name
           <*> bindM process
-        -- return callee
-
-    -- callee <- case result of
-    --   -- register a new calee
-    --   Nothing -> do
-    --     traceShow ("no " ++ show name) (return ())
-    --     process <- toProcess <$> askDefn name loc
-    --     -- insert a placeholder to prevent `bindM` from looping forever
-    --     modify $ \ st -> st { bsCallees = Map.insert name Nothing (bsCallees st) }
-    --     -- trying to do the real work (with perhaps some placeholders)
-    --     callee <- B.Callee
-    --                 <$> bindM name
-    --                 <*> (Just <$> bindM process)
-    --     traceShow (show callee) (return ())
-    --
-    --     -- update the placeholder
-    --     modify $ \ st -> st { bsCallees = Map.insert name (Just callee) (bsCallees st) }
-    --     return callee
-    --   Just (Just c) -> return c
-    --   Just Nothing -> do
-    --     traceShow ("some " ++ show name) (return ())
-    --     B.Callee <$> bindM name <*> pure Nothing
     return $ B.Call callee loc
   bindM (Link x y loc) =
     B.Link

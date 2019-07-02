@@ -10,6 +10,8 @@ import Syntax.Base
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
 import Data.Maybe (mapMaybe)
+import qualified Data.Set as Set
+import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Function (on)
@@ -344,3 +346,29 @@ convert (SessionSyntax xs _) = xs
 --
 --     definitions :: Definitions
 --     definitions = Map.union termsWithTypes termsWithoutTypes
+
+--------------------------------------------------------------------------------
+-- Free variables
+
+freeVariables :: Process -> Set Var
+freeVariables process = case process of
+  Call (Callee _ p) loc -> freeVariables p
+  Link x y loc -> Set.empty
+  Compose x t p q loc -> Set.delete (toVar x) $ Set.union (freeVariables p) (freeVariables q)
+  Output x y p q loc -> Set.insert (toVar x) $ Set.delete (toVar y) $ Set.union (freeVariables p) (freeVariables q)
+  Input x y p loc -> Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
+  SelectL x p loc -> Set.insert (toVar x) $ freeVariables p
+  SelectR x p loc -> Set.insert (toVar x) $ freeVariables p
+  Choice x p q loc -> Set.insert (toVar x) $ Set.union (freeVariables p) (freeVariables q)
+  Accept x y p loc ->Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
+  Request x y p loc -> Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
+  OutputT x t p loc -> Set.insert (toVar x) (freeVariables p)
+  InputT x t p loc -> Set.insert (toVar x) (freeVariables p)
+  EmptyOutput x loc -> Set.singleton (toVar x)
+  EmptyInput x p loc -> Set.insert (toVar x) (freeVariables p)
+  EmptyChoice x loc -> Set.singleton (toVar x)
+  End loc -> Set.empty
+  Mix p q loc -> Set.union (freeVariables p) (freeVariables q)
+  where
+    toVar :: Chan -> Var
+    toVar (Chan var _ _) = var
