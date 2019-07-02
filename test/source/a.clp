@@ -1,7 +1,6 @@
 -- putName = u[] . end
 -- compute = u() . v() . w[] . end
 
--- test = \ q . (a() . end | b[] . end)
-sub = x[y] . (y() . end | x[] . end)
-test = w(z) . sub
-a = w(z) . sub
+compose0 = \x . (x[] . end | x() . end)
+output0 = x[y] . (y[] . end | x() . end)
+input = x(y) . x() . y() . end

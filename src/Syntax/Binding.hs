@@ -350,7 +350,7 @@ convert (SessionSyntax xs _) = xs
 --------------------------------------------------------------------------------
 -- Free variables
 
-freeVariables :: Process -> Set Var
+freeVariables :: Process -> Set Text
 freeVariables process = case process of
   Call (Callee _ p) loc -> freeVariables p
   Link x y loc -> Set.empty
@@ -370,5 +370,5 @@ freeVariables process = case process of
   End loc -> Set.empty
   Mix p q loc -> Set.union (freeVariables p) (freeVariables q)
   where
-    toVar :: Chan -> Var
-    toVar (Chan var _ _) = var
+    toVar :: Chan -> Text
+    toVar (Chan _ name _) = name

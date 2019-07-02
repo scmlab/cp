@@ -9,6 +9,7 @@ import Prelude hiding (lookup)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
+import Data.Set (Set)
 
 import Control.Monad.State
 import Control.Monad.Except
@@ -51,6 +52,8 @@ data ScopeError
   | TermDefnDuplicated C.Name C.Name
   | DefnNotFound C.Process C.Name
   | RecursiveCall C.Process C.Name
+  | ChanNotFound Process (Set Text)
+  | ChanFound Process (Set Text)
   | Others Text
   deriving (Show)
 

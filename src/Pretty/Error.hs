@@ -15,6 +15,7 @@ import Data.Monoid ((<>))
 import Data.Text.Prettyprint.Doc hiding (line)
 import Data.Text (Text)
 import Data.Loc (locOf)
+import qualified Data.Set as Set
 
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
@@ -57,6 +58,28 @@ instance Report ScopeError where
     , P $ highlight name <> " is calling itself"
     , CODE $ locOf term
     ]
+  reportS (ChanNotFound term names) = reportS
+    [ H1 "Channel not found"
+    , P $ message
+        <+> highlight' (sep $ punctuate "," (map pretty $ Set.toList names))
+        <+> "should occur free"
+        <> line
+        <> "in the following term"
+    , CODE $ locOf term
+    ]
+    where
+      message = plural "the channel" "the channels" (length names)
+  reportS (ChanFound term names) = reportS
+    [ H1 "Channel occur free"
+    , P $ message
+        <+> highlight' (sep $ punctuate "," (map pretty $ Set.toList names))
+        <+> "should not occur free"
+        <> line
+        <> "in the following term"
+    , CODE $ locOf term
+    ]
+    where
+      message = plural "the channel" "the channels" (length names)
   reportS (Others msg) = reportS
     [ H1 "Other unformatted type errors"
     , P $ pretty msg
@@ -64,6 +87,9 @@ instance Report ScopeError where
 
 highlight :: Pretty a => a -> Doc AnsiStyle
 highlight = annotate (colorDull Blue) . pretty
+
+highlight' :: Doc AnsiStyle -> Doc AnsiStyle
+highlight' = annotate (colorDull Blue)
 
 instance Report TypeError where
   reportS (General msg) = reportS [H1 "Other unformatted inference errors", P $ pretty msg]

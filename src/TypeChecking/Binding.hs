@@ -13,7 +13,7 @@ import Data.Loc (Loc(..))
 import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Set (Set)
+import Data.Set (Set, (\\))
 import qualified Data.Set as Set
 import Prelude hiding (LT, EQ, GT)
 
@@ -163,97 +163,108 @@ instance Bind Chan B.Chan where
     modify $ \ st -> st { bsChannel = Binding idx (Set.insert name ns) }
     return $ B.Chan (Free name) name loc
 
+has :: [Chan] -> BindM B.Process -> BindM B.Process
+has channels p = do
+  process <- p
+  let names = map (\(Chan n _) -> n) channels
+  let absent = Set.fromList names \\ B.freeVariables process
+  unless (Set.null absent) $
+    throwError $ ChanNotFound process absent
+  return process
+
+hasNo :: [Chan] -> BindM B.Process -> BindM B.Process
+hasNo channels p = do
+  process <- p
+  let names = map (\(Chan n _) -> n) channels
+  let present = Set.fromList names `Set.intersection` B.freeVariables process
+  unless (Set.null present) $
+    throwError $ ChanFound process present
+  return process
+
 instance Bind Process B.Process where
   bindM (Call name loc) = do
     -- see if name has been traversed
     traversed <- Set.member name <$> gets bsTraversed
-    callee <- if traversed
-      then throwError $ RecursiveCall (Call name loc) name
-      else do
-        process <- toProcess <$> askDefn name loc
-        -- mark `name` as traversed
-        markTraversed name
-        B.Callee
-          <$> bindM name
-          <*> bindM process
+    -- raise error if it's been traversed
+    when traversed $ throwError $ RecursiveCall (Call name loc) name
+
+    process <- toProcess <$> askDefn name loc
+    -- mark `name` as traversed
+    markTraversed name
+
+    callee <- B.Callee
+      <$> bindM name
+      <*> bindM process
     return $ B.Call callee loc
   bindM (Link x y loc) =
     B.Link
       <$> bindM x
       <*> bindM y
       <*> pure loc
-  bindM (Compose x Nothing p q loc) = do
+  bindM (Compose x t p q loc) = do
     (var, bind) <- createBinderChan x
     B.Compose
       <$> pure var
-      <*> pure Nothing
-      <*> (bind <$> bindM p)
-      <*> (bind <$> bindM q)
-      <*> pure loc
-  bindM (Compose x (Just t) p q loc) = do
-    (var, bind) <- createBinderChan x
-    B.Compose
-      <$> pure var
-      <*> (Just <$> bindM t)
-      <*> (bind <$> bindM p)
-      <*> (bind <$> bindM q)
+      <*> mapM bindM t
+      <*> has [x] (bind <$> bindM p)
+      <*> has [x] (bind <$> bindM q)
       <*> pure loc
   bindM (Output x y q p loc) = do
     (varB, bindB) <- createBinderChan y
     B.Output
       <$> bindM x
       <*> pure varB
-      <*> (bindB <$> bindM q)
-      <*> bindM p
+      <*> hasNo [x] (bindB <$> bindM q)
+      <*> has [x] (bindM p)
       <*> pure loc
-  bindM (Input x y proc loc) = do
+  bindM (Input x y p loc) = do
     (varB, bindB) <- createBinderChan y
     B.Input
       <$> bindM x
       <*> pure varB
-      <*> (bindB <$> bindM proc)
+      <*> has [x, y] (bindB <$> bindM p)
       <*> pure loc
-  bindM (SelectL x proc loc) =
+  bindM (SelectL x p loc) =
     B.SelectL
       <$> bindM x
-      <*> bindM proc
+      <*> has [x] (bindM p)
       <*> pure loc
-  bindM (SelectR x proc loc) =
+  bindM (SelectR x p loc) =
     B.SelectR
       <$> bindM x
-      <*> bindM proc
+      <*> has [x] (bindM p)
       <*> pure loc
   bindM (Choice x p q loc) =
     B.Choice
       <$> bindM x
-      <*> bindM p
-      <*> bindM q
+      <*> has [x] (bindM p)
+      <*> has [x] (bindM q)
       <*> pure loc
   bindM (Accept x y p loc) = do
     (varB, bindB) <- createBinderChan y
     B.Accept
       <$> bindM x
       <*> pure varB
-      <*> (bindB <$> bindM p)
+      <*> hasNo [x] (has [y] (bindB <$> bindM p))
       <*> pure loc
   bindM (Request x y p loc) = do
     (varB, bindB) <- createBinderChan y
     B.Request
       <$> bindM x
       <*> pure varB
-      <*> (bindB <$> bindM p)
+      <*> hasNo [x] (has [y] (bindB <$> bindM p))
       <*> pure loc
   bindM (OutputT x t p loc) =
     B.OutputT
       <$> bindM x
       <*> bindM t
-      <*> bindM p
+      <*> has [x] (bindM p)
       <*> pure loc
   bindM (InputT x (TypeVar n l) p loc) = do
     B.InputT
       <$> bindM x
       <*> pure (B.TypeVar (Free n) n l)
-      <*> bindM p
+      <*> has [x] (bindM p)
       <*> pure loc
   bindM (EmptyOutput x loc) =
     B.EmptyOutput
@@ -262,7 +273,7 @@ instance Bind Process B.Process where
   bindM (EmptyInput x p loc) =
     B.EmptyInput
       <$> bindM x
-      <*> bindM p
+      <*> hasNo [x] (bindM p)
       <*> pure loc
   bindM (EmptyChoice x loc) =
     B.EmptyChoice
