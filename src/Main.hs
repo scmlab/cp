@@ -258,10 +258,10 @@ handleCommand (Debug expr) = do
     -- global environment setup
     program <- gets replProgram
     -- local expression parsing
-    process <- parseProcessM expr
-    process' <- bind program process
-    -- liftIO $ print process'
-    liftIO $ putDoc $ pretty process' <> line
+    expr' <- parseProcessM expr
+    result <- bind program expr'
+    liftIO $ putDoc $ pretty result <> line
+    -- liftIO $ print result
 
     -- _ <- runTCM $ bindingCheck process
     return ()

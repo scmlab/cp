@@ -18,10 +18,8 @@ instance Pretty TypeName where
   pretty (TypeName name _) = pretty name
 
 instance Pretty TypeVar where
-  pretty (TypeVar (Bound _) name _)   = pretty name
-  pretty (TypeVar (Free i) name _)   = pretty name <> "$" <> pretty i
-  -- pretty (Nameless i)   = "$" <> pretty i
-  -- pretty (Named i)      = pretty i
+  pretty (TypeVar (Bound i) name _)   = pretty name <> "$" <> pretty i
+  pretty (TypeVar (Free _) name _)   = pretty name
   pretty Unknown        = "$_"
   pretty (DualOf i)     = "^" <> pretty i
 
@@ -29,13 +27,14 @@ instance Pretty Name where
   pretty (Name name _) = pretty name
 
 instance Pretty Chan where
-  pretty (Chan _ name _) = pretty name
+  pretty (Chan (Bound i) name _) = pretty name <> "$" <> pretty i
+  pretty (Chan (Free _) name _) = pretty name
 
 instance Pretty Callee where
-  pretty (Callee name _) = pretty name
-  
+  pretty (Callee name p) = pretty name <> " => " <> pretty p
+
 instance Pretty Process where
-  pretty (Call x _) = pretty x
+  pretty (Call callee _) = pretty callee
   pretty (Link x y _) = pretty x <> " ↔ " <> pretty y
   pretty (Compose x Nothing p q _) = "ν " <> pretty x
     <> " ( " <> pretty p
