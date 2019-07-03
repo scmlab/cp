@@ -4,6 +4,7 @@ import qualified Syntax.Binding as B
 import qualified Syntax.Concrete as C
 -- import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
 import TypeChecking.Infer
+import TypeChecking.Infer2 (inferProcess)
 import TypeChecking.Binding
 import TypeChecking.Base
 import Base
@@ -37,7 +38,7 @@ scopeCheck program = do
   return definitions
 
 
-typeCheck :: Map B.Name B.Definition -> TCM (Map B.Name B.Session)
+typeCheck :: B.Definitions -> TCM (Map B.Name B.Session)
 typeCheck definitions = do
   Map.traverseMaybeWithKey typeCheckOrInfer definitions
   where
@@ -46,7 +47,8 @@ typeCheck definitions = do
       _ <- check name session term
       return Nothing
     typeCheckOrInfer _ (B.Unannotated _ term) =
-      inferTerm term >>= return . Just
+      -- inferTerm term >>= return . Just
+      inferProcess term >>= return . Just
 
 
 --------------------------------------------------------------------------------

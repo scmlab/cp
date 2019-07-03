@@ -8,6 +8,7 @@ import Syntax.Parser
 import TypeChecking
 -- import TypeChecking.Binding
 import TypeChecking.Infer
+import TypeChecking.Infer2 (inferProcess)
 import TypeChecking.Base
 import Pretty.Error ()
 import Pretty.Base
@@ -248,7 +249,7 @@ handleCommand (TypeOf expr) = do
     -- local expression parsing
     process <- parseProcessM expr
     process' <- bind program process
-    (session, _) <- runTCM $ (inferTerm process')
+    (session, _) <- runTCM $ (inferProcess process')
     liftIO $ putDoc $ report session <> line
     return ()
   return True

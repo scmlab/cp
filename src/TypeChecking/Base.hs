@@ -45,6 +45,7 @@ data TypeError
   | CannotCloseChannel Process Chan
   | ChannelNotFound Process Chan Session
   | ChannelNotComsumed Process Session
+  | ChanFound Process Chan
   deriving (Show)
 
 data ScopeError
@@ -52,8 +53,8 @@ data ScopeError
   | TermDefnDuplicated C.Name C.Name
   | DefnNotFound C.Process C.Name
   | RecursiveCall C.Process C.Name
-  | ChanNotFound Process (Set Text)
-  | ChanFound Process (Set Text)
+  -- | ChanNotFound Process (Set Text)
+  -- | ChanFound Process (Set Text)
   | Others Text
   deriving (Show)
 
@@ -61,3 +62,8 @@ data ScopeError
 -- | TCM
 
 type TCM = ExceptT TypeError (State TCState)
+
+--------------------------------------------------------------------------------
+-- | Type Checking Monad
+
+type TypeM = ExceptT TypeError (State TCState)

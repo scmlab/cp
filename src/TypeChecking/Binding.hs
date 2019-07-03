@@ -163,23 +163,23 @@ instance Bind Chan B.Chan where
     modify $ \ st -> st { bsChannel = Binding idx (Set.insert name ns) }
     return $ B.Chan (Free name) name loc
 
-has :: [Chan] -> BindM B.Process -> BindM B.Process
-has channels p = do
-  process <- p
-  let names = map (\(Chan n _) -> n) channels
-  let absent = Set.fromList names \\ B.freeVariables process
-  unless (Set.null absent) $
-    throwError $ ChanNotFound process absent
-  return process
-
-hasNo :: [Chan] -> BindM B.Process -> BindM B.Process
-hasNo channels p = do
-  process <- p
-  let names = map (\(Chan n _) -> n) channels
-  let present = Set.fromList names `Set.intersection` B.freeVariables process
-  unless (Set.null present) $
-    throwError $ ChanFound process present
-  return process
+-- has :: [Chan] -> BindM B.Process -> BindM B.Process
+-- has channels p = do
+--   process <- p
+--   let names = map (\(Chan n _) -> n) channels
+--   let absent = Set.fromList names \\ B.freeVariables process
+--   unless (Set.null absent) $
+--     throwError $ ChanNotFound process absent
+--   return process
+--
+-- hasNo :: [Chan] -> BindM B.Process -> BindM B.Process
+-- hasNo channels p = do
+--   process <- p
+--   let names = map (\(Chan n _) -> n) channels
+--   let present = Set.fromList names `Set.intersection` B.freeVariables process
+--   unless (Set.null present) $
+--     throwError $ ChanFound process present
+--   return process
 
 instance Bind Process B.Process where
   bindM (Call name loc) = do
@@ -206,65 +206,65 @@ instance Bind Process B.Process where
     B.Compose
       <$> pure var
       <*> mapM bindM t
-      <*> has [x] (bind <$> bindM p)
-      <*> has [x] (bind <$> bindM q)
+      <*> (bind <$> bindM p)
+      <*> (bind <$> bindM q)
       <*> pure loc
   bindM (Output x y q p loc) = do
     (varB, bindB) <- createBinderChan y
     B.Output
       <$> bindM x
       <*> pure varB
-      <*> hasNo [x] (bindB <$> bindM q)
-      <*> has [x] (bindM p)
+      <*> (bindB <$> bindM q)
+      <*> bindM p
       <*> pure loc
   bindM (Input x y p loc) = do
     (varB, bindB) <- createBinderChan y
     B.Input
       <$> bindM x
       <*> pure varB
-      <*> has [x, y] (bindB <$> bindM p)
+      <*> (bindB <$> bindM p)
       <*> pure loc
   bindM (SelectL x p loc) =
     B.SelectL
       <$> bindM x
-      <*> has [x] (bindM p)
+      <*> bindM p
       <*> pure loc
   bindM (SelectR x p loc) =
     B.SelectR
       <$> bindM x
-      <*> has [x] (bindM p)
+      <*> bindM p
       <*> pure loc
   bindM (Choice x p q loc) =
     B.Choice
       <$> bindM x
-      <*> has [x] (bindM p)
-      <*> has [x] (bindM q)
+      <*> bindM p
+      <*> bindM q
       <*> pure loc
   bindM (Accept x y p loc) = do
     (varB, bindB) <- createBinderChan y
     B.Accept
       <$> bindM x
       <*> pure varB
-      <*> hasNo [x] (has [y] (bindB <$> bindM p))
+      <*> (bindB <$> bindM p)
       <*> pure loc
   bindM (Request x y p loc) = do
     (varB, bindB) <- createBinderChan y
     B.Request
       <$> bindM x
       <*> pure varB
-      <*> hasNo [x] (has [y] (bindB <$> bindM p))
+      <*> (bindB <$> bindM p)
       <*> pure loc
   bindM (OutputT x t p loc) =
     B.OutputT
       <$> bindM x
       <*> bindM t
-      <*> has [x] (bindM p)
+      <*> bindM p
       <*> pure loc
   bindM (InputT x (TypeVar n l) p loc) = do
     B.InputT
       <$> bindM x
       <*> pure (B.TypeVar (Free n) n l)
-      <*> has [x] (bindM p)
+      <*> bindM p
       <*> pure loc
   bindM (EmptyOutput x loc) =
     B.EmptyOutput
@@ -273,7 +273,7 @@ instance Bind Process B.Process where
   bindM (EmptyInput x p loc) =
     B.EmptyInput
       <$> bindM x
-      <*> hasNo [x] (bindM p)
+      <*> bindM p
       <*> pure loc
   bindM (EmptyChoice x loc) =
     B.EmptyChoice

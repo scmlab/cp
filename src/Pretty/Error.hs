@@ -58,28 +58,17 @@ instance Report ScopeError where
     , P $ highlight name <> " is calling itself"
     , CODE $ locOf term
     ]
-  reportS (ChanNotFound term names) = reportS
-    [ H1 "Channel not found"
-    , P $ message
-        <+> highlight' (sep $ punctuate "," (map pretty $ Set.toList names))
-        <+> "should occur free"
-        <> line
-        <> "in the following term"
-    , CODE $ locOf term
-    ]
-    where
-      message = plural "the channel" "the channels" (length names)
-  reportS (ChanFound term names) = reportS
-    [ H1 "Channel occur free"
-    , P $ message
-        <+> highlight' (sep $ punctuate "," (map pretty $ Set.toList names))
-        <+> "should not occur free"
-        <> line
-        <> "in the following term"
-    , CODE $ locOf term
-    ]
-    where
-      message = plural "the channel" "the channels" (length names)
+  -- reportS (ChanNotFound term names) = reportS
+  --   [ H1 "Channel not found"
+  --   , P $ message
+  --       <+> highlight' (sep $ punctuate "," (map pretty $ Set.toList names))
+  --       <+> "should occur free"
+  --       <> line
+  --       <> "in the following term"
+  --   , CODE $ locOf term
+  --   ]
+  --   where
+  --     message = plural "the channel" "the channels" (length names)
   reportS (Others msg) = reportS
     [ H1 "Other unformatted type errors"
     , P $ pretty msg
@@ -92,6 +81,13 @@ highlight' :: Doc AnsiStyle -> Doc AnsiStyle
 highlight' = annotate (colorDull Blue)
 
 instance Report TypeError where
+  reportS (ChanFound term channel) = reportS
+    [ H1 "Channel occur free"
+    , P $ "the channel" <+> highlight channel <+> "should not occur free"
+        <> line
+        <> "in the following term"
+    , CODE $ locOf term
+    ]
   reportS (General msg) = reportS [H1 "Other unformatted inference errors", P $ pretty msg]
   reportS (CannotCloseChannel term chan) = reportS
     [ H1 "Channel cannot be closed"
