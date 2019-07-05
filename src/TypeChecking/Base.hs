@@ -13,6 +13,7 @@ import Data.Set (Set)
 
 import Control.Monad.State
 import Control.Monad.Except
+import Control.Monad.Reader
 
 --------------------------------------------------------------------------------
 -- | State
@@ -21,15 +22,15 @@ isAnnotated :: Definition -> Bool
 isAnnotated (Annotated _ _ _) = True
 isAnnotated _                 = False
 
-type CtxVar = Int
+-- type CtxVar = Int
+--
+-- data TCState = TCState
+--   { stTypeCount   :: Int              -- for type variables
+--   , stDefinitions :: Map Name Definition
+--   } deriving (Show)
 
-data TCState = TCState
-  { stTypeCount   :: Int              -- for type variables
-  , stDefinitions :: Map Name Definition
-  } deriving (Show)
-
-initialTCState :: TCState
-initialTCState = TCState 0 Map.empty
+-- initialTCState :: TCState
+-- initialTCState = TCState 0 Map.empty
 
 
 --------------------------------------------------------------------------------
@@ -46,6 +47,7 @@ data TypeError
   | ChannelNotFound Process Chan Session
   | ChannelNotComsumed Process Session
   | ChanFound Process Chan
+  | ChanNotFound Process Chan
   deriving (Show)
 
 data ScopeError
@@ -61,9 +63,10 @@ data ScopeError
 --------------------------------------------------------------------------------
 -- | TCM
 
-type TCM = ExceptT TypeError (State TCState)
+type TCM = ExceptT TypeError (StateT Int (Reader Definitions))
 
---------------------------------------------------------------------------------
--- | Type Checking Monad
-
-type TypeM = ExceptT TypeError (State TCState)
+--
+-- --------------------------------------------------------------------------------
+-- -- | Type Checking Monad
+--
+-- type TypeM = ExceptT TypeError (State TCState)

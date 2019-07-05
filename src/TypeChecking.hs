@@ -3,7 +3,7 @@ module TypeChecking where
 import qualified Syntax.Binding as B
 import qualified Syntax.Concrete as C
 -- import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
-import TypeChecking.Infer
+-- import TypeChecking.Infer
 import TypeChecking.Infer2 (inferProcess)
 import TypeChecking.Binding
 import TypeChecking.Base
@@ -44,7 +44,7 @@ typeCheck definitions = do
   where
     typeCheckOrInfer :: B.Name -> B.Definition -> TCM (Maybe B.Session)
     typeCheckOrInfer _ (B.Annotated name term session) = do
-      _ <- check name session term
+      -- _ <- check name session term
       return Nothing
     typeCheckOrInfer _ (B.Unannotated _ term) =
       -- inferTerm term >>= return . Just

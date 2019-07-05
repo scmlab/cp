@@ -7,7 +7,7 @@ import Syntax.Binding
 import Syntax.Parser
 import TypeChecking
 -- import TypeChecking.Binding
-import TypeChecking.Infer
+-- import TypeChecking.Infer
 import TypeChecking.Infer2 (inferProcess)
 import TypeChecking.Base
 import Pretty.Error ()
@@ -33,6 +33,7 @@ import Data.Text.Prettyprint.Doc
 import Control.Exception (IOException, try)
 import Control.Monad.State hiding (state)
 import Control.Monad.Except
+import Control.Monad.Reader
 
 import System.Console.Haskeline
 import System.Console.GetOpt
@@ -96,13 +97,13 @@ handleM program = do
       return Nothing
     Right value -> return (Just value)
 
-runTCM :: TCM a -> M (a, TCState)
+runTCM :: TCM a -> M a
 runTCM f = do
   definitions <- gets replDefinitions
-  let (result, s) = runState (runExceptT f) (TCState 0 definitions)
+  let (result, s) = runReader (runStateT (runExceptT f) 0) definitions
   case result of
     Left err -> throwError $ TypeError err
-    Right val -> return (val, s)
+    Right val -> return val
 
 
 main :: IO ()
@@ -228,10 +229,10 @@ handleCommand (Load filePath) = do
     loadSource filePath
     program <- parseSource
     definitions <- scopeCheck program
-    (inferred, tcmState) <- runTCM $ typeCheck definitions
+    inferred <- runTCM $ typeCheck definitions
     modify $ \ st -> st
       { replInferred = inferred
-      , replDefinitions = stDefinitions tcmState
+      , replDefinitions = definitions
       }
     return ()
     -- liftIO $ putStrLn $ "loaded: " ++ filePath
@@ -249,7 +250,7 @@ handleCommand (TypeOf expr) = do
     -- local expression parsing
     process <- parseProcessM expr
     process' <- bind program process
-    (session, _) <- runTCM $ (inferProcess process')
+    session <- runTCM $ (inferProcess process')
     liftIO $ putDoc $ report session <> line
     return ()
   return True

@@ -58,17 +58,6 @@ instance Report ScopeError where
     , P $ highlight name <> " is calling itself"
     , CODE $ locOf term
     ]
-  -- reportS (ChanNotFound term names) = reportS
-  --   [ H1 "Channel not found"
-  --   , P $ message
-  --       <+> highlight' (sep $ punctuate "," (map pretty $ Set.toList names))
-  --       <+> "should occur free"
-  --       <> line
-  --       <> "in the following term"
-  --   , CODE $ locOf term
-  --   ]
-  --   where
-  --     message = plural "the channel" "the channels" (length names)
   reportS (Others msg) = reportS
     [ H1 "Other unformatted type errors"
     , P $ pretty msg
@@ -84,6 +73,13 @@ instance Report TypeError where
   reportS (ChanFound term channel) = reportS
     [ H1 "Channel occur free"
     , P $ "the channel" <+> highlight channel <+> "should not occur free"
+        <> line
+        <> "in the following term"
+    , CODE $ locOf term
+    ]
+  reportS (ChanNotFound term channel) = reportS
+    [ H1 "Channel not found"
+    , P $ "the channel" <+> highlight channel <+> "should occur free"
         <> line
         <> "in the following term"
     , CODE $ locOf term

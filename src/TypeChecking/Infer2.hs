@@ -1,15 +1,17 @@
 module TypeChecking.Infer2 where
 
+import Syntax.Base
 import Syntax.Binding
 import TypeChecking.Base
 import qualified TypeChecking.Unification as U
-import TypeChecking.Unification
+-- import TypeChecking.Unification
 
 
 -- import Control.Monad
 import Control.Monad.State
 import Control.Monad.Except
-import Control.Monad.Writer
+import Control.Monad.Reader
+import Control.Monad.Writer hiding (Dual)
 
 import Data.Loc (Loc(..), locOf)
 import Data.Map (Map)
@@ -17,11 +19,10 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Debug.Trace
 
-
-infer :: Process -> InferM Session
+infer :: Process -> TCM Session
 infer process = case process of
   Call (Callee name _) _ -> do
-    definitions <- lift $ lift $ gets stDefinitions
+    definitions <- ask
     case Map.lookup name definitions of
       Nothing -> error "[panic] Definition not found, this shouldn't happen at the type checking state"
       Just (Annotated _ _ t) -> return t
@@ -29,74 +30,137 @@ infer process = case process of
 
   Link x y _ -> do
 
+    t <- fresh
+
     return $ Map.fromList
-      [ (x, Bot NoLoc)
+      [ (x, t)
+      , (y, dual t)
       ]
+
+  Compose x _ p q _ -> do
+
+    sessionP <- infer p
+    s <- lookup x sessionP
+
+    sessionQ <- infer q
+    t <- lookup x sessionQ
+
+    -- sessionP & sessionQ be disjoint
+
+    subst <- unifyOpposite s t
+
+    return $ Map.map subst $ Map.union
+        (Map.delete x sessionP)
+        (Map.delete x sessionQ)
+
+  Output x y p q _ -> do
+
+    sessionP <- infer p
+    s <- lookup y sessionP
+
+    sessionQ <- infer q
+    t <- lookup x sessionQ
+
+    return
+      $ Map.insert x (Times s t NoLoc)
+      $ Map.union
+          (Map.delete y sessionP)
+          (Map.delete x sessionQ)
+
+  Input x y p _ -> do
+
+    sessionP <- infer p
+    s <- lookup x sessionP
+    t <- lookup y sessionP
+
+    return
+      $ Map.insert x (Par s t NoLoc)
+      $ Map.delete x sessionP
+
+  Request x y p _ -> do
+
+    sessionP <- infer p
+    t <- lookup y sessionP
+
+    return
+      $ Map.insert x (Req t NoLoc)
+      $ Map.delete y sessionP
+
+  InputT x var p _ -> do
+
+    sessionP <- infer p
+    t <- lookup x sessionP
+
+    return
+      $ Map.insert x (Forall var t NoLoc)
+      $ Map.delete x sessionP
 
   EmptyInput x p _ -> do
 
     x `notFreeIn` p
+    sessionP <- infer p
 
-    session <- infer p
+    return
+      $ Map.insert x (Bot NoLoc)
+      $ sessionP
 
-    -- unify (Bot NoLoc) t
-    -- traceShow session (return ())
+  EmptyOutput x _ -> do
 
     return $ Map.fromList
-      [ (x, Bot NoLoc)
+      [ (x, Top NoLoc)
       ]
 
   End _ -> return Map.empty
 
-
-    -- sessionP <- infer p [] [x]
-    --
-    -- t <- extract x
-    -- unify (Bot NoLoc) t
-
-  -- Link x y _ -> do
-
   others -> error $ show others
 
   where
-    notFreeIn :: Chan -> Process -> InferM ()
+    -- If a channel is free in some process, we should be able to get its
+    --  type from the inferred session
+    -- However, if we are asking for something that doesn't exist
+    --  we can still apply the Weakening rule and return something wrapped in "?"
+    lookup :: Chan -> Session -> TCM Type
+    lookup chan session = case Map.lookup chan session of
+      Nothing -> Req <$> fresh <*> pure NoLoc -- Weakening!!
+      Just t -> return t
+
+    -- assert that some channel shouldn't occur free in some process
+    notFreeIn :: Chan -> Process -> TCM ()
     notFreeIn channel term = do
-      -- error $ show (freeVariables process, channel)
       let Chan _ name _ = channel
       when (name `Set.member` freeVariables term) $
         throwError $ ChanFound term channel
 
-    -- unify the two given types, and update the give session.
+    -- return a fresh type variable
+    fresh :: TCM Type
+    fresh = do
+      i <- get
+      put (succ i)
+      return $ Var (TypeVar (Bound i) "_" NoLoc) NoLoc
+
+    -- unify the two given types, and return a substitution function
     -- for better error message, make the former type be the expecting type
     -- and the latter be the given type
-    unify :: Type -> Type -> InferM ()
+    unify :: Type -> Type -> TCM (Type -> Type)
     unify expected given = do
       let (result, subst) = U.unify expected given
       case result of
         Left (t, u) -> throwError $ TypeMismatch process expected given t u
-        Right _ -> tell subst
+        Right _ -> return $ compose $ map U.apply subst
+          where
+            -- compose a list of functions
+            compose = foldl (flip (.)) id
 
-    -- hasNo channels p = do
-    --   process <- p
-    --   let names = map (\(Chan n _) -> n) channels
-    --   let present = Set.fromList names `Set.intersection` B.freeVariables process
-    --   unless (Set.null present) $
-    --     throwError $ ChanFound process present
-    --   return process
+    -- taking extra care when unifying two opposite types
+    -- because we might will lose something when taking the dual of (Exists _ _ _)
+    unifyOpposite :: Type -> Type -> TCM (Type -> Type)
+    unifyOpposite a@(Exists _ _ _ _) b@(Forall _ _ _) = unify a (dual b)
+    unifyOpposite a@(Forall _ _ _) b@(Exists _ _ _ _) = unify (dual a) b
+    unifyOpposite a b                                 = unify a (dual b)
+
 
 --------------------------------------------------------------------------------
--- | InferM
+-- | TCM
 
-type TypeVars = Map Chan TypeVar
-type InferM = WriterT [Substitution] (StateT TypeVars TypeM)
-
-runInferM :: TypeVars -> InferM a -> TypeM ((a, [Substitution]), TypeVars)
-runInferM freeVars f = runStateT (runWriterT f) freeVars
-
-inferProcess :: Process -> TypeM Session
-inferProcess term = do
-  ((result, substitutions), freeChannels) <- runInferM Map.empty (infer term)
-  return $ Map.union (substitute substitutions result) (substitute substitutions (fmap (\c -> Var c (locOf c)) freeChannels))
-  where
-    substitute :: [Substitution] -> Session -> Session
-    substitute = flip $ foldr $ \ (Substitute var t) -> Map.map (U.substitute var t)
+inferProcess :: Process -> TCM Session
+inferProcess = infer

@@ -79,6 +79,9 @@ substitute var new (Forall t u l)   = Forall t (substitute var new u) l
 substitute _   _   others         = others
 
 
+apply :: Substitution -> Type -> Type
+apply (Substitute x y) = substitute x y
+
 -- freeVariable :: Process -> Set Chan
 -- freeVariable (Var x _) = Set.fromList [x, y]
 -- freeVariable (Link x y _) = Set.fromList [x, y]
