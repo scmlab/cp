@@ -30,24 +30,24 @@ infer process = case process of
 
   Link x y _ -> do
 
-    t <- fresh
+    a <- fresh
 
     return $ Map.fromList
-      [ (x, t)
-      , (y, dual t)
+      [ (x, a)
+      , (y, dual a)
       ]
 
   Compose x _ p q _ -> do
 
     sessionP <- infer p
-    s <- lookup x sessionP
+    a <- lookup x sessionP
 
     sessionQ <- infer q
-    t <- lookup x sessionQ
+    a' <- lookup x sessionQ
 
     -- sessionP & sessionQ be disjoint
 
-    subst <- unifyOpposite s t
+    subst <- unifyOpposite a a'
 
     return $ Map.map subst $ Map.union
         (Map.delete x sessionP)
@@ -55,14 +55,16 @@ infer process = case process of
 
   Output x y p q _ -> do
 
+    x `notFreeIn` p
     sessionP <- infer p
-    s <- lookup y sessionP
+    a <- lookup y sessionP
 
+    y `notFreeIn` q
     sessionQ <- infer q
-    t <- lookup x sessionQ
+    b <- lookup x sessionQ
 
     return
-      $ Map.insert x (Times s t NoLoc)
+      $ Map.insert x (Times a b NoLoc)
       $ Map.union
           (Map.delete y sessionP)
           (Map.delete x sessionQ)
@@ -70,30 +72,109 @@ infer process = case process of
   Input x y p _ -> do
 
     sessionP <- infer p
-    s <- lookup x sessionP
-    t <- lookup y sessionP
+    b <- lookup x sessionP
+    a <- lookup y sessionP
 
     return
-      $ Map.insert x (Par s t NoLoc)
-      $ Map.delete x sessionP
+      $ Map.insert x (Par a b NoLoc)
+      $ Map.delete x
+      $ Map.delete y
+      $ sessionP
+
+  SelectL x p _ -> do
+
+    sessionP <- infer p
+    a <- lookup x sessionP
+
+    b <- fresh
+
+    return
+      $ Map.insert x (Plus a b NoLoc)
+      $ Map.delete x
+      $ sessionP
+
+  SelectR x p _ -> do
+
+    sessionP <- infer p
+    b <- lookup x sessionP
+
+    a <- fresh
+
+    return
+      $ Map.insert x (Plus a b NoLoc)
+      $ Map.delete x
+      $ sessionP
+
+  Choice x p q _ -> do
+
+    sessionP <- infer p
+    a <- lookup x sessionP
+
+    sessionQ <- infer q
+    b <- lookup x sessionQ
+
+    -- sessionP sessionQ should be the same
+
+    return
+      $ Map.insert x (With a b NoLoc)
+      $ Map.delete x
+      $ sessionP
+
+  Accept x y p _ -> do
+
+    x `notFreeIn` p
+    sessionP <- infer p
+    a <- lookup y sessionP
+
+    -- sessionShouldAllBeRequesting sessionP
+
+
+    return
+      $ Map.insert x (Acc a NoLoc)
+      $ Map.delete y
+      $ sessionP
 
   Request x y p _ -> do
 
+    x `notFreeIn` p
     sessionP <- infer p
-    t <- lookup y sessionP
+    a <- lookup y sessionP
 
     return
-      $ Map.insert x (Req t NoLoc)
-      $ Map.delete y sessionP
+      $ Map.insert x (Req a NoLoc)
+      $ Map.delete y
+      $ sessionP
+
+  OutputT x outputType p _ -> do
+
+    session <- infer p
+    afterSubstitution <- lookup x session  -- B {A / X}
+    beforeSubstitution <- fresh   -- B
+
+    let t = (Exists
+              Unknown                     -- the type variable to be substituted
+              beforeSubstitution          -- the type before substitution
+              (Just
+                ( outputType   -- the type to be substituted with
+                , afterSubstitution       -- the resulting type after substitution
+                ))
+              NoLoc)
+
+    return
+      $ Map.insert x t
+      $ Map.delete x
+      $ session
+
 
   InputT x var p _ -> do
 
     sessionP <- infer p
-    t <- lookup x sessionP
+    b <- lookup x sessionP
 
     return
-      $ Map.insert x (Forall var t NoLoc)
-      $ Map.delete x sessionP
+      $ Map.insert x (Forall var b NoLoc)
+      $ Map.delete x
+      $ sessionP
 
   EmptyInput x p _ -> do
 
@@ -107,7 +188,7 @@ infer process = case process of
   EmptyOutput x _ -> do
 
     return $ Map.fromList
-      [ (x, Top NoLoc)
+      [ (x, One NoLoc)
       ]
 
   End _ -> return Map.empty

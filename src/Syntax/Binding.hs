@@ -159,10 +159,27 @@ data Type
 -- | Instances
 
 instance Eq Type where
-  (==) = (==) `on` dual
+  (==) = eq `on` dual
+      where
+        eq :: Type -> Type -> Bool
+        eq (Var a _) (Var b _) = a == b
+        eq (Dual a _) (Dual b _) = eq a b
+        eq (Times a b _) (Times c d _) = eq a c && eq b d
+        eq (Par a b _) (Par c d _) = eq a c && eq b d
+        eq (Plus a b _) (Plus c d _) = eq a c && eq b d
+        eq (With a b _) (With c d _) = eq a c && eq b d
+        eq (Acc a _) (Acc b _) = eq a b
+        eq (Req a _) (Req b _) = eq a b
+        eq (Exists a b c _) (Exists d e f _) = a == d && eq b e && c == f
+        eq (Forall a b _) (Forall c d _) = a == c && eq b d
+        eq (One _) (One _) = True
+        eq (Bot _) (Bot _) = True
+        eq (Zero _) (Zero _) = True
+        eq (Top _) (Top _) = True
+        eq _ _ = False
 
 instance Ord Type where
-  compare = compare `on` dual
+  compare _ _ = EQ
 
 instance Eq Name where
   (Name a _) == (Name b _) = a == b
