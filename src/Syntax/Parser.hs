@@ -9,12 +9,10 @@ module Syntax.Parser
   )
   where
 
-import Syntax.Base
 import Syntax.Concrete
-import Syntax.Parser.Parser (programParser, processParser, sessionSyntaxParser)
+import Syntax.Parser.Parser (programParser, processParser)
 import Syntax.Parser.Lexer (lexer)
 import Syntax.Parser.Type
-import TypeChecking.Binding
 
 import Control.Monad.Except
 import Control.Monad.State

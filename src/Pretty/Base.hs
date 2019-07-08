@@ -15,7 +15,6 @@ import qualified Data.Loc as Loc
 
 import Data.Loc
 import qualified Data.Set as Set
-import qualified Data.Map as Map
 import Data.Monoid (mempty, (<>))
 import System.IO
 
@@ -116,21 +115,21 @@ prettySourceCode (SourceCode source (Loc from to) spread) =
           substring startFrom (Just endAt)  = drop (startFrom - 1) . take endAt
 
           prettyLine :: (Int, String) -> Doc SourceCodeAnnotation
-          prettyLine (n, line)
+          prettyLine (n, s)
             | n == posLine from && n == posLine to =
-                    annotate Other            (pretty $ substring 0              (Just (posCol from - 1)) line)
-                <>  annotate HighlightedArea  (pretty $ substring (posCol from)  (Just (posCol to))       line)
-                <>  annotate Other            (pretty $ substring (posCol to + 1) Nothing                 line)
+                    annotate Other            (pretty $ substring 0              (Just (posCol from - 1)) s)
+                <>  annotate HighlightedArea  (pretty $ substring (posCol from)  (Just (posCol to))       s)
+                <>  annotate Other            (pretty $ substring (posCol to + 1) Nothing                 s)
             | n == posLine from =
-                    annotate Other            (pretty $ substring 0              (Just (posCol from - 1)) line)
-                <>  annotate HighlightedArea  (pretty $ substring (posCol from)  Nothing                  line)
+                    annotate Other            (pretty $ substring 0              (Just (posCol from - 1)) s)
+                <>  annotate HighlightedArea  (pretty $ substring (posCol from)  Nothing                  s)
             | n == posLine to =
-                    annotate HighlightedArea  (pretty $ substring 0              (Just (posCol to))       line)
-                <>  annotate Other            (pretty $ substring (posCol to)    Nothing                  line)
+                    annotate HighlightedArea  (pretty $ substring 0              (Just (posCol to))       s)
+                <>  annotate Other            (pretty $ substring (posCol to)    Nothing                  s)
             | n > posLine from && n < posLine to =
-                    annotate HighlightedArea  (pretty line)
+                    annotate HighlightedArea  (pretty s)
             | otherwise =
-                    annotate Other            (pretty line)
+                    annotate Other            (pretty s)
 
 
 --------------------------------------------------------------------------------

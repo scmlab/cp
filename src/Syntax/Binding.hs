@@ -9,10 +9,8 @@ import Syntax.Base
 
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
-import Data.Maybe (mapMaybe)
 import qualified Data.Set as Set
 import Data.Set (Set)
-import qualified Data.Map as Map
 import Data.Map (Map)
 import Data.Function (on)
 
@@ -340,52 +338,28 @@ instance HasDual Type where
 convert :: SessionSyntax -> Session
 convert (SessionSyntax xs _) = xs
 
--- toDefinitions :: Program -> Definitions
--- toDefinitions (Program declarations _) = definitions
---   where
---     toTypeSigPair (TypeSig n s _) = Just (n, convert s)
---     toTypeSigPair _                 = Nothing
---
---     toTermDefnPair (TermDefn n t _) = Just (n, (n, t))
---     toTermDefnPair _                  = Nothing
---
---     typeSigs :: Map Name Session
---     typeSigs  = Map.fromList $ mapMaybe toTypeSigPair declarations
---
---     termDefns :: Map Name (Name, Process)
---     termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
---
---     termsWithTypes :: Definitions
---     termsWithTypes = Map.map (\ ((n, t), s) -> Annotated n t s) $ Map.intersectionWith (,) termDefns typeSigs
---
---     termsWithoutTypes :: Definitions
---     termsWithoutTypes = Map.map (\ (n, t) -> Unannotated n t) $ Map.difference termDefns typeSigs
---
---     definitions :: Definitions
---     definitions = Map.union termsWithTypes termsWithoutTypes
-
 --------------------------------------------------------------------------------
 -- Free variables
 
 freeVariables :: Process -> Set Text
 freeVariables process = case process of
-  Call (Callee _ p) loc -> freeVariables p
-  Link x y loc -> Set.fromList [toVar x, toVar y]
-  Compose x t p q loc -> Set.delete (toVar x) $ Set.union (freeVariables p) (freeVariables q)
-  Output x y p q loc -> Set.insert (toVar x) $ Set.delete (toVar y) $ Set.union (freeVariables p) (freeVariables q)
-  Input x y p loc -> Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
-  SelectL x p loc -> Set.insert (toVar x) $ freeVariables p
-  SelectR x p loc -> Set.insert (toVar x) $ freeVariables p
-  Choice x p q loc -> Set.insert (toVar x) $ Set.union (freeVariables p) (freeVariables q)
-  Accept x y p loc ->Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
-  Request x y p loc -> Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
-  OutputT x t p loc -> Set.insert (toVar x) (freeVariables p)
-  InputT x t p loc -> Set.insert (toVar x) (freeVariables p)
-  EmptyOutput x loc -> Set.singleton (toVar x)
-  EmptyInput x p loc -> Set.insert (toVar x) (freeVariables p)
-  EmptyChoice x loc -> Set.singleton (toVar x)
-  End loc -> Set.empty
-  Mix p q loc -> Set.union (freeVariables p) (freeVariables q)
+  Call (Callee _ p) _ -> freeVariables p
+  Link x y _ -> Set.fromList [toVar x, toVar y]
+  Compose x _ p q _ -> Set.delete (toVar x) $ Set.union (freeVariables p) (freeVariables q)
+  Output x y p q _ -> Set.insert (toVar x) $ Set.delete (toVar y) $ Set.union (freeVariables p) (freeVariables q)
+  Input x y p _ -> Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
+  SelectL x p _ -> Set.insert (toVar x) $ freeVariables p
+  SelectR x p _ -> Set.insert (toVar x) $ freeVariables p
+  Choice x p q _ -> Set.insert (toVar x) $ Set.union (freeVariables p) (freeVariables q)
+  Accept x y p _ ->Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
+  Request x y p _ -> Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
+  OutputT x _ p _ -> Set.insert (toVar x) (freeVariables p)
+  InputT x _ p _ -> Set.insert (toVar x) (freeVariables p)
+  EmptyOutput x _ -> Set.singleton (toVar x)
+  EmptyInput x p _ -> Set.insert (toVar x) (freeVariables p)
+  EmptyChoice x _ -> Set.singleton (toVar x)
+  End _ -> Set.empty
+  Mix p q _ -> Set.union (freeVariables p) (freeVariables q)
   where
     toVar :: Chan -> Text
     toVar (Chan _ name _) = name

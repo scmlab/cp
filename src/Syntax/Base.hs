@@ -5,11 +5,7 @@
 module Syntax.Base where
 
 import Data.Text (Text)
-import qualified Data.Set as Set
-import Data.Set (Set)
 import Data.Loc (Loc(..))
-
-import Control.Monad.State
 
 instance Ord Loc where
   Loc _ _ `compare` Loc _ _ = EQ

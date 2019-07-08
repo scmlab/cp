@@ -15,7 +15,8 @@ import Data.Monoid ((<>))
 import Data.Text.Prettyprint.Doc hiding (line)
 import Data.Text (Text)
 import Data.Loc (locOf)
-import qualified Data.Set as Set
+-- import qualified Data.Set as Set
+import qualified Data.Map as Map
 
 import Data.Text.Prettyprint.Doc
 import Data.Text.Prettyprint.Doc.Render.Terminal
@@ -70,39 +71,39 @@ highlight' :: Doc AnsiStyle -> Doc AnsiStyle
 highlight' = annotate (colorDull Blue)
 
 instance Report TypeError where
-  reportS (ChanFound term channel) = reportS
+  reportS (ChannelNotComsumed term channel) = reportS
     [ H1 "Channel occur free"
     , P $ "the channel" <+> highlight channel <+> "should not occur free"
         <> line
         <> "in the following term"
     , CODE $ locOf term
     ]
-  reportS (ChanNotFound term channel) = reportS
-    [ H1 "Channel not found"
-    , P $ "the channel" <+> highlight channel <+> "should occur free"
-        <> line
-        <> "in the following term"
-    , CODE $ locOf term
-    ]
-  reportS (General msg) = reportS [H1 "Other unformatted inference errors", P $ pretty msg]
-  reportS (CannotCloseChannel term chan) = reportS
-    [ H1 "Channel cannot be closed"
-    , P $ "channel" <+> highlight chan <+> "cannot be closed"
-    , CODE $ locOf chan
-    , P $ "because it is being used in the following term"
-    , CODE $ locOf term
-    ]
-  reportS (ChannelNotComsumed term session) = reportS
-    [ H1 "Channel not consumed"
-    , P $ "these channels should be comsumed"
-        <> line
-        <> line
-        <> indent 2 (report session)
-        <> line
-        <> line
-        <> "in the following term"
-    , CODE $ locOf term
-    ]
+  -- reportS (ChanNotFound term channel) = reportS
+  --   [ H1 "Channel not found"
+  --   , P $ "the channel" <+> highlight channel <+> "should occur free"
+  --       <> line
+  --       <> "in the following term"
+  --   , CODE $ locOf term
+  --   ]
+  -- reportS (General msg) = reportS [H1 "Other unformatted inference errors", P $ pretty msg]
+  -- reportS (CannotCloseChannel term chan) = reportS
+  --   [ H1 "Channel cannot be closed"
+  --   , P $ "channel" <+> highlight chan <+> "cannot be closed"
+  --   , CODE $ locOf chan
+  --   , P $ "because it is being used in the following term"
+  --   , CODE $ locOf term
+  --   ]
+  -- reportS (ChannelNotComsumed term session) = reportS
+  --   [ H1 "Channel not consumed"
+  --   , P $ "these channels should be comsumed"
+  --       <> line
+  --       <> line
+  --       <> indent 2 (report session)
+  --       <> line
+  --       <> line
+  --       <> "in the following term"
+  --   , CODE $ locOf term
+  --   ]
   reportS (TypeMismatch term expectedWhole actualWhole expected actual) = reportS $
         [ H1 "Type mismatched" ]
     ++  message
@@ -139,8 +140,18 @@ instance Report TypeError where
         <>  "when checking the following term"
     , CODE $ locOf term
     ]
+  reportS (SessionNotDisjoint term a b) = reportS
+    [ H1 "Sessions not disjoint"
+    , P $ "these channels appear in both sides of the session" <> line
+        <> line
+        <> indent 2 (report (Map.intersection a b))
+        <> line
+        <> line
+        <> "when checking the following term"
+    , CODE $ locOf term
+    ]
 
-  reportS (SessionShouldAllBeRequesting term session) = reportS
+  reportS (SessionNotAllRequest term session) = reportS
     [ H1 "Channels should all be requesting"
     , P $ "there are some channels"
         <> line
@@ -155,17 +166,6 @@ instance Report TypeError where
     ]
 
 
-
-  reportS (SessionShouldBeDisjoint term session) = reportS
-    [ H1 "Sessions not disjoint"
-    , P $ "these channels appear in both sides of the session" <> line
-        <> line
-        <> indent 2 (report session)
-        <> line
-        <> line
-        <> "when checking the following term"
-    , CODE $ locOf term
-    ]
 
 instance Report RuntimeError where
   report (Runtime_NotInScope name) = report

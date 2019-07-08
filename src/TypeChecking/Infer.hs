@@ -1,4 +1,4 @@
-module TypeChecking.Infer2 where
+module TypeChecking.Infer where
 
 import Syntax.Base
 import Syntax.Binding
@@ -11,13 +11,39 @@ import qualified TypeChecking.Unification as U
 import Control.Monad.State
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.Writer hiding (Dual)
+-- import Control.Monad.Writer hiding (Dual)
 
-import Data.Loc (Loc(..), locOf)
-import Data.Map (Map)
+import Data.Loc (Loc(..))
+-- import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Debug.Trace
+-- import Debug.Trace
+import Prelude hiding (lookup)
+
+-- check :: Process -> Session
+
+check :: Name -> Process -> Session -> TCM ()
+check _ process annotation = do
+  inferred <- infer process
+  let notInferred = Map.difference annotation inferred
+  let notAnnotated = Map.difference inferred annotation
+  let difference = Map.union notInferred notAnnotated
+
+  -- see if the keys of two Maps look the same
+  unless (Map.null difference) $
+    throwError $ SessionMismatch process notInferred notAnnotated
+
+  -- look into the types and see if they are also the same
+  forM_ (Map.intersectionWith (,) annotation inferred) (uncurry (checkIfEqual process))
+
+  where
+    checkIfEqual :: Process -> Type -> Type -> TCM ()
+    checkIfEqual p expected given = do
+        let (result, _) = U.unify expected given
+        case result of
+          Left (a, b) -> throwError $ TypeMismatch p expected given a b
+          Right _ -> return ()
+
 
 infer :: Process -> TCM Session
 infer process = case process of
@@ -45,13 +71,17 @@ infer process = case process of
     sessionQ <- infer q
     a' <- lookup x sessionQ
 
-    -- sessionP & sessionQ be disjoint
+    let sessionP' = Map.delete x sessionP
+    let sessionQ' = Map.delete x sessionQ
+
+
+    sessionP' `disjoint` sessionQ'
 
     subst <- unifyOpposite a a'
 
-    return $ Map.map subst $ Map.union
-        (Map.delete x sessionP)
-        (Map.delete x sessionQ)
+    return
+      $ Map.map subst
+      $ Map.union sessionP' sessionQ'
 
   Output x y p q _ -> do
 
@@ -63,47 +93,52 @@ infer process = case process of
     sessionQ <- infer q
     b <- lookup x sessionQ
 
+    let sessionP' = Map.delete y sessionP
+    let sessionQ' = Map.delete x sessionQ
+
+    sessionP' `disjoint` sessionQ'
+
     return
       $ Map.insert x (Times a b NoLoc)
-      $ Map.union
-          (Map.delete y sessionP)
-          (Map.delete x sessionQ)
+      $ Map.union sessionP' sessionQ'
 
   Input x y p _ -> do
 
-    sessionP <- infer p
-    b <- lookup x sessionP
-    a <- lookup y sessionP
+    session <- infer p
+    b <- lookup x session
+    a <- lookup y session
+
+    let session' = Map.delete x $ Map.delete y session
 
     return
       $ Map.insert x (Par a b NoLoc)
-      $ Map.delete x
-      $ Map.delete y
-      $ sessionP
+      $ session'
 
   SelectL x p _ -> do
 
-    sessionP <- infer p
-    a <- lookup x sessionP
+    session <- infer p
+    a <- lookup x session
+
+    let session' = Map.delete x session
 
     b <- fresh
 
     return
       $ Map.insert x (Plus a b NoLoc)
-      $ Map.delete x
-      $ sessionP
+      $ session'
 
   SelectR x p _ -> do
 
-    sessionP <- infer p
-    b <- lookup x sessionP
+    session <- infer p
+    b <- lookup x session
+
+    let session' = Map.delete x session
 
     a <- fresh
 
     return
       $ Map.insert x (Plus a b NoLoc)
-      $ Map.delete x
-      $ sessionP
+      $ session'
 
   Choice x p q _ -> do
 
@@ -113,37 +148,41 @@ infer process = case process of
     sessionQ <- infer q
     b <- lookup x sessionQ
 
-    -- sessionP sessionQ should be the same
+
+    let sessionP' = Map.delete x sessionP
+    let sessionQ' = Map.delete x sessionQ
+
+    sessionP' `equal` sessionQ'
 
     return
       $ Map.insert x (With a b NoLoc)
-      $ Map.delete x
-      $ sessionP
+      $ sessionP'
 
   Accept x y p _ -> do
 
     x `notFreeIn` p
-    sessionP <- infer p
-    a <- lookup y sessionP
+    session <- infer p
+    a <- lookup y session
 
-    -- sessionShouldAllBeRequesting sessionP
+    let session' = Map.delete y session
 
+    allRequest session'
 
     return
       $ Map.insert x (Acc a NoLoc)
-      $ Map.delete y
-      $ sessionP
+      $ session'
 
   Request x y p _ -> do
 
     x `notFreeIn` p
-    sessionP <- infer p
-    a <- lookup y sessionP
+    session <- infer p
+    a <- lookup y session
+
+    let session' = Map.delete y session
 
     return
       $ Map.insert x (Req a NoLoc)
-      $ Map.delete y
-      $ sessionP
+      $ session'
 
   OutputT x outputType p _ -> do
 
@@ -155,45 +194,55 @@ infer process = case process of
               Unknown                     -- the type variable to be substituted
               beforeSubstitution          -- the type before substitution
               (Just
-                ( outputType   -- the type to be substituted with
+                ( outputType              -- the type to be substituted with
                 , afterSubstitution       -- the resulting type after substitution
                 ))
               NoLoc)
+    let session' = Map.delete x session
 
     return
       $ Map.insert x t
-      $ Map.delete x
-      $ session
-
+      $ session'
 
   InputT x var p _ -> do
 
-    sessionP <- infer p
-    b <- lookup x sessionP
+    session <- infer p
+    b <- lookup x session
+    let session' = Map.delete x session
 
     return
       $ Map.insert x (Forall var b NoLoc)
-      $ Map.delete x
-      $ sessionP
+      $ session'
 
   EmptyInput x p _ -> do
 
     x `notFreeIn` p
-    sessionP <- infer p
+    session <- infer p
 
     return
       $ Map.insert x (Bot NoLoc)
-      $ sessionP
+      $ session
 
   EmptyOutput x _ -> do
+    return
+      $ Map.singleton x (One NoLoc)
 
-    return $ Map.fromList
-      [ (x, One NoLoc)
-      ]
+  EmptyChoice x _ -> do
+    return
+      $ Map.singleton x (Top NoLoc)
 
   End _ -> return Map.empty
 
-  others -> error $ show others
+  Mix p q _ -> do
+
+    sessionP <- infer p
+    sessionQ <- infer q
+
+    sessionP `disjoint` sessionQ
+
+    return
+      $ Map.union sessionP sessionQ
+
 
   where
     -- If a channel is free in some process, we should be able to get its
@@ -210,7 +259,7 @@ infer process = case process of
     notFreeIn channel term = do
       let Chan _ name _ = channel
       when (name `Set.member` freeVariables term) $
-        throwError $ ChanFound term channel
+        throwError $ ChannelNotComsumed term channel
 
     -- return a fresh type variable
     fresh :: TCM Type
@@ -238,6 +287,30 @@ infer process = case process of
     unifyOpposite a@(Exists _ _ _ _) b@(Forall _ _ _) = unify a (dual b)
     unifyOpposite a@(Forall _ _ _) b@(Exists _ _ _ _) = unify (dual a) b
     unifyOpposite a b                                 = unify a (dual b)
+
+    -- assert that two sessions be disjoint
+    disjoint :: Session -> Session -> TCM ()
+    disjoint a b =
+      unless (Set.disjoint (Map.keysSet a) (Map.keysSet b)) $
+        throwError $ SessionNotDisjoint process a b
+
+    -- assert that two sessions be equal
+    equal :: Session -> Session -> TCM ()
+    equal a b =
+      unless (a == b) $
+        throwError $ SessionMismatch process a b
+
+    allRequest :: Session -> TCM ()
+    allRequest session =
+      unless (Map.null outliers) $
+        throwError $ SessionNotAllRequest process outliers
+      where
+        outliers :: Session
+        outliers = Map.filter (not . isRequesting) session
+
+        isRequesting :: Type -> Bool
+        isRequesting (Req _ _) = True
+        isRequesting _         = False
 
 
 --------------------------------------------------------------------------------

@@ -6,10 +6,7 @@ import Syntax.Binding
 import Prelude hiding (lookup)
 
 
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Text (Text)
-import Data.Set (Set)
 
 import Control.Monad.State
 import Control.Monad.Except
@@ -37,17 +34,21 @@ isAnnotated _                 = False
 -- | Error
 
 data TypeError
-  = General Text
-  | TypeMismatch Process Type Type Type Type
-  | SessionMismatch Name Session Session
-  | SessionShouldBeTheSame Process Session
-  | SessionShouldBeDisjoint Process Session
-  | SessionShouldAllBeRequesting Process Session
-  | CannotCloseChannel Process Chan
-  | ChannelNotFound Process Chan Session
-  | ChannelNotComsumed Process Session
-  | ChanFound Process Chan
-  | ChanNotFound Process Chan
+  =  TypeMismatch Process Type Type Type Type
+  -- | SessionMismatch Name Session Session
+  -- | SessionShouldBeTheSame Process Session
+  -- | SessionShouldBeDisjoint Process Session
+  -- | SessionShouldAllBeRequesting Process Session
+  -- | CannotCloseChannel Process Chan
+  -- | ChannelNotFound Process Chan Session
+  -- | ChannelNotComsumed Process Session
+  -- | ChanFound Process Chan
+  | ChannelNotComsumed Process Chan
+
+
+  | SessionMismatch Process Session Session
+  | SessionNotDisjoint Process Session Session
+  | SessionNotAllRequest Process Session
   deriving (Show)
 
 data ScopeError

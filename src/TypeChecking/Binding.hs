@@ -11,9 +11,8 @@ import TypeChecking.Base
 
 import Data.Loc (Loc(..))
 import Data.Text (Text)
-import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Set (Set, (\\))
+import Data.Set (Set)
 import qualified Data.Set as Set
 import Prelude hiding (LT, EQ, GT)
 
@@ -21,7 +20,7 @@ import Control.Monad.Reader
 import Control.Monad.State
 import Control.Monad.Except
 
-import Debug.Trace
+-- import Debug.Trace
 
 --------------------------------------------------------------------------------
 -- | Converting to Concrete Binding Tree

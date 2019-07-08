@@ -2,9 +2,9 @@ module Runtime where
 
 
 import Syntax.Binding
-import Pretty
+-- import Pretty
 
-import TypeChecking.Base
+-- import TypeChecking.Base
 import Base
 
 import Data.Loc (Loc(..))

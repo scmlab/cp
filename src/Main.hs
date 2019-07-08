@@ -8,7 +8,7 @@ import Syntax.Parser
 import TypeChecking
 -- import TypeChecking.Binding
 -- import TypeChecking.Infer
-import TypeChecking.Infer2 (inferProcess)
+import TypeChecking.Infer (inferProcess)
 import TypeChecking.Base
 import Pretty.Error ()
 import Pretty.Base
@@ -100,7 +100,7 @@ handleM program = do
 runTCM :: TCM a -> M a
 runTCM f = do
   definitions <- gets replDefinitions
-  let (result, s) = runReader (runStateT (runExceptT f) 0) definitions
+  let (result, _) = runReader (runStateT (runExceptT f) 0) definitions
   case result of
     Left err -> throwError $ TypeError err
     Right val -> return val

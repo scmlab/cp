@@ -5,19 +5,14 @@
 module Syntax.Concrete where
 
 import Syntax.Base
--- import qualified Syntax.Abstract as A
-import qualified Syntax.Binding as B
 
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe (mapMaybe)
-import qualified Data.Set as Set
-import Data.Function (on)
 import Prelude hiding (LT, EQ, GT)
 
-import Control.Monad.State
 
 --------------------------------------------------------------------------------
 -- | Concrete Syntax Tree

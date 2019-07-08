@@ -2,8 +2,6 @@
 
 module Pretty.Syntax.Concrete where
 
-import TypeChecking.Binding
-import Syntax.Base
 import Syntax.Concrete
 import Pretty.Syntax.Binding ()
 

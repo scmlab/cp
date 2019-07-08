@@ -31,4 +31,4 @@ choice = x.case(sell, quote)
 runSelectBuyChoice = \x . (selectBuy | choice)
 runSelectShopChoice = \x . (selectShop | choice)
 
-client = ?x(y) . selectBuy | ?x(y) . selectShop
+-- client = ?x[y] . selectBuy | ?x[y] . selectShop
