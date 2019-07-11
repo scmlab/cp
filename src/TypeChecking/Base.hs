@@ -55,7 +55,7 @@ data ScopeError
   = TypeSigDuplicated C.Name C.Name
   | TermDefnDuplicated C.Name C.Name
   | DefnNotFound C.Process C.Name
-  | RecursiveCall C.Process C.Name
+  | RecursiveCall [C.Name]
   -- | ChanNotFound Process (Set Text)
   -- | ChanFound Process (Set Text)
   | Others Text

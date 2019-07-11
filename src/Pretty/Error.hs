@@ -54,10 +54,9 @@ instance Report ScopeError where
         <> "when checking the following term"
     , CODE $ locOf term
     ]
-  reportS (RecursiveCall term name) = reportS
-    [ H1 "Recursive call detected"
-    , P $ highlight name <> " is calling itself"
-    , CODE $ locOf term
+  reportS (RecursiveCall names) = reportS
+    [ H1 "Recursive calls detected"
+    , P $ pretty names
     ]
   reportS (Others msg) = reportS
     [ H1 "Other unformatted type errors"

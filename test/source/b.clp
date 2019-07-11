@@ -1,27 +1,37 @@
-zero = x(A).x(s).x(z).z<->x
+zero = x(X).x(s).x(z).z<->x
+one = x(X).x(s).x(z).?s[f].f[a].(a<->z|f<->x)
+
 
 putName = u[] . end
 putCredit = v[] . end
 getReceipt = w() . end
 compute = u() . v() . w[] . end
 
+buy1 = x() . getReceipt
+buy2 = x(w) . x() . getReceipt
+buy3 = x[v] . (putCredit | x(w) . x() . getReceipt)
 buy = x[u] . (putName | x[v] . (putCredit | x(w) . x() . getReceipt))
 sell = x(u) . x(v) . x[w] . (compute | x[] . end)
+-- runBuy = \ x . (buy | sell)
 
-buySell = \ x . (buy | sell)
 
-getPrice = v() . end
+getPrice = v() . x() . end
 lookup = u() . v[] . end
 
 shop = x[u] . (putName | x(v) . getPrice)
 quote = x(u) . x[v] . (lookup | x[] . end)
+runShopQuote = \x . (shop | quote)
+
 
 selectBuy = x[inl] . buy
 selectShop = x[inr] . shop
 choice = x.case(sell, quote)
 
-runBuy = \ x . (selectBuy | choice)
-runShop = \ x . (selectShop | choice)
 
--- client = ?a[y] . selectBuy | ?a[y] . selectShop
--- server = !a(y) . choice
+-- runSelectBuyChoice = \x . (selectBuy | choice)
+-- runSelectShopChoice = \x . (selectShop | choice)
+
+
+-- a = ?z[y] . selectBuy
+-- b = ?z[y] . selectShop
+-- client = a | b

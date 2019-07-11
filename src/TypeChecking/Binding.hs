@@ -2,7 +2,10 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE DeriveFunctor, FlexibleInstances #-}
 
-module TypeChecking.Binding where
+module TypeChecking.Binding
+  ( runBindM
+  , Bind(..)
+  ) where
 
 import Syntax.Base
 import Syntax.Concrete
@@ -33,8 +36,6 @@ data Binding = Binding
 data BindingState = BindingState
   { bsChannel :: Binding
   , bsTypeVar :: Binding
-  -- should be reset when checking each definitions
-  , bsTraversed :: Set Name
   } deriving (Show)
 
 type BindM = ExceptT ScopeError (StateT BindingState (Reader Definitions))
@@ -56,7 +57,6 @@ runBindM defns f =
       BindingState
         (Binding 0 Set.empty)
         (Binding 0 Set.empty)
-        Set.empty
 
 askDefn :: Name -> Loc -> BindM Definition
 askDefn name loc = do
@@ -65,15 +65,6 @@ askDefn name loc = do
     Nothing -> throwError $ DefnNotFound (Call name loc) name
     Just definition -> return definition
 
-
-resetTraversed :: BindM ()
-resetTraversed = do
-  modify $ \ st -> st { bsTraversed = Set.empty }
-
-
-markTraversed :: Name -> BindM ()
-markTraversed name = do
-  modify $ \ st -> st { bsTraversed = Set.insert name (bsTraversed st) }
 
 --------------------------------------------------------------------------------
 
@@ -182,14 +173,7 @@ instance Bind Chan B.Chan where
 
 instance Bind Process B.Process where
   bindM (Call name loc) = do
-    -- see if name has been traversed
-    traversed <- Set.member name <$> gets bsTraversed
-    -- raise error if it's been traversed
-    when traversed $ throwError $ RecursiveCall (Call name loc) name
-
     process <- toProcess <$> askDefn name loc
-    -- mark `name` as traversed
-    markTraversed name
 
     callee <- B.Callee
       <$> bindM name
@@ -309,13 +293,11 @@ instance Bind Program B.Program where
 
 instance Bind Definition B.Definition where
   bindM (Annotated name process session) = do
-    resetTraversed
     B.Annotated
       <$> bindM name
       <*> bindM process
       <*> bindM session
   bindM (Unannotated name process) = do
-    resetTraversed
     B.Unannotated
       <$> bindM name
       <*> bindM process

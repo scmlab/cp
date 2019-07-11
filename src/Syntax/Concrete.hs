@@ -8,10 +8,17 @@ import Syntax.Base
 
 import Data.Loc (Loc(..), Located(..))
 import Data.Text (Text)
+import Data.List (elemIndex)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 import Data.Maybe (mapMaybe)
 import Prelude hiding (LT, EQ, GT)
+
+import Control.Monad.State
+import Control.Monad.Except
+import Control.Monad.Reader
 
 
 --------------------------------------------------------------------------------
@@ -193,3 +200,79 @@ instance Located Type where
   locOf (Bot loc) = loc
   locOf (Zero loc) = loc
   locOf (Top loc) = loc
+
+
+
+--------------------------------------------------------------------------------
+-- Call graph
+
+type CallGraph = Map Name (Set Name)
+type CallM = State CallGraph
+
+buildCallGraph :: Program -> CallGraph
+buildCallGraph program = execState (buildAll (toDefinitions program)) Map.empty
+  where
+    buildAll :: Definitions -> CallM ()
+    buildAll = mapM_ (uncurry build) . Map.toList . Map.map toProcess
+
+    insert :: Name -> Name -> CallM ()
+    insert a b = modify (Map.insertWith Set.union a (Set.singleton b))
+
+    build :: Name -> Process -> CallM ()
+    build name process = case process of
+      Call callee _ -> insert name callee
+      Link _ _ _ -> return ()
+      Compose _ _ p q _ -> do
+        build name p
+        build name q
+      Output _ _ p q _ -> do
+        build name p
+        build name q
+      Input _ _ p _ -> build name p
+      SelectL _ p _ -> build name p
+      SelectR _ p _ -> build name p
+      Choice _ p q _ -> do
+        build name p
+        build name q
+      Accept _ _ p _ -> build name p
+      Request _ _ p _ -> build name p
+      OutputT _ _ p _ -> build name p
+      InputT _ _ p _ -> build name p
+      EmptyOutput _ _ -> return ()
+      EmptyInput _ p _ -> build name p
+      EmptyChoice _ _ -> return ()
+      End _ -> return ()
+      Mix p q _ -> do
+        build name p
+        build name q
+
+-- represents the order of calls (from back to front)
+type Path = [Name]
+type LoopM = ExceptT Path (Reader CallGraph)
+
+step :: Path -> LoopM [Path]
+step input = do
+  graph <- ask
+  paths <- case input of
+    -- constructing initial paths with the entries
+    [] -> return [ [p] | p <- Map.keys graph ]
+    (x:xs) -> do
+      -- throw error when the newly added name is already traversed
+      case elemIndex x xs of
+        Nothing -> return ()
+        -- `x` occurs at the nths position of `xs`, cut that cycling part down
+        Just n -> throwError (x : take n xs)
+
+      case Map.lookup x graph of
+        -- x not present in the graph, end it here
+        Nothing -> return []
+        -- x leads to some more names
+        Just ns -> return [ (n:x:xs) | n <- Set.toList ns ]
+
+  results <- mapM step paths
+  return (concat results)
+
+detectLoop :: CallGraph -> Maybe Path
+detectLoop graph = case runReader (runExceptT (step [])) graph of
+  Left loop -> Just loop
+  Right _ -> Nothing

@@ -19,6 +19,7 @@ import Data.Maybe (mapMaybe)
 
 import Control.Monad.State
 import Control.Monad.Except
+import Pretty
 
 bind :: Bind a b => Maybe C.Program -> a -> M b
 bind program process = do
@@ -31,6 +32,8 @@ scopeCheck :: C.Program -> M B.Definitions
 scopeCheck program = do
   -- check the program for duplicated definitions
   checkDuplications program
+  -- check the program for recursive calls
+  checkRecursion program
   -- form the binding structure
   B.Program definitions _ <- bind (Just program) program
   modify $ \ st -> st { replDefinitions = definitions }
@@ -70,6 +73,12 @@ checkDuplications (C.Program declarations _) = do
     getDuplicatedPair names =
       let dup = filter ((> 1) . length) $ List.group $ List.sort names
       in if null dup then Nothing else Just (head dup !! 0, head dup !! 1)
+
+checkRecursion :: C.Program -> M ()
+checkRecursion program = do
+  case C.detectLoop (C.buildCallGraph program) of
+    Nothing -> return ()
+    Just loop -> throwError $ ScopeError $ RecursiveCall loop
 
 -- scopeCheckAll :: Program -> M ()
 -- scopeCheckAll program = do

@@ -1,3 +1,5 @@
+{-# LANGUAGE OverloadedStrings #-}
+
 module TypeChecking.Infer where
 
 import Syntax.Base
