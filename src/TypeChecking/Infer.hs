@@ -25,8 +25,6 @@ import Prelude hiding (lookup)
 -- import Debug.Trace
 -- import Pretty
 
--- check :: Process -> Session
-
 check :: Name -> Process -> Session -> TCM ()
 check _ process expected = do
   given <- infer process

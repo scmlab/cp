@@ -4,13 +4,22 @@ zero = x(X).x(s).x(z).z<->x
 one : { x : forall X . ? (X * ^X) % (^X % X) }
 one = x(X).x(s).x(z).?s[f].f[a].(a<->z|f<->x)
 
-count :
-  { x : ^ (forall X . ? (X * ^X) % (^X % X))
+incr :
+  { a : 0
+  ; f : ? Top
   }
 
--- server = ?x[y] . y[] . end
--- client = !x(y) . y() . end
+nought :
+  { z : ? Top
+  }
 
--- run = \x . (server | client)
+a = x[s] . (!s(f) . f(a) . incr | x[z] . (nought | x <-> y))
 
--- sell = x(u) . x(v) . x[w] . (u() . v() . w[] . end | x[] . end)
+count :
+  { x : ^ (forall X . ? (X * ^X) % (^X % X))
+  ; y : ? Top
+  }
+count = x[? Top] . x[s] . (!s(f) . f(a) . incr | x[z] . (nought | x <-> y))
+
+countZero = \x . (zero | count)
+countOne = \x . (one | count)

@@ -250,7 +250,7 @@ handleCommand (TypeOf expr) = do
     -- local expression parsing
     process <- parseProcessM expr
     process' <- bind program process
-    session <- runTCM $ (inferProcess process')
+    session <- runTCM $ inferProcess process'
     liftIO $ putDoc $ report session <> line
     return ()
   return True

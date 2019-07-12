@@ -132,23 +132,26 @@ toDefinitions (Program declarations _) = definitions
     toTypeSigPair (TypeSig n s _) = Just (n, convert s)
     toTypeSigPair _                 = Nothing
 
-    toTermDefnPair (TermDefn n t _) = Just (n, (n, t))
+    toTermDefnPair (TermDefn n t _) = Just (n, t)
     toTermDefnPair _                  = Nothing
 
     typeSigs :: Map Name Session
     typeSigs  = Map.fromList $ mapMaybe toTypeSigPair declarations
 
-    termDefns :: Map Name (Name, Process)
+    termDefns :: Map Name Process
     termDefns = Map.fromList $ mapMaybe toTermDefnPair declarations
 
     paired :: Definitions
-    paired = Map.map (\ ((n, t), s) -> Paired n t s) $ Map.intersectionWith (,) termDefns typeSigs
+    paired = Map.mapWithKey (\ n (t, s) -> Paired n t s) $ Map.intersectionWith (,) termDefns typeSigs
 
     termsOnly :: Definitions
-    termsOnly = Map.map (\ (n, t) -> TermOnly n t) $ Map.difference termDefns typeSigs
+    termsOnly = Map.mapWithKey (\ n t -> TermOnly n t) $ Map.difference termDefns typeSigs
+
+    typesOnly :: Definitions
+    typesOnly = Map.mapWithKey (\ n s -> TypeOnly n s) $ Map.difference typeSigs termDefns
 
     definitions :: Definitions
-    definitions = Map.union paired termsOnly
+    definitions = Map.union paired $ Map.union termsOnly typesOnly
 
 --------------------------------------------------------------------------------
 -- | Instance of Located
