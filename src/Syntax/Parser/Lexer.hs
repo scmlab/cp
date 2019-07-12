@@ -37,8 +37,9 @@ tokenRE
   <|> TokenBot          <$ "Bot"
   <|> TokenZero         <$ "0"
   <|> TokenTop          <$ "Top"
-  <|> TokenEmptySession <$ "{}"
-
+  <|> TokenSessionStart <$ "{"
+  <|> TokenSessionEnd   <$ "}"
+  <|> TokenSessionSep   <$ ";"
   -- term
   <|> TokenLink         <$ "<->"
   <|> TokenScope        <$ "\\"

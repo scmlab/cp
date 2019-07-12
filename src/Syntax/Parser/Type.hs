@@ -35,7 +35,9 @@ data Token
   | TokenBot
   | TokenZero
   | TokenTop
-  | TokenEmptySession
+  | TokenSessionStart
+  | TokenSessionEnd
+  | TokenSessionSep
 
   -- Terms
 

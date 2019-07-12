@@ -17,7 +17,7 @@ import Data.Text (Text)
 
 %name programParser Program
 %name processParser ProcessMix
-%name sessionSyntaxParser SessionSyntax
+%name sessionSyntaxParser Session
 
 %tokentype { Token }
 %error { syntaticalError }
@@ -43,7 +43,9 @@ import Data.Text (Text)
         'Bot'           { TokenBot              }
         '0'             { TokenZero             }
         'Top'           { TokenTop              }
-        '{}'            { TokenEmptySession     }
+        '{'             { TokenSessionStart     }
+        '}'             { TokenSessionEnd       }
+        ';'             { TokenSessionSep       }
 
         '<->'           { TokenLink             }
         'nu'            { TokenScope            }
@@ -79,7 +81,7 @@ Declarations :: {[Declaration]}
     | Declarations Declaration                  { $2:$1 }
 
 Declaration :: {Declaration}
-    : s Name ':' SessionSyntax                  {% locate' $1 $ TypeSig $2 $4 }
+    : s Name ':' Session                        {% locate' $1 $ TypeSig $2 $4 }
     | s Name '=' ProcessMix                     {% locate' $1 $ TermDefn $2 $4 }
 
 -- left recursive
@@ -107,10 +109,12 @@ Process :: {Process}
     | s 'end'                                               {% locate' $1 $ End }
     | s '(' ProcessMix ')'                                  { $3 }
 
-SessionSyntax :: {SessionSyntax}
-    : s '{}'                                                {% locate' $1 $ emptySessionSyntax }
+Session :: {SessionSyntax}
+    : s '{' Sessions '}'                                    { $3 }
+Sessions :: {SessionSyntax}
+    : {- empty -}                                           {% locate $ emptySessionSyntax }
     | s Chan ':' Type                                       {% locate' $1 $ singletonSessionSyntax $2 $4 }
-    | SessionSyntax ',' Chan ':' Type                       { insertSessionSyntax $3 $5 $1 }
+    | Sessions ';' Chan ':' Type                            { insertSessionSyntax $3 $5 $1 }
 
 Type :: {Type}
     : s Type1                                   { $2 }
