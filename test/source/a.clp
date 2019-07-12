@@ -1,4 +1,3 @@
-
 zero : x : forall X . ? (X * ^X) % (^X % X)
 zero = x(X).x(s).x(z).z<->x
 one = x(X).x(s).x(z).?s[f].f[a].(a<->z|f<->x)

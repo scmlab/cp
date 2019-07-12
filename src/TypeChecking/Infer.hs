@@ -28,19 +28,16 @@ import Prelude hiding (lookup)
 -- check :: Process -> Session
 
 check :: Name -> Process -> Session -> TCM ()
-check _ process annotation = do
-  inferred <- infer process
-  let notInferred = Map.difference annotation inferred
-  let notAnnotated = Map.difference inferred annotation
-  let difference = Map.union notInferred notAnnotated
-
+check _ process expected = do
+  given <- infer process
+  let difference = Map.union (Map.difference expected given) (Map.difference given expected)
 
   -- see if the keys of two Maps look the same
   unless (Map.null difference) $
-    throwError $ SessionMismatch process notInferred notAnnotated
+    throwError $ SessionMismatch process expected given
 
   -- look into the types and see if they are also the same
-  forM_ (Map.intersectionWith (,) annotation inferred) (uncurry checkIfEqual)
+  forM_ (Map.intersectionWith (,) expected given) (uncurry checkIfEqual)
 
   where
     checkIfEqual :: Type -> Type -> TCM ()
