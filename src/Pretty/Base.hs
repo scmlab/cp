@@ -140,3 +140,15 @@ instance Pretty a => Pretty (Set.Set a) where
 
 -- instance (Pretty k, Pretty v) => Pretty (Map.Map k v) where
 --   pretty m = encloseSep "{" "}" ", " (map (\(k, v) -> pretty k <+> ":" <+> pretty v) $ Map.toList m)
+
+
+--------------------------------------------------------------------------------
+-- | Precedences
+
+class PrettyPrec a where
+  prettyPrec :: Int -> a -> Doc ann
+
+-- adds parentheses on True
+parensIf :: Bool -> Doc ann -> Doc ann
+parensIf False xs = xs
+parensIf True  xs = parens xs

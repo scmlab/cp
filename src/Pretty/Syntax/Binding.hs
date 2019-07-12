@@ -95,19 +95,41 @@ instance Pretty SessionSyntax where
 instance Report Session where
   report = pretty
 
+instance PrettyPrec Type where
+  -- nullary
+  prettyPrec _ (Var i _)      = pretty i
+  prettyPrec _ (One _)        = "1"
+  prettyPrec _ (Bot _)        = "⊥"
+  prettyPrec _ (Zero _)       = "0"
+  prettyPrec _ (Top _)        = "⊤"
+  -- unary, with the highest precedences
+  prettyPrec p (Dual a _)     = parensIf (p > 19) $
+    "-" <+> prettyPrec 19 a
+  prettyPrec p (Acc a _)      = parensIf (p > 18) $
+    "!" <+> prettyPrec 18 a
+  prettyPrec p (Req a _)      = parensIf (p > 17) $
+    "?" <+> prettyPrec 17 a
+  -- binary, with lower precedences
+  prettyPrec p (Times a b _)  = parensIf (p > 8) $
+    prettyPrec 9 a <+> "⊗" <+> prettyPrec 8 b
+  prettyPrec p (Par a b _)    = parensIf (p > 7) $
+    prettyPrec 8 a <+> "⅋" <+> prettyPrec 7 b
+  prettyPrec p (Plus a b _)    = parensIf (p > 6) $
+    prettyPrec 7 a <+> "⊕" <+> prettyPrec 6 b
+  prettyPrec p (With a b _)    = parensIf (p > 5) $
+    prettyPrec 6 a <+> "&" <+> prettyPrec 5 b
+  prettyPrec p (Exists x a Nothing _) = parensIf (p > 4) $
+    "∃" <+> pretty x <+> "." <+> prettyPrec 4 a
+  prettyPrec p (Exists x a (Just (b, c)) _) = parensIf (p > 4) $
+    prettyPrec 4 a
+      <+> "{"
+      <+> prettyPrec 4 b
+      <+> "/"
+      <+> pretty x
+      <+> "} ="
+      <+> prettyPrec 4 c
+  prettyPrec p (Forall x a _)   = parensIf (p > 3) $
+    "∀ " <+> pretty x <+> "." <+> prettyPrec 3 a
+
 instance Pretty Type where
-  pretty (Var i _)        = pretty i
-  pretty (Dual a _)       = "^" <> pretty a
-  pretty (Times a b _)    = pretty a <> " ⊗ " <> pretty b
-  pretty (Par a b _)      = pretty a <> " ⅋ " <> pretty b
-  pretty (Plus a b _)     = pretty a <> " ⊕ " <> pretty b
-  pretty (With a b _)     = pretty a <> " & " <> pretty b
-  pretty (Acc a _)        = "!" <> pretty a
-  pretty (Req a _)        = "?" <> pretty a
-  pretty (Exists x a Nothing _)   = "∃ " <> pretty x <> " . " <> pretty a
-  pretty (Exists x a (Just (b, c)) _)   = pretty a <> " { " <> pretty b <> " / " <> pretty x <>  " } = " <> pretty c
-  pretty (Forall x a _)   = "∀ " <> pretty x <> " . " <> pretty a
-  pretty (One _)          = "1"
-  pretty (Bot _)          = "⊥"
-  pretty (Zero _)         = "0"
-  pretty (Top _)          = "⊤"
+  pretty = prettyPrec 0
