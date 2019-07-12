@@ -46,11 +46,12 @@ typeCheck definitions = do
   Map.traverseMaybeWithKey typeCheckOrInfer definitions
   where
     typeCheckOrInfer :: B.Name -> B.Definition -> TCM (Maybe B.Session)
-    typeCheckOrInfer _ (B.Annotated name process session) = do
+    typeCheckOrInfer _ (B.Paired name process session) = do
       _ <- check name process session
       return Nothing
-    typeCheckOrInfer _ (B.Unannotated _ process) =
+    typeCheckOrInfer _ (B.TermOnly _ process) =
       inferProcess process >>= return . Just
+    typeCheckOrInfer _ (B.TypeOnly _ session) = return $ Just session
 
 
 --------------------------------------------------------------------------------

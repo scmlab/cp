@@ -78,56 +78,57 @@ run = do
 
 
 digest :: Process -> RuntimeM ()
-digest process = case process of
-  (Call callee _) -> do
-    lookupCallee callee >>= putBack
-  (Link _ _ _) -> undefined
-  (Compose _ _ p q _) -> do
-    putBack p
-    putBack q
-  (Output x y p q _) -> do
-    blocked <- Map.lookup x <$> gets rsBlocked
-    case blocked of
-      Nothing -> addBlocked x process
-      Just (Input _ y' r _) -> do
-        if y == y'
-          then do
-            removeBlocked x
-            putBack p
-            putBack q
-            putBack r
-          else throwError $ Runtime_CannotMatch x y y'
-      _ -> throwError $ Runtime_Stuck process
-  (Input x y p _) -> do
-    blocked <- Map.lookup x <$> gets rsBlocked
-    case blocked of
-      Nothing -> addBlocked x process
-      Just (Output _ y' q r _) -> do
-        if y == y'
-          then do
-            removeBlocked x
-            putBack p
-            putBack q
-            putBack r
-          else throwError $ Runtime_CannotMatch x y y'
-      _ -> throwError $ Runtime_Stuck process
-  (EmptyOutput x _) -> do
-    blocked <- Map.lookup x <$> gets rsBlocked
-    case blocked of
-      Nothing -> addBlocked x process
-      Just (EmptyInput _ p _) -> do
-        removeBlocked x
-        putBack p
-      _ -> throwError $ Runtime_Stuck process
-  (EmptyInput x p _) -> do
-    blocked <- Map.lookup x <$> gets rsBlocked
-    case blocked of
-      Nothing -> addBlocked x process
-      Just (EmptyOutput _ _) -> do
-        removeBlocked x
-        putBack p
-      _ -> throwError $ Runtime_Stuck process
-  others -> error $ show others
+digest = undefined
+-- digest process = case process of
+--   (Call callee _) -> do
+--     lookupCallee callee >>= putBack
+--   (Link _ _ _) -> undefined
+--   (Compose _ _ p q _) -> do
+--     putBack p
+--     putBack q
+--   (Output x y p q _) -> do
+--     blocked <- Map.lookup x <$> gets rsBlocked
+--     case blocked of
+--       Nothing -> addBlocked x process
+--       Just (Input _ y' r _) -> do
+--         if y == y'
+--           then do
+--             removeBlocked x
+--             putBack p
+--             putBack q
+--             putBack r
+--           else throwError $ Runtime_CannotMatch x y y'
+--       _ -> throwError $ Runtime_Stuck process
+--   (Input x y p _) -> do
+--     blocked <- Map.lookup x <$> gets rsBlocked
+--     case blocked of
+--       Nothing -> addBlocked x process
+--       Just (Output _ y' q r _) -> do
+--         if y == y'
+--           then do
+--             removeBlocked x
+--             putBack p
+--             putBack q
+--             putBack r
+--           else throwError $ Runtime_CannotMatch x y y'
+--       _ -> throwError $ Runtime_Stuck process
+--   (EmptyOutput x _) -> do
+--     blocked <- Map.lookup x <$> gets rsBlocked
+--     case blocked of
+--       Nothing -> addBlocked x process
+--       Just (EmptyInput _ p _) -> do
+--         removeBlocked x
+--         putBack p
+--       _ -> throwError $ Runtime_Stuck process
+--   (EmptyInput x p _) -> do
+--     blocked <- Map.lookup x <$> gets rsBlocked
+--     case blocked of
+--       Nothing -> addBlocked x process
+--       Just (EmptyOutput _ _) -> do
+--         removeBlocked x
+--         putBack p
+--       _ -> throwError $ Runtime_Stuck process
+--   others -> error $ show others
 
 -- -- run (Compose chan _ p q _) =
 -- run others = return others
@@ -152,13 +153,13 @@ digest process = case process of
 
 
 
-lookupCallee :: Callee -> RuntimeM Process
-lookupCallee (Callee name _) = do
-  definitions <- lift $ lift $ gets replDefinitions
-  case Map.lookup name definitions of
-    Nothing -> throwError $ Runtime_NotInScope name
-    Just (Annotated _ p _) -> return p
-    Just (Unannotated _ p) -> return p
+-- lookupCallee :: Callee -> RuntimeM Process
+-- lookupCallee (Callee name _) = do
+--   definitions <- lift $ lift $ gets replDefinitions
+--   case Map.lookup name definitions of
+--     Nothing -> throwError $ Runtime_NotInScope name
+--     Just (Annotated _ p _) -> return p
+--     Just (Unannotated _ p) -> return p
 
 
 

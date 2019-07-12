@@ -59,8 +59,9 @@ data TypeName = TypeName  Text Loc deriving (Show)
 data Chan     = Chan Var Text Loc
               deriving (Show)
 
-data Definition = Annotated   Name Process Session
-                | Unannotated Name Process
+data Definition = Paired   Name Process Session
+                | TypeOnly Name Session
+                | TermOnly Name Process
                 deriving (Show)
 type Definitions = Map Name Definition
 data Program = Program Definitions Loc deriving (Show)
@@ -80,7 +81,7 @@ data Program = Program Definitions Loc deriving (Show)
 type Session = Map Chan Type
 data SessionSyntax = SessionSyntax Session Loc deriving (Show)
 
-data Callee = Callee Name Process
+data Callee = Callee Name (Maybe Process)
     deriving (Eq, Ord, Show)
 data Process  = Call      Callee                            Loc
               | Link      Chan Chan                         Loc
@@ -224,8 +225,9 @@ subsituteChannel free bound (Chan var name loc)
   | otherwise        = Chan var name loc
 
 subsituteCallee :: Text -> Int -> Callee -> Callee
-subsituteCallee free bound (Callee name process) =
-  Callee name $ subsituteProcess free bound process
+subsituteCallee free bound (Callee name Nothing) = Callee name Nothing
+subsituteCallee free bound (Callee name (Just process)) =
+  Callee name $ Just $ subsituteProcess free bound process
     -- Map.adjust (subsituteVar free bound) name vars
 
 subsituteProcess :: Text -> Int -> Process -> Process
@@ -343,7 +345,8 @@ convert (SessionSyntax xs _) = xs
 
 freeVariables :: Process -> Set Text
 freeVariables process = case process of
-  Call (Callee _ p) _ -> freeVariables p
+  Call (Callee _ Nothing) _ -> Set.empty
+  Call (Callee _ (Just p)) _ -> freeVariables p
   Link x y _ -> Set.fromList [toVar x, toVar y]
   Compose x _ p q _ -> Set.delete (toVar x) $ Set.union (freeVariables p) (freeVariables q)
   Output x y p q _ -> Set.insert (toVar x) $ Set.delete (toVar y) $ Set.union (freeVariables p) (freeVariables q)

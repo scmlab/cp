@@ -52,8 +52,9 @@ infer process = case process of
     definitions <- ask
     case Map.lookup name definitions of
       Nothing -> error "[panic] Definition not found, this shouldn't happen at the type checking state"
-      Just (Annotated _ _ t) -> return t
-      Just (Unannotated _ p) -> infer p
+      Just (Paired _ _ t) -> return t
+      Just (TypeOnly _ t) -> return t
+      Just (TermOnly _ p) -> infer p
 
   Link x y _ -> do
 

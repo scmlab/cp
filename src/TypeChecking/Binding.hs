@@ -174,10 +174,9 @@ instance Bind Chan B.Chan where
 instance Bind Process B.Process where
   bindM (Call name loc) = do
     process <- toProcess <$> askDefn name loc
-
     callee <- B.Callee
       <$> bindM name
-      <*> bindM process
+      <*> mapM bindM process
     return $ B.Call callee loc
   bindM (Link x y loc) =
     B.Link
@@ -292,13 +291,17 @@ instance Bind Program B.Program where
 --       <*> pure loc
 
 instance Bind Definition B.Definition where
-  bindM (Annotated name process session) = do
-    B.Annotated
+  bindM (Paired name process session) = do
+    B.Paired
       <$> bindM name
       <*> bindM process
       <*> bindM session
-  bindM (Unannotated name process) = do
-    B.Unannotated
+  bindM (TypeOnly name session) = do
+    B.TypeOnly
+      <$> bindM name
+      <*> bindM session
+  bindM (TermOnly name process) = do
+    B.TermOnly
       <$> bindM name
       <*> bindM process
 

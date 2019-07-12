@@ -16,8 +16,8 @@ import Control.Monad.Reader
 -- | State
 
 isAnnotated :: Definition -> Bool
-isAnnotated (Annotated _ _ _) = True
-isAnnotated _                 = False
+isAnnotated (Paired _ _ _) = True
+isAnnotated _              = False
 
 -- type CtxVar = Int
 --
