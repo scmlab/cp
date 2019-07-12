@@ -60,9 +60,9 @@ unify a b = runState (runExceptT (run a b)) []
 
 -- replace a type variable in some type with another type
 substitute :: TypeVar -> Type -> Type -> Type
-substitute var new (Var (DualOf var') l)
-  | var ==      var' = dual new
-  | otherwise        = Var (DualOf var') l
+-- substitute var new (Var (DualOf var') l)
+--   | var ==      var' = dual new
+--   | otherwise        = Var (DualOf var') l
 substitute var new (Var var' l)
   | var ==      var' = new
   | otherwise        = Var var' l

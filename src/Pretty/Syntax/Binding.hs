@@ -29,7 +29,7 @@ instance Pretty TypeVar where
   pretty (TypeVar (Bound i) name _)   = pretty name <> "$" <> pretty (varName i)
   pretty (TypeVar (Free _) name _)   = pretty name
   pretty Unknown        = "$_"
-  pretty (DualOf i)     = "^" <> pretty i
+  -- pretty (DualOf i)     = "^" <> pretty i
 
 instance Pretty Name where
   pretty (Name name _) = pretty name
@@ -112,7 +112,7 @@ instance PrettyPrec Type where
   prettyPrec _ (Top _)        = "⊤"
   -- unary, with the highest precedences
   prettyPrec p (Dual a _)     = parensIf (p > 19) $
-    "-" <+> prettyPrec 19 a
+    "-" <> prettyPrec 19 a
   prettyPrec p (Acc a _)      = parensIf (p > 18) $
     "!" <+> prettyPrec 18 a
   prettyPrec p (Req a _)      = parensIf (p > 17) $
@@ -137,7 +137,7 @@ instance PrettyPrec Type where
       <+> "} ="
       <+> prettyPrec 4 c
   prettyPrec p (Forall x a _)   = parensIf (p > 3) $
-    "∀ " <+> pretty x <+> "." <+> prettyPrec 3 a
+    "∀" <+> pretty x <+> "." <+> prettyPrec 3 a
 
 instance Pretty Type where
   pretty = prettyPrec 0

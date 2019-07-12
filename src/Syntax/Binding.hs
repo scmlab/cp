@@ -19,7 +19,7 @@ import Data.Function (on)
 
 data TypeVar  = TypeVar Var Text Loc
               | Unknown
-              | DualOf TypeVar
+              -- | DualOf TypeVar
               deriving (Show)
 --
 -- instance Show TypeVar where
@@ -34,7 +34,7 @@ instance Eq TypeVar where
     _ == Unknown = True
     --
     TypeVar i _ _ == TypeVar j _ _ = i == j
-    DualOf m == DualOf n = m == n
+    -- DualOf m == DualOf n = m == n
     --
     _ == _ = False
 
@@ -44,7 +44,7 @@ instance Ord TypeVar where
     _       `compare` Unknown = GT
     --
     TypeVar i _ _ `compare` TypeVar j _ _ = i `compare` j
-    DualOf m `compare` DualOf n = m `compare` n
+    -- DualOf m `compare` DualOf n = m `compare` n
     -- whatever ???
     _ `compare` _ = EQ
 
@@ -212,7 +212,7 @@ subsituteTypeVar free bound (TypeVar var name loc)
   | Free free == var = TypeVar (Bound bound) name loc
   | otherwise        = TypeVar var name loc
 subsituteTypeVar _ _ Unknown = Unknown
-subsituteTypeVar free bound (DualOf var) = DualOf (subsituteTypeVar free bound var)
+-- subsituteTypeVar free bound (DualOf var) = DualOf (subsituteTypeVar free bound var)
 
 subsituteType :: Text -> Int -> Type -> Type
 subsituteType free bound (Var var loc) = Var (subsituteTypeVar free bound var) loc
@@ -257,7 +257,7 @@ subsituteProcess free bound process = case process of
 instance Located TypeVar where
   locOf (TypeVar _ _ loc) = loc
   locOf Unknown           = NoLoc
-  locOf (DualOf v)        = locOf v
+  -- locOf (DualOf v)        = locOf v
 
 instance Located TypeName where
   locOf (TypeName _ loc) = loc
@@ -313,13 +313,13 @@ instance Located Type where
 --------------------------------------------------------------------------------
 -- | Instance of HasDual
 
-instance HasDual TypeVar where
-  dual (TypeVar v n l)  = DualOf (TypeVar v n l)
-  dual Unknown          = Unknown
-  dual (DualOf v)       = v
+-- instance HasDual TypeVar where
+--   dual (TypeVar v n l)  = DualOf (TypeVar v n l)
+--   dual Unknown          = Unknown
+  -- dual (DualOf v)       = v
 
 instance HasDual Type where
-  dual (Var a l)          = Var (dual a) l
+  dual (Var a l)          = Dual (Var a l) l
   dual (Dual a _)         = a
   dual (Times a b l)      = Par (dual a) (dual b) l
   dual (Par a b l)        = Times (dual a) (dual b) l
