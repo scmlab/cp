@@ -81,9 +81,7 @@ data Program = Program Definitions Loc deriving (Show)
 type Session = Map Chan Type
 data SessionSyntax = SessionSyntax Session Loc deriving (Show)
 
-data Callee = Callee Name (Maybe Process)
-    deriving (Eq, Ord, Show)
-data Process  = Call      Callee                            Loc
+data Process  = Call      Name (Maybe Process)              Loc
               | Link      Chan Chan                         Loc
               | Compose   Chan (Maybe Type) Process Process Loc
               | Output    Chan Chan Process Process         Loc
@@ -224,15 +222,9 @@ subsituteChannel free bound (Chan var name loc)
   | Free free == var = Chan (Bound bound) name loc
   | otherwise        = Chan var name loc
 
-subsituteCallee :: Text -> Int -> Callee -> Callee
-subsituteCallee free bound (Callee name Nothing) = Callee name Nothing
-subsituteCallee free bound (Callee name (Just process)) =
-  Callee name $ Just $ subsituteProcess free bound process
-    -- Map.adjust (subsituteVar free bound) name vars
-
 subsituteProcess :: Text -> Int -> Process -> Process
 subsituteProcess free bound process = case process of
-  Call callee loc -> Call (subsituteCallee free bound callee) loc
+  Call name p loc -> Call name (fmap (subsituteProcess free bound) p) loc
   Link x y loc -> Link (chan x) (chan y) loc
   Compose x t a b loc -> Compose (chan x) t (proc a) (proc b) loc
   Output x y a b loc -> Output (chan x) (chan y) (proc a) (proc b) loc
@@ -273,12 +265,8 @@ instance Located Chan where
 instance Located Program where
   locOf (Program _ loc) = loc
 
--- instance Located Declaration where
---   locOf (TypeSig _ _ loc) = loc
---   locOf (TermDefn _ _ loc) = loc
-
 instance Located Process where
-  locOf (Call _ loc) = loc
+  locOf (Call _ _ loc) = loc
   locOf (Link _ _ loc) = loc
   locOf (Compose _ _ _ _ loc) = loc
   locOf (Output _ _ _ _ loc) = loc
@@ -345,8 +333,8 @@ convert (SessionSyntax xs _) = xs
 
 freeVariables :: Process -> Set Text
 freeVariables process = case process of
-  Call (Callee _ Nothing) _ -> Set.empty
-  Call (Callee _ (Just p)) _ -> freeVariables p
+  Call _ Nothing _ -> Set.empty
+  Call _ (Just p) _ -> freeVariables p
   Link x y _ -> Set.fromList [toVar x, toVar y]
   Compose x _ p q _ -> Set.delete (toVar x) $ Set.union (freeVariables p) (freeVariables q)
   Output x y p q _ -> Set.insert (toVar x) $ Set.delete (toVar y) $ Set.union (freeVariables p) (freeVariables q)

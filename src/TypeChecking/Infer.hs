@@ -41,14 +41,14 @@ check _ process expected = do
 
   where
     checkIfEqual :: Type -> Type -> TCM ()
-    checkIfEqual expected given = do
-      case U.unify expected given of
-        Left (t, u) -> throwError $ TypeMismatch process expected given t u
+    checkIfEqual expected' given' = do
+      case U.unify expected' given' of
+        Left (t, u) -> throwError $ TypeMismatch process expected' given' t u
         Right _ -> return ()
 
 infer :: Process -> TCM Session
 infer process = case process of
-  Call (Callee name _) _ -> do
+  Call name _ _ -> do
     definitions <- ask
     case Map.lookup name definitions of
       Nothing -> error "[panic] Definition not found, this shouldn't happen at the type checking state"

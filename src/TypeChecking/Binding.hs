@@ -174,10 +174,10 @@ instance Bind Chan B.Chan where
 instance Bind Process B.Process where
   bindM (Call name loc) = do
     process <- toProcess <$> askDefn name loc
-    callee <- B.Callee
+    B.Call
       <$> bindM name
       <*> mapM bindM process
-    return $ B.Call callee loc
+      <*> pure loc
   bindM (Link x y loc) =
     B.Link
       <$> bindM x
