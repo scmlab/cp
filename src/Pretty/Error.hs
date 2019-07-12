@@ -49,7 +49,7 @@ instance Report ScopeError where
     ]
   reportS (DefnNotFound term name) = reportS
     [ H1 "Definition not found"
-    , P $ highlight name <> " is not in scope"
+    , P $ paint name <> " is not in scope"
         <> line
         <> "when checking the following term"
     , CODE $ locOf term
@@ -63,23 +63,23 @@ instance Report ScopeError where
     , P $ pretty msg
     ]
 
-highlight :: Pretty a => a -> Doc AnsiStyle
-highlight = annotate (colorDull Blue) . pretty
+paint :: Pretty a => a -> Doc AnsiStyle
+paint = annotate (colorDull Blue) . pretty
 
-highlight' :: Doc AnsiStyle -> Doc AnsiStyle
-highlight' = annotate (colorDull Blue)
+paint' :: Doc AnsiStyle -> Doc AnsiStyle
+paint' = annotate (colorDull Blue)
 
 instance Report TypeError where
   reportS (ChannelNotComsumed term channel) = reportS
     [ H1 "Channel occur free"
-    , P $ "the channel" <+> highlight channel <+> "should not occur free"
+    , P $ "the channel" <+> paint channel <+> "should not occur free"
         <> line
         <> "in the following term"
     , CODE $ locOf term
     ]
   -- reportS (ChanNotFound term channel) = reportS
   --   [ H1 "Channel not found"
-  --   , P $ "the channel" <+> highlight channel <+> "should occur free"
+  --   , P $ "the channel" <+> paint channel <+> "should occur free"
   --       <> line
   --       <> "in the following term"
   --   , CODE $ locOf term
@@ -87,7 +87,7 @@ instance Report TypeError where
   -- reportS (General msg) = reportS [H1 "Other unformatted inference errors", P $ pretty msg]
   -- reportS (CannotCloseChannel term chan) = reportS
   --   [ H1 "Channel cannot be closed"
-  --   , P $ "channel" <+> highlight chan <+> "cannot be closed"
+  --   , P $ "channel" <+> paint chan <+> "cannot be closed"
   --   , CODE $ locOf chan
   --   , P $ "because it is being used in the following term"
   --   , CODE $ locOf term
@@ -111,15 +111,15 @@ instance Report TypeError where
         ]
     where message = if expectedWhole == expected && actualWhole == actual
             then
-              [ P $  "expected: " <> highlight expected <> line
-                  <> "  actual: " <> highlight actual
+              [ P $  "expected: " <> paint expected <> line
+                  <> "  actual: " <> paint actual
               ]
             else
-              [ P $  "expected: " <> highlight expected <> line
-                  <> "  actual: " <> highlight actual    <> line
+              [ P $  "expected: " <> paint expected <> line
+                  <> "  actual: " <> paint actual    <> line
                   <> line
-                  <> "      in: " <> highlight expectedWhole <> line
-                  <> "     and: " <> highlight actualWhole
+                  <> "      in: " <> paint expectedWhole <> line
+                  <> "     and: " <> paint actualWhole
               ]
 
   reportS (SessionMismatch term expected actual) = reportS
@@ -169,11 +169,11 @@ instance Report TypeError where
 instance Report RuntimeError where
   report (Runtime_NotInScope name) = report
     [ H1 "Process not defined"
-    , P $ highlight name <+> "is not in scope"
+    , P $ paint name <+> "is not in scope"
     ]
   report Runtime_CodeNotLoaded = report
     [ H1 "Source not loaded yet"
-    , P $ "type " <> highlight (":l FILEPATH" :: Text) <> " to load the source"
+    , P $ "type " <> paint (":l FILEPATH" :: Text) <> " to load the source"
     ]
   report (Runtime_CannotMatch comm x y) = report
     [ H1 "Unmatched channels"

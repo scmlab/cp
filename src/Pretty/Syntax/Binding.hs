@@ -9,6 +9,7 @@ import Syntax.Binding
 import qualified Data.Map as Map
 
 import Data.Monoid ((<>))
+import Data.List (unfoldr)
 import Data.Text.Prettyprint.Doc hiding (line)
 
 --------------------------------------------------------------------------------
@@ -17,8 +18,15 @@ import Data.Text.Prettyprint.Doc hiding (line)
 instance Pretty TypeName where
   pretty (TypeName name _) = pretty name
 
+varName :: Int -> String
+varName = map (toEnum . (+) 64) . digits . succ
+  where
+    digits = reverse . unfoldr (\x -> if x == 0 then Nothing else Just (mod x 26, div x 26))
+
+
 instance Pretty TypeVar where
-  pretty (TypeVar (Bound i) name _)   = pretty name <> "$" <> pretty i
+  pretty (TypeVar (Bound i) "_" _) = "$" <> pretty (varName i)
+  pretty (TypeVar (Bound i) name _)   = pretty name <> "$" <> pretty (varName i)
   pretty (TypeVar (Free _) name _)   = pretty name
   pretty Unknown        = "$_"
   pretty (DualOf i)     = "^" <> pretty i

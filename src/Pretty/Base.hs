@@ -20,7 +20,7 @@ import System.IO
 
 
 --------------------------------------------------------------------------------
--- | Report typeclass
+-- | Report with colour and source
 
 class Report a where
   report :: a -> Doc AnsiStyle
