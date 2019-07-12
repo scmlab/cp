@@ -20,8 +20,15 @@ instance Show Substitution where
 type UniError = (Type, Type)
 type UniM = ExceptT UniError (State [Substitution])
 
-unify :: Type -> Type -> (Either (Type, Type) Type, [Substitution])
-unify a b = runState (runExceptT (run a b)) []
+unify :: Type -> Type -> Either (Type, Type) (Type -> Type)
+unify a b =
+  let (result, subst) = runState (runExceptT (run a b)) []
+  in case result of
+      Left err -> Left err
+      Right _ -> Right $ normalize . (compose $ map apply subst)
+        where
+          -- compose a list of functions
+          compose = foldl (flip (.)) id
   where
     run :: Type -> Type -> UniM Type
     run (Var        i _)  v               = do
@@ -82,19 +89,17 @@ substitute _   _   others         = others
 apply :: Substitution -> Type -> Type
 apply (Substitute x y) = substitute x y
 
--- freeVariable :: Process -> Set Chan
--- freeVariable (Var x _) = Set.fromList [x, y]
--- freeVariable (Link x y _) = Set.fromList [x, y]
--- freeVariable (Compose x _ p q _) = Set.delete x $ Set.union (freeVariable p) (freeVariable q)
--- freeVariable (Output x y p q _) = Set.insert x $ Set.delete y $ Set.union (freeVariable p) (freeVariable q)
--- freeVariable (Input x y p _) = Set.insert x $ Set.delete y (freeVariable p)
--- freeVariable (SelectL x p _) = Set.insert x $ freeVariable p
--- freeVariable (SelectR x p _) = Set.insert x $ freeVariable p
--- freeVariable (Choice x p q _) = Set.insert x $ Set.union (freeVariable p) (freeVariable q)
--- freeVariable (Accept x y p _) = Set.insert x $ Set.delete y (freeVariable p)
--- freeVariable (Request x y p _) = Set.insert x $ Set.delete y (freeVariable p)
--- freeVariable (OutputT x _ p _) = Set.insert x (freeVariable p)
--- freeVariable (InputT x _ p _) = Set.insert x (freeVariable p)
--- freeVariable (EmptyOutput x _) = Set.singleton x
--- freeVariable (EmptyInput x p _) = Set.insert x $ freeVariable p
--- freeVariable (EmptyChoice x _) = Set.singleton x
+-- remove recurring Duals
+normalize :: Type -> Type
+normalize = dual . dual
+-- normalize (Dual (Dual t _) _) = t
+-- normalize (Times t u l) = Times (normalize t) (normalize u) l
+-- normalize (Par t u l) = Par (normalize t) (normalize u) l
+-- normalize (Plus t u l) = Plus (normalize t) (normalize u) l
+-- normalize (With t u l) = With (normalize t) (normalize u) l
+-- normalize (Acc t l) = Acc (normalize t) l
+-- normalize (Req t l) = Req (normalize t) l
+-- normalize (Exists t u Nothing l) = Exists t (normalize u) Nothing l
+-- normalize (Exists t u (Just (v, w)) l) = Exists t (normalize u) (Just (normalize v, normalize w)) l
+-- normalize (Forall t u l) = Forall t (normalize u) l
+-- normalize others = others

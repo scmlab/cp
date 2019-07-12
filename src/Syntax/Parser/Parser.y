@@ -114,8 +114,8 @@ SessionSyntax :: {SessionSyntax}
 
 Type :: {Type}
     : s Type1                                   { $2 }
-    | s 'exists' TypeVar Type1                     {% locate' $1 $ Exists $3 $4 }
-    | s 'forall' TypeVar Type1                 {% locate' $1 $ Forall $3 $4 }
+    | s 'exists' TypeVar '.' Type1              {% locate' $1 $ Exists $3 $5 }
+    | s 'forall' TypeVar '.' Type1              {% locate' $1 $ Forall $3 $5 }
 
 -- right associative
 Type1 :: {Type}
@@ -141,6 +141,7 @@ Type4 :: {Type}
     | 'Bot'                                     {% locate $ Bot }
     | '0'                                       {% locate $ Zero }
     | 'Top'                                     {% locate $ Top }
+    | TypeVar                                   {% locate $ Var $1 }
 
 Name :: {Name}
     : termName                                  {% locate $ Name $1 }

@@ -19,8 +19,11 @@ import Data.Loc (Loc(..))
 -- import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
--- import Debug.Trace
+
 import Prelude hiding (lookup)
+
+-- import Debug.Trace
+-- import Pretty
 
 -- check :: Process -> Session
 
@@ -31,21 +34,20 @@ check _ process annotation = do
   let notAnnotated = Map.difference inferred annotation
   let difference = Map.union notInferred notAnnotated
 
+
   -- see if the keys of two Maps look the same
   unless (Map.null difference) $
     throwError $ SessionMismatch process notInferred notAnnotated
 
   -- look into the types and see if they are also the same
-  forM_ (Map.intersectionWith (,) annotation inferred) (uncurry (checkIfEqual process))
+  forM_ (Map.intersectionWith (,) annotation inferred) (uncurry checkIfEqual)
 
   where
-    checkIfEqual :: Process -> Type -> Type -> TCM ()
-    checkIfEqual p expected given = do
-        let (result, _) = U.unify expected given
-        case result of
-          Left (a, b) -> throwError $ TypeMismatch p expected given a b
-          Right _ -> return ()
-
+    checkIfEqual :: Type -> Type -> TCM ()
+    checkIfEqual expected given = do
+      case U.unify expected given of
+        Left (t, u) -> throwError $ TypeMismatch process expected given t u
+        Right _ -> return ()
 
 infer :: Process -> TCM Session
 infer process = case process of
@@ -274,14 +276,10 @@ infer process = case process of
     -- for better error message, make the former type be the expecting type
     -- and the latter be the given type
     unify :: Type -> Type -> TCM (Type -> Type)
-    unify expected given = do
-      let (result, subst) = U.unify expected given
-      case result of
+    unify expected given =
+      case U.unify expected given of
         Left (t, u) -> throwError $ TypeMismatch process expected given t u
-        Right _ -> return $ compose $ map U.apply subst
-          where
-            -- compose a list of functions
-            compose = foldl (flip (.)) id
+        Right subst -> return subst
 
     -- taking extra care when unifying two opposite types
     -- because we might will lose something when taking the dual of (Exists _ _ _)
