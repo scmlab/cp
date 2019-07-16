@@ -11,6 +11,7 @@ import qualified TypeChecking.Unification as U
 import Base
 
 import Data.Loc (Loc(..))
+import Data.Text (Text)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Map (Map)
@@ -455,3 +456,28 @@ substituteType old new process = case process of
 --
 -- substChan :: Chan -> Chan -> Chan -> M Chan
 -- substChan a x y = return $ if a == x then y else a
+
+
+
+data Tree
+    = Node Chan
+        Tree (Set Text)
+        Tree (Set Text)
+    | Leaf Process
+  deriving (Show)
+
+toTree :: Process -> Tree
+toTree (Compose chan _ p q _) =
+  Node chan (toTree p) (freeVariables p) (toTree q) (freeVariables q)
+toTree others =
+  Leaf others
+
+fromTree :: Tree -> Process
+fromTree (Node chan p _ q _) = Compose chan Nothing (fromTree p) (fromTree q) NoLoc
+fromTree (Leaf p) = p
+
+instance Pretty Tree where
+  pretty (Node chan p p' q q') =
+    "\\" <+> pretty chan <> line
+    <> indent 2 (vsep [pretty p' <+> pretty p, pretty q' <+> pretty q])
+  pretty (Leaf p) = pretty p
