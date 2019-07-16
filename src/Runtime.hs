@@ -56,15 +56,18 @@ import Pretty
 --     Left a -> return a
 --     Right a -> return a
 
-type RuntimeM = StateT (Maybe Rule) Core
+
+type RuntimeM = ExceptT RuntimeError (StateT (Maybe Rule) Core)
 
 evaluate :: Process -> M Process
 evaluate process = do
-  (result, _) <- lift $ runStateT (run process) Nothing
-  return result
+  (result, _) <- lift $ runStateT (runExceptT (run process)) Nothing
+  case result of
+    Left e -> throwError $ RuntimeError e
+    Right v -> return v
 
 -- rules of reduction
-data Rule = Invoke Name
+data Rule = Invoke Name | Swap | TypeElim
   deriving (Show, Pretty)
 
 use :: Rule -> RuntimeM ()
@@ -109,19 +112,31 @@ reduce process = case process of
   (Call _ Nothing _) -> stuck
   (Call name (Just p) _) -> step (Invoke name) p
 
-  (Compose x _ p q _) -> do
+-- runCompose x (Output x y p q) (Input v w r) = runCompose x p q
+-- runCompose x (Input v w r) (Output x y p q) = runCompose x (Output x y p q) (Input v w r)
 
+  -- (Compose chan _ (Input v w r _) (Output x y p q _) _) -> do
+  --   step Swap $ Compose chan Nothing (Output x y p q NoLoc) (Input v w r NoLoc) NoLoc
+  -- (Compose x _ (Output x y p q) (Input v w r) _) -> do
 
+  (Compose chan _ (OutputT x t p _) (InputT y u q _) _) -> do
+    if chan == x && chan == y
+      then step TypeElim $ Compose chan Nothing p (InputT y u q NoLoc) NoLoc
+      else throwError $ Runtime_CannotMatch chan x y
+  (Compose chan _ (InputT v w r _) (OutputT x p q _) _) -> do
+    step Swap $ Compose chan Nothing (OutputT x p q NoLoc) (InputT v w r NoLoc) NoLoc
+
+  (Compose chan _ p q _) -> do
     reduceP <- reduce p
     case reduceP of
       Nothing -> do
         reduceQ <- reduce q
         case reduceQ of
           Nothing -> stuck
-          Just q' -> return $ Just $ Compose x Nothing p q' NoLoc
-      Just p' -> return $ Just $ Compose x Nothing p' q NoLoc
+          Just q' -> return $ Just $ Compose chan Nothing p q' NoLoc
+      Just p' -> return $ Just $ Compose chan Nothing p' q NoLoc
 
-      
+
     -- p' <- tryReduce p
     -- q' <- tryReduce q
     -- step $ Compose x Nothing p' q' NoLoc
@@ -339,3 +354,85 @@ printStatus process = do
 -- --   --
 -- -- reduce _ = undefined
 --
+
+-- substituteType :: Process -> TypeVar -> Type -> Process
+-- substituteType
+
+--
+-- substitute :: Process -> Chan -> Chan -> M Process
+-- substitute (Call name) a b = do
+--   p <- lookupProcess name
+--   substitute p a b
+-- substitute (Link x y) a b =
+--   Link
+--     <$> substChan x a b
+--     <*> substChan y a b
+-- substitute (Compose x t p q) a b =
+--   Compose
+--     <$> return x
+--     <*> return t
+--     <*> (if x == a then return p else substitute p a b)
+--     <*> (if x == a then return q else substitute q a b)
+-- substitute (Output x y p q) a b =
+--   Output
+--     <$> substChan x a b
+--     <*> substChan y a b
+--     <*> substitute p a b
+--     <*> substitute q a b
+-- substitute (Input x y p) a b =
+--   Input
+--     <$> substChan x a b
+--     <*> (if y == a then return y else substChan y a b)
+--     <*> (if y == a then return p else substitute p a b)
+-- substitute (SelectL x p) a b =
+--   SelectL
+--     <$> substChan x a b
+--     <*> substitute p a b
+-- substitute (SelectR x p) a b =
+--   SelectR
+--     <$> substChan x a b
+--     <*> substitute p a b
+-- substitute (Choice x p q) a b =
+--   Choice
+--     <$> substChan x a b
+--     <*> substitute p a b
+--     <*> substitute q a b
+-- substitute (Accept x y p) a b =
+--   Accept
+--     <$> substChan x a b
+--     <*> (if y == a then return y else substChan y a b)
+--     <*> (if y == a then return p else substitute p a b)
+-- substitute (Request x y p) a b =
+--   Request
+--     <$> substChan x a b
+--     <*> substChan y a b
+--     <*> substitute p a b
+-- substitute (OutputT x t p) a b =
+--   OutputT
+--     <$> substChan x a b
+--     <*> return t
+--     <*> substitute p a b
+-- substitute (InputT x v p) a b =
+--   InputT
+--     <$> substChan x a b
+--     <*> return v
+--     <*> substitute p a b
+-- substitute (EmptyOutput x) a b =
+--   EmptyOutput
+--     <$> substChan x a b
+-- substitute (EmptyInput x p) a b =
+--   EmptyInput
+--     <$> substChan x a b
+--     <*> substitute p a b
+-- substitute (EmptyChoice x) a b =
+--   EmptyChoice
+--     <$> substChan x a b
+-- substitute End _ _ = return End
+-- substitute (Mix p q) a b =
+--   Mix
+--     <$> substitute p a b
+--     <*> substitute q a b
+--
+--
+-- substChan :: Chan -> Chan -> Chan -> M Chan
+-- substChan a x y = return $ if a == x then y else a

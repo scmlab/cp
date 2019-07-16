@@ -78,5 +78,6 @@ data RuntimeError
   | Runtime_CodeNotLoaded
   | Runtime_CannotMatch Chan Chan Chan
   | Runtime_Stuck Process
+
   deriving (Show)
 -- data Rule = AxCut Chan
