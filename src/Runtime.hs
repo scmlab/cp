@@ -4,6 +4,7 @@ module Runtime (evaluate) where
 
 
 import Syntax.Binding
+import qualified TypeChecking.Unification as U
 -- import Pretty
 
 -- import TypeChecking.Base
@@ -67,7 +68,7 @@ evaluate process = do
     Right v -> return v
 
 -- rules of reduction
-data Rule = Invoke Name | Swap | TypeElim
+data Rule = Invoke Name | Swap | TypeElim | Elim
   deriving (Show, Pretty)
 
 use :: Rule -> RuntimeM ()
@@ -115,13 +116,16 @@ reduce process = case process of
 -- runCompose x (Output x y p q) (Input v w r) = runCompose x p q
 -- runCompose x (Input v w r) (Output x y p q) = runCompose x (Output x y p q) (Input v w r)
 
-  -- (Compose chan _ (Input v w r _) (Output x y p q _) _) -> do
-  --   step Swap $ Compose chan Nothing (Output x y p q NoLoc) (Input v w r NoLoc) NoLoc
-  -- (Compose x _ (Output x y p q) (Input v w r) _) -> do
+  (Compose chan _ (Output x y p q _) (Input v w r _) _) -> do
+    if chan == x && chan == v && y == w
+      then step Elim $ Compose y Nothing p (Compose chan Nothing q r NoLoc) NoLoc
+      else throwError $ Runtime_CannotMatch chan x v
+  (Compose chan _ (Input v w r _) (Output x y p q _) _) -> do
+    step Swap $ Compose chan Nothing (Output x y p q NoLoc) (Input v w r NoLoc) NoLoc
 
   (Compose chan _ (OutputT x t p _) (InputT y u q _) _) -> do
     if chan == x && chan == y
-      then step TypeElim $ Compose chan Nothing p (InputT y u q NoLoc) NoLoc
+      then step TypeElim $ Compose chan Nothing p (substituteType u t q) NoLoc
       else throwError $ Runtime_CannotMatch chan x y
   (Compose chan _ (InputT v w r _) (OutputT x p q _) _) -> do
     step Swap $ Compose chan Nothing (OutputT x p q NoLoc) (InputT v w r NoLoc) NoLoc
@@ -355,9 +359,24 @@ printStatus process = do
 -- -- reduce _ = undefined
 --
 
--- substituteType :: Process -> TypeVar -> Type -> Process
--- substituteType
-
+substituteType :: TypeVar -> Type -> Process -> Process
+substituteType old new process = case process of
+  Compose x t p q l -> Compose x (fmap substT t) (subst p) (subst q) l
+  Output x y p q l -> Output x y (subst p) (subst q) l
+  Input x y p l -> Input x y (subst p) l
+  SelectL x p l -> SelectL x (subst p) l
+  SelectR x p l -> SelectR x (subst p) l
+  Choice x p q l -> Choice x (subst p) (subst q) l
+  Accept x y p l -> Accept x y (subst p) l
+  Request x y p l -> Request x y (subst p) l
+  OutputT x t p l -> OutputT x (substT t) (subst p) l
+  InputT x t p l -> InputT x t (subst p) l
+  EmptyInput x p l -> EmptyInput x (subst p) l
+  Mix p q l -> Mix (subst p) (subst q) l
+  others -> others
+  where
+    subst = substituteType old new
+    substT = U.substitute old new
 --
 -- substitute :: Process -> Chan -> Chan -> M Process
 -- substitute (Call name) a b = do
