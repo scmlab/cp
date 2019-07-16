@@ -173,10 +173,14 @@ instance Bind Chan B.Chan where
 
 instance Bind Process B.Process where
   bindM (Call name loc) = do
-    process <- toProcess <$> askDefn name loc
+    defn <- askDefn name loc
+    result <- case defn of
+                  Paired _ p _ -> Right <$> bindM p
+                  TypeOnly _ s -> return $ Left $ sessionKeys s
+                  TermOnly _ p -> Right <$> bindM p
     B.Call
       <$> bindM name
-      <*> mapM bindM process
+      <*> pure result
       <*> pure loc
   bindM (Link x y loc) =
     B.Link

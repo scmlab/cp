@@ -113,6 +113,9 @@ toProcess (Paired _ term _) = Just term
 toProcess (TypeOnly _ _)    = Nothing
 toProcess (TermOnly _ term) = Just term
 
+sessionKeys :: Session -> Set Text
+sessionKeys = Set.fromList . map (\(Chan n _) -> n) . Map.keys
+
 convert :: SessionSyntax -> Session
 convert (SessionSyntax xs _) = xs
 

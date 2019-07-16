@@ -111,8 +111,8 @@ tryReduce input = do
 
 reduce :: Process -> RuntimeM (Maybe Process)
 reduce process = case process of
-  (Call _ Nothing _) -> stuck
-  (Call name (Just p) _) -> step (Invoke name) p
+  (Call _ (Left _) _) -> stuck
+  (Call name (Right p) _) -> step (Invoke name) p
 
 -- runCompose x (Output x y p q) (Input v w r) = runCompose x p q
 -- runCompose x (Input v w r) (Output x y p q) = runCompose x (Output x y p q) (Input v w r)
@@ -154,7 +154,7 @@ printStatus process = do
   liftIO $ print $ line
     <> pretty ("=>" :: String) <+> pretty rule <> line
     <> line
-    <> pretty process
+    <> pretty (toTree process)
 
 -- runCompose :: Chan -> Process -> Process -> Eval Process
 -- runCompose x (Call _ (Just p) _) q = runCompose x p q

@@ -81,7 +81,7 @@ data Program = Program Definitions Loc deriving (Show)
 type Session = Map Chan Type
 data SessionSyntax = SessionSyntax Session Loc deriving (Show)
 
-data Process  = Call      Name (Maybe Process)              Loc
+data Process  = Call      Name (Either (Set Text) Process)  Loc
               | Link      Chan Chan                         Loc
               | Compose   Chan (Maybe Type) Process Process Loc
               | Output    Chan Chan Process Process         Loc
@@ -333,8 +333,8 @@ convert (SessionSyntax xs _) = xs
 
 freeVariables :: Process -> Set Text
 freeVariables process = case process of
-  Call _ Nothing _ -> Set.empty
-  Call _ (Just p) _ -> freeVariables p
+  Call _ (Left s) _ -> s
+  Call _ (Right p) _ -> freeVariables p
   Link x y _ -> Set.fromList [toVar x, toVar y]
   Compose x _ p q _ -> Set.delete (toVar x) $ Set.union (freeVariables p) (freeVariables q)
   Output x y p q _ -> Set.insert (toVar x) $ Set.delete (toVar y) $ Set.union (freeVariables p) (freeVariables q)
