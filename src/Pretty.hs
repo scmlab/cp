@@ -6,4 +6,4 @@ module Pretty
 
 import Pretty.Syntax.Binding ()
 import Pretty.Syntax.Concrete ()
-import Data.Text.Prettyprint.Doc hiding (line)
+import Data.Text.Prettyprint.Doc

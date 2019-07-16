@@ -1,4 +1,6 @@
-module Runtime where
+{-# LANGUAGE OverloadedStrings, DeriveAnyClass                  #-}
+
+module Runtime (evaluate) where
 
 
 import Syntax.Binding
@@ -14,61 +16,159 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Control.Monad.State
 import Control.Monad.Except
+
+import Pretty
+
 -- import Debug.Trace
 
-data RuntimeState = RuntimeState
-  { rsBlocked :: Map Chan Process
-  , rsPool :: Set Process
-  }
-type RuntimeM = ExceptT RuntimeError (StateT RuntimeState Core)
+-- data RuntimeState = RuntimeState
+--   { rsBlocked :: Map Chan Process
+--   , rsPool :: Set Process
+--   }
+-- type RuntimeM = ExceptT RuntimeError (StateT RuntimeState Core)
+--
+-- addBlocked :: Chan -> Process -> RuntimeM ()
+-- addBlocked chan process = modify $ \st -> st { rsBlocked = Map.insert chan process (rsBlocked st) }
+--
+-- removeBlocked :: Chan -> RuntimeM ()
+-- removeBlocked chan = modify $ \st -> st { rsBlocked = Map.delete chan (rsBlocked st) }
+--
+-- putBack :: Process -> RuntimeM ()
+-- putBack (End _) = return ()
+-- putBack others  = modify $ \st -> st { rsPool = Set.insert others (rsPool st) }
+--
+-- draw :: RuntimeM (Maybe Process)
+-- draw = do
+--   result <- Set.lookupMin <$> gets rsPool
+--   modify $ \st -> st { rsPool = Set.deleteMin (rsPool st) }
+--   return result
 
-addBlocked :: Chan -> Process -> RuntimeM ()
-addBlocked chan process = modify $ \st -> st { rsBlocked = Map.insert chan process (rsBlocked st) }
+-- type Eval = ExceptT Process IO
+--
+-- -- using throwError as a mean of early return
+-- earlyReturn :: Process -> Eval a
+-- earlyReturn = throwError
+--
+-- runEval :: Eval Process -> IO Process
+-- runEval f = do
+--   result <- runExceptT f
+--   case result of
+--     Left a -> return a
+--     Right a -> return a
 
-removeBlocked :: Chan -> RuntimeM ()
-removeBlocked chan = modify $ \st -> st { rsBlocked = Map.delete chan (rsBlocked st) }
-
-putBack :: Process -> RuntimeM ()
-putBack (End _) = return ()
-putBack others  = modify $ \st -> st { rsPool = Set.insert others (rsPool st) }
-
-draw :: RuntimeM (Maybe Process)
-draw = do
-  result <- Set.lookupMin <$> gets rsPool
-  modify $ \st -> st { rsPool = Set.deleteMin (rsPool st) }
-  return result
+type RuntimeM = StateT (Maybe Rule) Core
 
 evaluate :: Process -> M Process
 evaluate process = do
-  result <- lift $ evalStateT
-              (runExceptT run)
-              $ RuntimeState
-                  Map.empty
-                  (Set.singleton process)
+  (result, _) <- lift $ runStateT (run process) Nothing
+  return result
+
+-- rules of reduction
+data Rule = Invoke Name
+  deriving (Show, Pretty)
+
+use :: Rule -> RuntimeM ()
+use = put . Just
+
+takeRule :: RuntimeM (Maybe Rule)
+takeRule = do
+  result <- get
   case result of
-    Left err -> throwError $ RuntimeError err
-    Right p -> return p
+    Nothing ->
+      return Nothing
+    Just rule -> do
+      put Nothing
+      return $ Just rule
 
-run :: RuntimeM Process
-run = do
-  next <- draw
-  case next of
-    Nothing -> do
-      -- blockedSize <- Map.size <$> gets rsBlocked
-      -- poolSize <- Set.size <$> gets rsPool
-      -- liftIO $ putStrLn $ show (blockedSize, poolSize) ++ " ================="
-      -- liftIO $ print $ pretty next
-      --
-      -- blocked <- Map.toList <$> gets rsBlocked
-      -- forM_ blocked $ \(c, p) -> do
-      --   liftIO $ print $ pretty (c, p)
-      -- liftIO $ putStrLn "===================="
+run :: Process -> RuntimeM Process
+run process = do
+  printStatus process
 
-      -- gets rsBlocked >>= error . show
-      return $ End NoLoc
-    Just process -> do
-      digest process
-      run
+  result <- reduce process
+  case result of
+    Nothing -> return process
+    Just reduced -> run reduced
+
+step :: Rule -> Process -> RuntimeM (Maybe Process)
+step rule process = do
+  use rule
+  return $ Just process
+
+stuck :: RuntimeM (Maybe Process)
+stuck = return Nothing
+
+tryReduce :: Process -> RuntimeM Process
+tryReduce input = do
+  result <- reduce input
+  case result of
+    Nothing -> return input
+    Just reduced -> return reduced
+
+reduce :: Process -> RuntimeM (Maybe Process)
+reduce process = case process of
+  (Call _ Nothing _) -> stuck
+  (Call name (Just p) _) -> step (Invoke name) p
+
+  (Compose x _ p q _) -> do
+
+
+    reduceP <- reduce p
+    case reduceP of
+      Nothing -> do
+        reduceQ <- reduce q
+        case reduceQ of
+          Nothing -> stuck
+          Just q' -> return $ Just $ Compose x Nothing p q' NoLoc
+      Just p' -> return $ Just $ Compose x Nothing p' q NoLoc
+
+      
+    -- p' <- tryReduce p
+    -- q' <- tryReduce q
+    -- step $ Compose x Nothing p' q' NoLoc
+
+  others -> stuck
+
+printStatus :: Process -> RuntimeM ()
+printStatus process = do
+  rule <- takeRule
+  liftIO $ print $ line
+    <> pretty ("=>" :: String) <+> pretty rule <> line
+    <> line
+    <> pretty process
+
+-- runCompose :: Chan -> Process -> Process -> Eval Process
+-- runCompose x (Call _ (Just p) _) q = runCompose x p q
+-- runCompose x p (Call _ (Just q) _) = runCompose x p q
+-- runCompose x (Output x y p q) (Input v w r) = runCompose x p q
+-- runCompose x (Input v w r) (Output x y p q) = runCompose x (Output x y p q) (Input v w r)
+-- runCompose x p q = return $ Compose x Nothing p q NoLoc
+--
+-- compose chan t (Output x y p q) (Input v w r)
+--   | chan == x && chan == v = compose y Nothing p (Compose x Nothing q r) >>= reduce
+--   | otherwise = reduce $ Compose chan t (Output x y p q) (Input v w r)
+-- compose chan t (Input v w r) (Output x y p q)
+--   = compose chan (fmap Dual t) (Output x y p q) (Input v w r) >>= reduce
+-- -- β⊕& left
+
+
+  -- next <- draw
+  -- case next of
+  --   Nothing -> do
+  --     -- blockedSize <- Map.size <$> gets rsBlocked
+  --     -- poolSize <- Set.size <$> gets rsPool
+  --     -- liftIO $ putStrLn $ show (blockedSize, poolSize) ++ " ================="
+  --     -- liftIO $ print $ pretty next
+  --     --
+  --     -- blocked <- Map.toList <$> gets rsBlocked
+  --     -- forM_ blocked $ \(c, p) -> do
+  --     --   liftIO $ print $ pretty (c, p)
+  --     -- liftIO $ putStrLn "===================="
+  --
+  --     -- gets rsBlocked >>= error . show
+  --     return $ End NoLoc
+  --   Just process -> do
+  --     digest process
+  --     run
 
   -- x[u] . u[] . end
   -- x[u] . x[v] . v[] . end
@@ -77,8 +177,8 @@ run = do
   -- x(u) . x(v) . x[w] . u() . x[] . end
 
 
-digest :: Process -> RuntimeM ()
-digest = undefined
+-- digest :: Process -> RuntimeM ()
+-- digest = undefined
 -- digest process = case process of
 --   (Call callee _) -> do
 --     lookupCallee callee >>= putBack
@@ -239,85 +339,3 @@ digest = undefined
 -- --   --
 -- -- reduce _ = undefined
 --
--- -- Swap
--- swap :: Chan -> (Maybe Type) -> Process -> Process -> Process
--- swap x Nothing p q = Compose x Nothing q p
--- swap x (Just t) p q = Compose x (Just (Dual t)) q p
---
--- substitute :: Process -> Chan -> Chan -> M Process
--- substitute (Call name) a b = do
---   p <- lookupProcess name
---   substitute p a b
--- substitute (Link x y) a b =
---   Link
---     <$> substChan x a b
---     <*> substChan y a b
--- substitute (Compose x t p q) a b =
---   Compose
---     <$> return x
---     <*> return t
---     <*> (if x == a then return p else substitute p a b)
---     <*> (if x == a then return q else substitute q a b)
--- substitute (Output x y p q) a b =
---   Output
---     <$> substChan x a b
---     <*> substChan y a b
---     <*> substitute p a b
---     <*> substitute q a b
--- substitute (Input x y p) a b =
---   Input
---     <$> substChan x a b
---     <*> (if y == a then return y else substChan y a b)
---     <*> (if y == a then return p else substitute p a b)
--- substitute (SelectL x p) a b =
---   SelectL
---     <$> substChan x a b
---     <*> substitute p a b
--- substitute (SelectR x p) a b =
---   SelectR
---     <$> substChan x a b
---     <*> substitute p a b
--- substitute (Choice x p q) a b =
---   Choice
---     <$> substChan x a b
---     <*> substitute p a b
---     <*> substitute q a b
--- substitute (Accept x y p) a b =
---   Accept
---     <$> substChan x a b
---     <*> (if y == a then return y else substChan y a b)
---     <*> (if y == a then return p else substitute p a b)
--- substitute (Request x y p) a b =
---   Request
---     <$> substChan x a b
---     <*> substChan y a b
---     <*> substitute p a b
--- substitute (OutputT x t p) a b =
---   OutputT
---     <$> substChan x a b
---     <*> return t
---     <*> substitute p a b
--- substitute (InputT x v p) a b =
---   InputT
---     <$> substChan x a b
---     <*> return v
---     <*> substitute p a b
--- substitute (EmptyOutput x) a b =
---   EmptyOutput
---     <$> substChan x a b
--- substitute (EmptyInput x p) a b =
---   EmptyInput
---     <$> substChan x a b
---     <*> substitute p a b
--- substitute (EmptyChoice x) a b =
---   EmptyChoice
---     <$> substChan x a b
--- substitute End _ _ = return End
--- substitute (Mix p q) a b =
---   Mix
---     <$> substitute p a b
---     <*> substitute q a b
---
---
--- substChan :: Chan -> Chan -> Chan -> M Chan
--- substChan a x y = return $ if a == x then y else a

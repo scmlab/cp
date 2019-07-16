@@ -13,7 +13,7 @@ import TypeChecking.Base
 import Pretty.Error ()
 import Pretty.Base
 import Base
--- import Runtime
+import Runtime
 
 import Data.ByteString.Lazy (ByteString)
 import qualified Data.ByteString.Lazy as BS
@@ -248,9 +248,9 @@ handleCommand (TypeOf expr) = do
     -- global environment setup
     program <- gets replProgram
     -- local expression parsing
-    process <- parseProcessM expr
-    process' <- bind program process
-    session <- runTCM $ inferProcess process'
+    process <- parseProcessM expr >>= bind program
+    -- infer session
+    session <- runTCM $ inferProcess process
     liftIO $ putDoc $ report session <> line
     return ()
   return True
@@ -260,21 +260,22 @@ handleCommand (Debug expr) = do
     -- global environment setup
     program <- gets replProgram
     -- local expression parsing
-    expr' <- parseProcessM expr
-    result <- bind program expr'
+    result <- parseProcessM expr >>= bind program
+    -- print some stuff
     liftIO $ putDoc $ pretty result <> line
-    -- liftIO $ print result
-
-    -- _ <- runTCM $ bindingCheck process
     return ()
   return True
 
 handleCommand Quit = return False
 handleCommand Help = liftIO displayHelp >> return True
-handleCommand (Eval _) = do
+handleCommand (Eval expr) = do
   void $ handleM $ do
-    -- process <- parseProcess s
-    -- result <- evaluate process
+    -- global environment setup
+    program <- gets replProgram
+    -- local expression parsing
+    process <- parseProcessM expr >>= bind program
+    --
+    result <- evaluate process
     -- liftIO $ putDoc $ pretty result <> line
     return ()
   return True

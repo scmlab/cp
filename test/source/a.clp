@@ -13,8 +13,6 @@ nought :
   { z : ? Top
   }
 
-a = x[s] . (!s(f) . f(a) . incr | x[z] . (nought | x <-> y))
-
 count :
   { x : ^ (forall X . ? (X * ^X) % (^X % X))
   ; y : ? Top
@@ -22,4 +20,6 @@ count :
 count = x[? Top] . x[s] . (!s(f) . f(a) . incr | x[z] . (nought | x <-> y))
 
 countZero = \x . (zero | count)
+a = \x . (zero | count)
+
 countOne = \x . (one | count)
