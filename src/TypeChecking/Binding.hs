@@ -100,20 +100,17 @@ instance Bind Process B.Process where
       (build y)
       (Set.fromList [chanName x, chanName y])
       loc
-  bindM (Compose x Nothing p q loc) = do
-    B.Compose
-      <$> buildM x
-      <*> pure Nothing
-      <*> bindM p
-      <*> bindM q
-      <*> pure loc
-  bindM (Compose x (Just t) p q loc) = do
-    B.Compose
-      <$> buildM x
-      <*> pure (Just $ build t)
-      <*> bindM p
-      <*> bindM q
-      <*> pure loc
+  bindM (Compose x t p q loc) = do
+    p' <- bindM p
+    q' <- bindM q
+    let free = Set.delete (chanName x) $ Set.union (B.freeChans p') (B.freeChans q')
+    return $ B.Compose
+              (build x)
+              (fmap build t)
+              p'
+              q'
+              free
+              loc
   bindM (Output x y q p loc) = do
     B.Output
       <$> buildM x

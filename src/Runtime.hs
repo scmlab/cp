@@ -111,35 +111,35 @@ tryReduce input = do
 
 reduce :: Process -> RuntimeM (Maybe Process)
 reduce process = case process of
-  (Call _ Nothing _ _) -> stuck
-  (Call name (Just p) _ _) -> step (Invoke name) p
-
--- runCompose x (Output x y p q) (Input v w r) = runCompose x p q
--- runCompose x (Input v w r) (Output x y p q) = runCompose x (Output x y p q) (Input v w r)
-
-  (Compose chan _ (Output x y p q _) (Input v w r _) _) -> do
-    if chan == x && chan == v && y == w
-      then step Elim $ Compose y Nothing p (Compose chan Nothing q r NoLoc) NoLoc
-      else throwError $ Runtime_CannotMatch chan x v
-  (Compose chan _ (Input v w r _) (Output x y p q _) _) -> do
-    step Swap $ Compose chan Nothing (Output x y p q NoLoc) (Input v w r NoLoc) NoLoc
-
-  (Compose chan _ (OutputT x t p _) (InputT y u q _) _) -> do
-    if chan == x && chan == y
-      then step TypeElim $ Compose chan Nothing p (substituteType u t q) NoLoc
-      else throwError $ Runtime_CannotMatch chan x y
-  (Compose chan _ (InputT v w r _) (OutputT x p q _) _) -> do
-    step Swap $ Compose chan Nothing (OutputT x p q NoLoc) (InputT v w r NoLoc) NoLoc
-
-  (Compose chan _ p q _) -> do
-    reduceP <- reduce p
-    case reduceP of
-      Nothing -> do
-        reduceQ <- reduce q
-        case reduceQ of
-          Nothing -> stuck
-          Just q' -> return $ Just $ Compose chan Nothing p q' NoLoc
-      Just p' -> return $ Just $ Compose chan Nothing p' q NoLoc
+--   (Call _ Nothing _ _) -> stuck
+--   (Call name (Just p) _ _) -> step (Invoke name) p
+--
+-- -- runCompose x (Output x y p q) (Input v w r) = runCompose x p q
+-- -- runCompose x (Input v w r) (Output x y p q) = runCompose x (Output x y p q) (Input v w r)
+--
+--   (Compose chan _ (Output x y p q _) (Input v w r _) _ _) -> do
+--     if chan == x && chan == v && y == w
+--       then step Elim $ Compose y Nothing p (Compose chan Nothing q r NoLoc) NoLoc
+--       else throwError $ Runtime_CannotMatch chan x v
+--   (Compose chan _ (Input v w r _) (Output x y p q _) _) -> do
+--     step Swap $ Compose chan Nothing (Output x y p q NoLoc) (Input v w r NoLoc) NoLoc
+--
+--   (Compose chan _ (OutputT x t p _) (InputT y u q _) _) -> do
+--     if chan == x && chan == y
+--       then step TypeElim $ Compose chan Nothing p (substituteType u t q) NoLoc
+--       else throwError $ Runtime_CannotMatch chan x y
+--   (Compose chan _ (InputT v w r _) (OutputT x p q _) _) -> do
+--     step Swap $ Compose chan Nothing (OutputT x p q NoLoc) (InputT v w r NoLoc) NoLoc
+--
+--   (Compose chan _ p q _) -> do
+--     reduceP <- reduce p
+--     case reduceP of
+--       Nothing -> do
+--         reduceQ <- reduce q
+--         case reduceQ of
+--           Nothing -> stuck
+--           Just q' -> return $ Just $ Compose chan Nothing p q' NoLoc
+--       Just p' -> return $ Just $ Compose chan Nothing p' q NoLoc
 
 
     -- p' <- tryReduce p
@@ -362,7 +362,7 @@ printStatus process = do
 
 substituteType :: TypeVar -> Type -> Process -> Process
 substituteType old new process = case process of
-  Compose x t p q l -> Compose x (fmap substT t) (subst p) (subst q) l
+  Compose x t p q f l -> Compose x (fmap substT t) (subst p) (subst q) f l
   Output x y p q l -> Output x y (subst p) (subst q) l
   Input x y p l -> Input x y (subst p) l
   SelectL x p l -> SelectL x (subst p) l
@@ -460,24 +460,22 @@ substituteType old new process = case process of
 
 
 data Tree
-    = Node Chan
-        Tree (Set Text)
-        Tree (Set Text)
+    = Node Chan Tree Tree
     | Leaf Process
   deriving (Show)
 
 toTree :: Process -> Tree
-toTree (Compose chan _ p q _) =
-  Node chan (toTree p) (freeChans p) (toTree q) (freeChans q)
+toTree (Compose chan _ p q _ _) =
+  Node chan (toTree p) (toTree q)
 toTree others =
   Leaf others
 
 fromTree :: Tree -> Process
-fromTree (Node chan p _ q _) = Compose chan Nothing (fromTree p) (fromTree q) NoLoc
+fromTree (Node chan p q) = Compose chan Nothing (fromTree p) (fromTree q) undefined NoLoc
 fromTree (Leaf p) = p
 
 instance Pretty Tree where
-  pretty (Node chan p p' q q') =
+  pretty (Node chan p q) =
     "\\" <+> pretty chan <> line
-    <> indent 2 (vsep [pretty p' <+> pretty p, pretty q' <+> pretty q])
+    <> indent 2 (vsep [pretty p, pretty q])
   pretty (Leaf p) = pretty p

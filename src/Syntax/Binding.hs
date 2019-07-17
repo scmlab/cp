@@ -51,8 +51,8 @@ data TypeName = TypeName  Text Loc deriving (Show)
 --
 data Chan     = Chan Text Loc deriving (Show)
 
-toName :: Chan -> Text
-toName (Chan name _) = name
+chanName :: Chan -> Text
+chanName (Chan name _) = name
 
 data Definition = Paired   Name Process Session
                 | TypeOnly Name Session
@@ -80,7 +80,7 @@ type FreeChans = Set Text
 
 data Process  = Call      Name (Maybe Process)    FreeChans Loc
               | Link      Chan Chan               FreeChans Loc
-              | Compose   Chan (Maybe Type) Process Process Loc
+              | Compose   Chan (Maybe Type) Process Process FreeChans Loc
               | Output    Chan Chan Process Process         Loc
               | Input     Chan Chan Process                 Loc
               | SelectL   Chan Process                      Loc
@@ -183,10 +183,10 @@ instance Ord Name where
   (Name a _) `compare` (Name b _) = a `compare` b
 
 instance Eq Chan where
-  (==) = (==) `on` toName
+  (==) = (==) `on` chanName
 
 instance Ord Chan where
-  compare = compare `on` toName
+  compare = compare `on` chanName
 
 -- instance Eq TypeName where
 --   (==) = (==) `on` toAbstract
@@ -223,7 +223,7 @@ subsituteProcess :: Text -> Text -> Process -> Process
 subsituteProcess old new process = case process of
   Call name p free loc -> Call name (fmap proc p) (susbt free) loc
   Link x y free loc -> Link (chan x) (chan y) (susbt free) loc
-  Compose x t a b loc -> Compose (chan x) t (proc a) (proc b) loc
+  Compose x t a b free loc -> Compose (chan x) t (proc a) (proc b) (susbt free) loc
   Output x y a b loc -> Output (chan x) (chan y) (proc a) (proc b) loc
   Input x y a loc -> Input (chan x) (chan y) (proc a) loc
   SelectL x a loc -> SelectL (chan x) (proc a) loc
@@ -266,7 +266,7 @@ instance Located Program where
 instance Located Process where
   locOf (Call _ _ _ loc) = loc
   locOf (Link _ _ _ loc) = loc
-  locOf (Compose _ _ _ _ loc) = loc
+  locOf (Compose _ _ _ _ _ loc) = loc
   locOf (Output _ _ _ _ loc) = loc
   locOf (Input _ _ _ loc) = loc
   locOf (SelectL _ _ loc) = loc
@@ -332,19 +332,19 @@ convert (SessionSyntax xs _) = xs
 freeChans :: Process -> FreeChans
 freeChans process = case process of
   Call _ _ free _ -> free
-  Link x y free _ -> free -- Set.fromList [toName x, toName y]
-  Compose x _ p q _ -> Set.delete (toName x) $ Set.union (freeChans p) (freeChans q)
-  Output x y p q _ -> Set.insert (toName x) $ Set.delete (toName y) $ Set.union (freeChans p) (freeChans q)
-  Input x y p _ -> Set.insert (toName x) $ Set.delete (toName y) (freeChans p)
-  SelectL x p _ -> Set.insert (toName x) $ freeChans p
-  SelectR x p _ -> Set.insert (toName x) $ freeChans p
-  Choice x p q _ -> Set.insert (toName x) $ Set.union (freeChans p) (freeChans q)
-  Accept x y p _ ->Set.insert (toName x) $ Set.delete (toName y) (freeChans p)
-  Request x y p _ -> Set.insert (toName x) $ Set.delete (toName y) (freeChans p)
-  OutputT x _ p _ -> Set.insert (toName x) (freeChans p)
-  InputT x _ p _ -> Set.insert (toName x) (freeChans p)
-  EmptyOutput x _ -> Set.singleton (toName x)
-  EmptyInput x p _ -> Set.insert (toName x) (freeChans p)
-  EmptyChoice x _ -> Set.singleton (toName x)
+  Link x y free _ -> free
+  Compose x _ p q free _ -> free -- Set.delete (chanName x) $ Set.union (freeChans p) (freeChans q)
+  Output x y p q _ -> Set.insert (chanName x) $ Set.delete (chanName y) $ Set.union (freeChans p) (freeChans q)
+  Input x y p _ -> Set.insert (chanName x) $ Set.delete (chanName y) (freeChans p)
+  SelectL x p _ -> Set.insert (chanName x) $ freeChans p
+  SelectR x p _ -> Set.insert (chanName x) $ freeChans p
+  Choice x p q _ -> Set.insert (chanName x) $ Set.union (freeChans p) (freeChans q)
+  Accept x y p _ ->Set.insert (chanName x) $ Set.delete (chanName y) (freeChans p)
+  Request x y p _ -> Set.insert (chanName x) $ Set.delete (chanName y) (freeChans p)
+  OutputT x _ p _ -> Set.insert (chanName x) (freeChans p)
+  InputT x _ p _ -> Set.insert (chanName x) (freeChans p)
+  EmptyOutput x _ -> Set.singleton (chanName x)
+  EmptyInput x p _ -> Set.insert (chanName x) (freeChans p)
+  EmptyChoice x _ -> Set.singleton (chanName x)
   End _ -> Set.empty
   Mix p q _ -> Set.union (freeChans p) (freeChans q)

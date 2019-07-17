@@ -63,7 +63,7 @@ infer process = case process of
       , (y, dual a)
       ]
 
-  Compose x _ p q _ -> do
+  Compose x _ p q _ _ -> do
 
     sessionP <- infer p
     let a = lookup x sessionP
