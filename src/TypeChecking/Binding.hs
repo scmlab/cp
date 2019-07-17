@@ -28,27 +28,13 @@ import Control.Monad.Except
 --------------------------------------------------------------------------------
 -- | Converting to Concrete Binding Tree
 
-data BindingState = BindingState
-  { bsFreeChans     :: Set Text
-  , bsFreeTypeVars  :: Set Text
-  } deriving (Show)
-
-type BindM = ExceptT ScopeError (StateT BindingState (Reader Definitions))
+type BindM = ExceptT ScopeError (Reader Definitions)
 
 class Bind a b | a -> b where
   bindM :: a -> BindM b
 
 runBindM :: Definitions -> BindM a -> Either ScopeError a
-runBindM defns f =
-  runReader
-    (evalStateT
-      (runExceptT
-        f)
-      initialBindingState)
-    defns
-  where
-    initialBindingState :: BindingState
-    initialBindingState = BindingState Set.empty Set.empty
+runBindM defns f = runReader (runExceptT f) defns
 
 askDefn :: Name -> Loc -> BindM Definition
 askDefn name loc = do
@@ -61,10 +47,7 @@ askDefn name loc = do
 --------------------------------------------------------------------------------
 
 instance Bind TypeVar B.TypeVar where
-  bindM (TypeVar name loc) = do
-    names <- gets bsFreeTypeVars
-    modify $ \ st -> st { bsFreeTypeVars = Set.insert name names }
-    return $ B.TypeVar name loc
+  bindM (TypeVar name loc) = return $ B.TypeVar name loc
 
 instance Bind Type B.Type where
   bindM (Var i loc) =
@@ -130,10 +113,7 @@ instance Bind TypeName B.TypeName where
   bindM (TypeName name loc) = return $ B.TypeName name loc
 
 instance Bind Chan B.Chan where
-  bindM (Chan name loc) = do
-    names <- gets bsFreeChans
-    modify $ \ st -> st { bsFreeChans = Set.insert name names }
-    return $ B.Chan name loc
+  bindM (Chan name loc) = return $ B.Chan name loc
 
 instance Bind Process B.Process where
   bindM (Call name loc) = do
