@@ -100,7 +100,7 @@ handleM program = do
 runTCM :: TCM a -> M a
 runTCM f = do
   definitions <- gets replDefinitions
-  let (result, _) = runReader (runStateT (runExceptT f) 0) definitions
+  let result = runReader (runExceptT f) definitions
   case result of
     Left err -> throwError $ TypeError err
     Right val -> return val
@@ -275,7 +275,7 @@ handleCommand (Eval expr) = do
     -- local expression parsing
     process <- parseProcessM expr >>= bind program
     --
-    result <- evaluate process
+    _result <- evaluate process
     -- liftIO $ putDoc $ pretty result <> line
     return ()
   return True

@@ -56,7 +56,7 @@ infer process = case process of
 
   Link x y _ -> do
 
-    a <- fresh
+    let a = fresh
 
     return $ Map.fromList
       [ (x, a)
@@ -66,10 +66,10 @@ infer process = case process of
   Compose x _ p q _ -> do
 
     sessionP <- infer p
-    a <- lookup x sessionP
+    let a = lookup x sessionP
 
     sessionQ <- infer q
-    a' <- lookup x sessionQ
+    let a' = lookup x sessionQ
 
     let sessionP' = Map.delete x sessionP
     let sessionQ' = Map.delete x sessionQ
@@ -87,11 +87,11 @@ infer process = case process of
 
     x `notFreeIn` p
     sessionP <- infer p
-    a <- lookup y sessionP
+    let a = lookup y sessionP
 
     y `notFreeIn` q
     sessionQ <- infer q
-    b <- lookup x sessionQ
+    let b = lookup x sessionQ
 
     let sessionP' = Map.delete y sessionP
     let sessionQ' = Map.delete x sessionQ
@@ -105,8 +105,8 @@ infer process = case process of
   Input x y p _ -> do
 
     session <- infer p
-    b <- lookup x session
-    a <- lookup y session
+    let b = lookup x session
+    let a = lookup y session
 
     let session' = Map.delete x $ Map.delete y session
 
@@ -117,11 +117,11 @@ infer process = case process of
   SelectL x p _ -> do
 
     session <- infer p
-    a <- lookup x session
+    let a = lookup x session
 
     let session' = Map.delete x session
 
-    b <- fresh
+    let b = fresh
 
     return
       $ Map.insert x (Plus a b NoLoc)
@@ -130,11 +130,11 @@ infer process = case process of
   SelectR x p _ -> do
 
     session <- infer p
-    b <- lookup x session
+    let b = lookup x session
 
     let session' = Map.delete x session
 
-    a <- fresh
+    let a = fresh
 
     return
       $ Map.insert x (Plus a b NoLoc)
@@ -143,10 +143,10 @@ infer process = case process of
   Choice x p q _ -> do
 
     sessionP <- infer p
-    a <- lookup x sessionP
+    let a = lookup x sessionP
 
     sessionQ <- infer q
-    b <- lookup x sessionQ
+    let b = lookup x sessionQ
 
 
     let sessionP' = Map.delete x sessionP
@@ -162,7 +162,7 @@ infer process = case process of
 
     x `notFreeIn` p
     session <- infer p
-    a <- lookup y session
+    let a = lookup y session
 
     let session' = Map.delete y session
 
@@ -176,7 +176,7 @@ infer process = case process of
 
     x `notFreeIn` p
     session <- infer p
-    a <- lookup y session
+    let a = lookup y session
 
     let session' = Map.delete y session
 
@@ -187,8 +187,8 @@ infer process = case process of
   OutputT x outputType p _ -> do
 
     session <- infer p
-    afterSubstitution <- lookup x session  -- B {A / X}
-    beforeSubstitution <- fresh   -- B
+    let afterSubstitution  = lookup x session  -- B {A / X}
+    let beforeSubstitution = fresh   -- B
 
     let t = (Exists
               Unknown                     -- the type variable to be substituted
@@ -207,7 +207,7 @@ infer process = case process of
   InputT x var p _ -> do
 
     session <- infer p
-    b <- lookup x session
+    let b = lookup x session
     let session' = Map.delete x session
 
     return
@@ -249,10 +249,10 @@ infer process = case process of
     --  type from the inferred session
     -- However, if we are asking for something that doesn't exist
     --  we can still apply the Weakening rule and return something wrapped in "?"
-    lookup :: Chan -> Session -> TCM Type
+    lookup :: Chan -> Session -> Type
     lookup chan session = case Map.lookup chan session of
-      Nothing -> Req <$> fresh <*> pure NoLoc -- Weakening!!
-      Just t -> return t
+      Nothing -> Req fresh NoLoc -- Weakening!!
+      Just t -> t
 
     -- assert that some channel shouldn't occur free in some process
     notFreeIn :: Chan -> Process -> TCM ()
@@ -262,8 +262,8 @@ infer process = case process of
         throwError $ ChannelNotComsumed term channel
 
     -- return a fresh type variable
-    fresh :: TCM Type
-    fresh = return $ Var (TypeVar "_" NoLoc) NoLoc
+    fresh :: Type
+    fresh = Var (TypeVar "_" NoLoc) NoLoc
 
     -- unify the two given types, and return a substitution function
     -- for better error message, make the former type be the expecting type

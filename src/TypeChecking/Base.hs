@@ -64,7 +64,7 @@ data ScopeError
 --------------------------------------------------------------------------------
 -- | TCM
 
-type TCM = ExceptT TypeError (StateT Int (Reader Definitions))
+type TCM = ExceptT TypeError (Reader Definitions)
 
 --
 -- --------------------------------------------------------------------------------
