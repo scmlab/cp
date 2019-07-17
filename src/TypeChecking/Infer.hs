@@ -54,7 +54,7 @@ infer process = case process of
       Just (TypeOnly _ t) -> return t
       Just (TermOnly _ p) -> infer p
 
-  Link x y _ -> do
+  Link x y _ _ -> do
 
     let a = fresh
 

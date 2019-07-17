@@ -155,6 +155,7 @@ instance Bind Process B.Process where
     B.Link
       <$> bindM x
       <*> bindM y
+      <*> pure (Set.fromList [chanName x, chanName y])
       <*> pure loc
   bindM (Compose x t p q loc) = do
     B.Compose

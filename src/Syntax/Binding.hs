@@ -79,7 +79,7 @@ data SessionSyntax = SessionSyntax Session Loc deriving (Show)
 type FreeChans = Set Text
 
 data Process  = Call      Name (Maybe Process)    FreeChans Loc
-              | Link      Chan Chan                         Loc
+              | Link      Chan Chan               FreeChans Loc
               | Compose   Chan (Maybe Type) Process Process Loc
               | Output    Chan Chan Process Process         Loc
               | Input     Chan Chan Process                 Loc
@@ -221,8 +221,8 @@ subsituteChannel old new (Chan name loc)
 
 subsituteProcess :: Text -> Text -> Process -> Process
 subsituteProcess old new process = case process of
-  Call name p free loc -> Call name (fmap proc p) (subsituteFreeChans old new free) loc
-  Link x y loc -> Link (chan x) (chan y) loc
+  Call name p free loc -> Call name (fmap proc p) (susbt free) loc
+  Link x y free loc -> Link (chan x) (chan y) (susbt free) loc
   Compose x t a b loc -> Compose (chan x) t (proc a) (proc b) loc
   Output x y a b loc -> Output (chan x) (chan y) (proc a) (proc b) loc
   Input x y a loc -> Input (chan x) (chan y) (proc a) loc
@@ -241,6 +241,7 @@ subsituteProcess old new process = case process of
   where
     chan = subsituteChannel old new
     proc = subsituteProcess old new
+    susbt = subsituteFreeChans old new
 
 
 --------------------------------------------------------------------------------
@@ -264,7 +265,7 @@ instance Located Program where
 
 instance Located Process where
   locOf (Call _ _ _ loc) = loc
-  locOf (Link _ _ loc) = loc
+  locOf (Link _ _ _ loc) = loc
   locOf (Compose _ _ _ _ loc) = loc
   locOf (Output _ _ _ _ loc) = loc
   locOf (Input _ _ _ loc) = loc
@@ -331,7 +332,7 @@ convert (SessionSyntax xs _) = xs
 freeChans :: Process -> FreeChans
 freeChans process = case process of
   Call _ _ free _ -> free
-  Link x y _ -> Set.fromList [toName x, toName y]
+  Link x y free _ -> free -- Set.fromList [toName x, toName y]
   Compose x _ p q _ -> Set.delete (toName x) $ Set.union (freeChans p) (freeChans q)
   Output x y p q _ -> Set.insert (toName x) $ Set.delete (toName y) $ Set.union (freeChans p) (freeChans q)
   Input x y p _ -> Set.insert (toName x) $ Set.delete (toName y) (freeChans p)

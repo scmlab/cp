@@ -38,7 +38,7 @@ instance Pretty Process where
   pretty (Call name _ _ _) = pretty name
   -- pretty (Call name Nothing _) = pretty name
   -- pretty (Call _ (Just p) _) = pretty p
-  pretty (Link x y _) = pretty x <> " ↔ " <> pretty y
+  pretty (Link x y _ _) = pretty x <> " ↔ " <> pretty y
   pretty (Compose x Nothing p q _) = "ν " <> pretty x
     <> " ( " <> pretty p
     <> " | " <> pretty q

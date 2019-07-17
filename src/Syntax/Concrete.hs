@@ -30,6 +30,8 @@ data Chan     = Chan      Text Loc deriving (Show, Eq, Ord)
 data TypeVar  = TypeVar   Text Loc deriving (Show)
 data TypeName = TypeName  Text Loc deriving (Show)
 
+chanName :: Chan -> Text
+chanName (Chan name _) = name
 
 data Program = Program [Declaration] Loc deriving (Show)
 
