@@ -17,9 +17,8 @@ import Data.Function (on)
 --------------------------------------------------------------------------------
 -- | Type Variable
 
-data TypeVar  = TypeVar Var Text Loc
+data TypeVar  = TypeVar Text Loc
               | Unknown
-              -- | DualOf TypeVar
               deriving (Show)
 --
 -- instance Show TypeVar where
@@ -33,20 +32,14 @@ instance Eq TypeVar where
     Unknown == _ = True
     _ == Unknown = True
     --
-    TypeVar i _ _ == TypeVar j _ _ = i == j
-    -- DualOf m == DualOf n = m == n
-    --
+    TypeVar i _ == TypeVar j _ = i == j
     _ == _ = False
 
 instance Ord TypeVar where
     Unknown `compare` Unknown = EQ
     Unknown `compare` _       = LT
     _       `compare` Unknown = GT
-    --
-    TypeVar i _ _ `compare` TypeVar j _ _ = i `compare` j
-    -- DualOf m `compare` DualOf n = m `compare` n
-    -- whatever ???
-    _ `compare` _ = EQ
+    TypeVar i _ `compare` TypeVar j _ = i `compare` j
 
 --------------------------------------------------------------------------------
 -- | Concrete Binding Tree
@@ -56,8 +49,10 @@ data Name     = Name      Text Loc deriving (Show)
 data TypeName = TypeName  Text Loc deriving (Show)
 
 --
-data Chan     = Chan Var Text Loc
-              deriving (Show)
+data Chan     = Chan Text Loc deriving (Show)
+
+toName :: Chan -> Text
+toName (Chan name _) = name
 
 data Definition = Paired   Name Process Session
                 | TypeOnly Name Session
@@ -184,13 +179,11 @@ instance Eq Name where
 instance Ord Name where
   (Name a _) `compare` (Name b _) = a `compare` b
 
--- TODO: FIX THIS
 instance Eq Chan where
-  -- (Chan varA _ _) == (Chan varB _ _) = varA == varB
-  (Chan _ nameA _) == (Chan _ nameB _) = nameA == nameB
+  (==) = (==) `on` toName
 
 instance Ord Chan where
-  (Chan _ nameA _) `compare` (Chan _ nameB _) = nameA `compare` nameB
+  compare = compare `on` toName
 
 -- instance Eq TypeName where
 --   (==) = (==) `on` toAbstract
@@ -200,29 +193,22 @@ instance Ord Chan where
 --------------------------------------------------------------------------------
 -- | Make free variables bounded
 
-subsituteVar :: Text -> Int -> Var -> Var
-subsituteVar free bound var@(Free name)
-  | free == name = Bound bound
-  | otherwise    = var
-subsituteVar _ _ var = var
-
-subsituteTypeVar :: Text -> Int -> TypeVar -> TypeVar
-subsituteTypeVar free bound (TypeVar var name loc)
-  | Free free == var = TypeVar (Bound bound) name loc
-  | otherwise        = TypeVar var name loc
+subsituteTypeVar :: Text -> Text -> TypeVar -> TypeVar
+subsituteTypeVar free bound (TypeVar name loc)
+  | free == name = TypeVar bound loc
+  | otherwise    = TypeVar name  loc
 subsituteTypeVar _ _ Unknown = Unknown
--- subsituteTypeVar free bound (DualOf var) = DualOf (subsituteTypeVar free bound var)
 
-subsituteType :: Text -> Int -> Type -> Type
+subsituteType :: Text -> Text -> Type -> Type
 subsituteType free bound (Var var loc) = Var (subsituteTypeVar free bound var) loc
 subsituteType _    _     others        = others
 
-subsituteChannel :: Text -> Int -> Chan -> Chan
-subsituteChannel free bound (Chan var name loc)
-  | Free free == var = Chan (Bound bound) name loc
-  | otherwise        = Chan var name loc
+subsituteChannel :: Text -> Text -> Chan -> Chan
+subsituteChannel free bound (Chan name loc)
+  | free == name = Chan bound loc
+  | otherwise    = Chan name  loc
 
-subsituteProcess :: Text -> Int -> Process -> Process
+subsituteProcess :: Text -> Text -> Process -> Process
 subsituteProcess free bound process = case process of
   Call name p loc -> Call name (fmap (subsituteProcess free bound) p) loc
   Link x y loc -> Link (chan x) (chan y) loc
@@ -249,9 +235,8 @@ subsituteProcess free bound process = case process of
 -- | Instance of Located
 
 instance Located TypeVar where
-  locOf (TypeVar _ _ loc) = loc
-  locOf Unknown           = NoLoc
-  -- locOf (DualOf v)        = locOf v
+  locOf (TypeVar _ loc) = loc
+  locOf Unknown         = NoLoc
 
 instance Located TypeName where
   locOf (TypeName _ loc) = loc
@@ -260,7 +245,7 @@ instance Located Name where
   locOf (Name _ loc) = loc
 
 instance Located Chan where
-  locOf (Chan _ _ loc) = loc
+  locOf (Chan _ loc) = loc
 
 instance Located Program where
   locOf (Program _ loc) = loc
@@ -335,22 +320,19 @@ freeVariables :: Process -> Set Text
 freeVariables process = case process of
   Call _ (Left s) _ -> s
   Call _ (Right p) _ -> freeVariables p
-  Link x y _ -> Set.fromList [toVar x, toVar y]
-  Compose x _ p q _ -> Set.delete (toVar x) $ Set.union (freeVariables p) (freeVariables q)
-  Output x y p q _ -> Set.insert (toVar x) $ Set.delete (toVar y) $ Set.union (freeVariables p) (freeVariables q)
-  Input x y p _ -> Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
-  SelectL x p _ -> Set.insert (toVar x) $ freeVariables p
-  SelectR x p _ -> Set.insert (toVar x) $ freeVariables p
-  Choice x p q _ -> Set.insert (toVar x) $ Set.union (freeVariables p) (freeVariables q)
-  Accept x y p _ ->Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
-  Request x y p _ -> Set.insert (toVar x) $ Set.delete (toVar y) (freeVariables p)
-  OutputT x _ p _ -> Set.insert (toVar x) (freeVariables p)
-  InputT x _ p _ -> Set.insert (toVar x) (freeVariables p)
-  EmptyOutput x _ -> Set.singleton (toVar x)
-  EmptyInput x p _ -> Set.insert (toVar x) (freeVariables p)
-  EmptyChoice x _ -> Set.singleton (toVar x)
+  Link x y _ -> Set.fromList [toName x, toName y]
+  Compose x _ p q _ -> Set.delete (toName x) $ Set.union (freeVariables p) (freeVariables q)
+  Output x y p q _ -> Set.insert (toName x) $ Set.delete (toName y) $ Set.union (freeVariables p) (freeVariables q)
+  Input x y p _ -> Set.insert (toName x) $ Set.delete (toName y) (freeVariables p)
+  SelectL x p _ -> Set.insert (toName x) $ freeVariables p
+  SelectR x p _ -> Set.insert (toName x) $ freeVariables p
+  Choice x p q _ -> Set.insert (toName x) $ Set.union (freeVariables p) (freeVariables q)
+  Accept x y p _ ->Set.insert (toName x) $ Set.delete (toName y) (freeVariables p)
+  Request x y p _ -> Set.insert (toName x) $ Set.delete (toName y) (freeVariables p)
+  OutputT x _ p _ -> Set.insert (toName x) (freeVariables p)
+  InputT x _ p _ -> Set.insert (toName x) (freeVariables p)
+  EmptyOutput x _ -> Set.singleton (toName x)
+  EmptyInput x p _ -> Set.insert (toName x) (freeVariables p)
+  EmptyChoice x _ -> Set.singleton (toName x)
   End _ -> Set.empty
   Mix p q _ -> Set.union (freeVariables p) (freeVariables q)
-  where
-    toVar :: Chan -> Text
-    toVar (Chan _ name _) = name

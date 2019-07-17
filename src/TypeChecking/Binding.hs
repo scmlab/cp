@@ -28,14 +28,9 @@ import Control.Monad.Except
 --------------------------------------------------------------------------------
 -- | Converting to Concrete Binding Tree
 
-data Binding = Binding
-  { bindingBound :: Int
-  , bindingFree :: Set Text
-  } deriving (Show)
-
 data BindingState = BindingState
-  { bsChannel :: Binding
-  , bsTypeVar :: Binding
+  { bsFreeChans     :: Set Text
+  , bsFreeTypeVars  :: Set Text
   } deriving (Show)
 
 type BindM = ExceptT ScopeError (StateT BindingState (Reader Definitions))
@@ -53,10 +48,7 @@ runBindM defns f =
     defns
   where
     initialBindingState :: BindingState
-    initialBindingState =
-      BindingState
-        (Binding 0 Set.empty)
-        (Binding 0 Set.empty)
+    initialBindingState = BindingState Set.empty Set.empty
 
 askDefn :: Name -> Loc -> BindM Definition
 askDefn name loc = do
@@ -68,18 +60,11 @@ askDefn name loc = do
 
 --------------------------------------------------------------------------------
 
-createBinderTypeVar :: TypeVar -> BindM (B.TypeVar, B.Type -> B.Type)
-createBinderTypeVar (TypeVar name loc) = do
-  Binding idx ns <- gets bsTypeVar
-  modify $ \ st -> st { bsTypeVar = Binding (idx + 1) ns }
-  let var = B.TypeVar (Bound idx) name loc
-  return (var, B.subsituteType name idx)
-
 instance Bind TypeVar B.TypeVar where
   bindM (TypeVar name loc) = do
-    Binding idx ns <- gets bsTypeVar
-    modify $ \ st -> st { bsTypeVar = Binding idx (Set.insert name ns) }
-    return $ B.TypeVar (Free name) name loc
+    names <- gets bsFreeTypeVars
+    modify $ \ st -> st { bsFreeTypeVars = Set.insert name names }
+    return $ B.TypeVar name loc
 
 instance Bind Type B.Type where
   bindM (Var i loc) =
@@ -119,27 +104,24 @@ instance Bind Type B.Type where
       <$> bindM t
       <*> pure loc
   bindM (Exists x t loc) = do
-    (var, bindFreeVars) <- createBinderTypeVar x
-    t' <- bindFreeVars <$> bindM t
-    return $ B.Exists var t' Nothing loc
+    -- binder
+    B.Exists
+      <$> bindM x
+      <*> bindM t
+      <*> pure Nothing
+      <*> pure loc
   bindM (Forall x t loc) = do
-    (var, bindFreeVars) <- createBinderTypeVar x
-    t' <- bindFreeVars <$> bindM t
-    return $ B.Forall var t' loc
+    -- binder
+    B.Forall
+      <$> bindM x
+      <*> bindM t
+      <*> pure loc
   bindM (One loc) = B.One <$> pure loc
   bindM (Bot loc) = B.Bot <$> pure loc
   bindM (Zero loc) = B.Zero <$> pure loc
   bindM (Top loc) = B.Top <$> pure loc
 
 --------------------------------------------------------------------------------
-
--- creates a channcel binder along with a function that binds free variables
-createBinderChan :: Chan -> BindM (B.Chan, B.Process -> B.Process)
-createBinderChan (Chan name loc) = do
-  Binding idx ns <- gets bsChannel
-  modify $ \ st -> st { bsChannel = Binding (idx + 1) ns }
-  let var = B.Chan (Bound idx) name loc
-  return (var, B.subsituteProcess name idx)
 
 instance Bind Name B.Name where
   bindM (Name name loc) = return $ B.Name name loc
@@ -149,27 +131,9 @@ instance Bind TypeName B.TypeName where
 
 instance Bind Chan B.Chan where
   bindM (Chan name loc) = do
-    Binding idx ns <- gets bsChannel
-    modify $ \ st -> st { bsChannel = Binding idx (Set.insert name ns) }
-    return $ B.Chan (Free name) name loc
-
--- has :: [Chan] -> BindM B.Process -> BindM B.Process
--- has channels p = do
---   process <- p
---   let names = map (\(Chan n _) -> n) channels
---   let absent = Set.fromList names \\ B.freeVariables process
---   unless (Set.null absent) $
---     throwError $ ChanNotFound process absent
---   return process
---
--- hasNo :: [Chan] -> BindM B.Process -> BindM B.Process
--- hasNo channels p = do
---   process <- p
---   let names = map (\(Chan n _) -> n) channels
---   let present = Set.fromList names `Set.intersection` B.freeVariables process
---   unless (Set.null present) $
---     throwError $ ChanFound process present
---   return process
+    names <- gets bsFreeChans
+    modify $ \ st -> st { bsFreeChans = Set.insert name names }
+    return $ B.Chan name loc
 
 instance Bind Process B.Process where
   bindM (Call name loc) = do
@@ -188,27 +152,27 @@ instance Bind Process B.Process where
       <*> bindM y
       <*> pure loc
   bindM (Compose x t p q loc) = do
-    (var, bind) <- createBinderChan x
     B.Compose
-      <$> pure var
+      -- binder
+      <$> bindM x
       <*> mapM bindM t
-      <*> (bind <$> bindM p)
-      <*> (bind <$> bindM q)
+      <*> bindM p
+      <*> bindM q
       <*> pure loc
   bindM (Output x y q p loc) = do
-    (varB, bindB) <- createBinderChan y
     B.Output
       <$> bindM x
-      <*> pure varB
-      <*> (bindB <$> bindM q)
+      -- binder
+      <*> bindM y
+      <*> bindM q
       <*> bindM p
       <*> pure loc
   bindM (Input x y p loc) = do
-    (varB, bindB) <- createBinderChan y
     B.Input
       <$> bindM x
-      <*> pure varB
-      <*> (bindB <$> bindM p)
+      -- binder
+      <*> bindM y
+      <*> bindM p
       <*> pure loc
   bindM (SelectL x p loc) =
     B.SelectL
@@ -227,18 +191,18 @@ instance Bind Process B.Process where
       <*> bindM q
       <*> pure loc
   bindM (Accept x y p loc) = do
-    (varB, bindB) <- createBinderChan y
     B.Accept
       <$> bindM x
-      <*> pure varB
-      <*> (bindB <$> bindM p)
+      -- binder
+      <*> bindM y
+      <*> bindM p
       <*> pure loc
   bindM (Request x y p loc) = do
-    (varB, bindB) <- createBinderChan y
     B.Request
       <$> bindM x
-      <*> pure varB
-      <*> (bindB <$> bindM p)
+      -- binder
+      <*> bindM y
+      <*> bindM p
       <*> pure loc
   bindM (OutputT x t p loc) =
     B.OutputT
@@ -249,7 +213,7 @@ instance Bind Process B.Process where
   bindM (InputT x (TypeVar n l) p loc) = do
     B.InputT
       <$> bindM x
-      <*> pure (B.TypeVar (Free n) n l)
+      <*> pure (B.TypeVar n l)
       <*> bindM p
       <*> pure loc
   bindM (EmptyOutput x loc) =

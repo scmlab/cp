@@ -257,16 +257,13 @@ infer process = case process of
     -- assert that some channel shouldn't occur free in some process
     notFreeIn :: Chan -> Process -> TCM ()
     notFreeIn channel term = do
-      let Chan _ name _ = channel
+      let Chan name _ = channel
       when (name `Set.member` freeVariables term) $
         throwError $ ChannelNotComsumed term channel
 
     -- return a fresh type variable
     fresh :: TCM Type
-    fresh = do
-      i <- get
-      put (succ i)
-      return $ Var (TypeVar (Bound i) "_" NoLoc) NoLoc
+    fresh = return $ Var (TypeVar "_" NoLoc) NoLoc
 
     -- unify the two given types, and return a substitution function
     -- for better error message, make the former type be the expecting type

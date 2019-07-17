@@ -26,9 +26,9 @@ class HasDual a where
   dual :: a -> a
 
 
---------------------------------------------------------------------------------
--- | Free/Bound variables
-
-data Var = Free Text
-         | Bound Int
-         deriving (Eq, Ord, Show)
+-- --------------------------------------------------------------------------------
+-- -- | Free/Bound variables
+--
+-- data Var = Free Text
+--          | Bound Int
+--          deriving (Eq, Ord, Show)

@@ -25,18 +25,14 @@ varName = map (toEnum . (+) 64) . digits . succ
 
 
 instance Pretty TypeVar where
-  pretty (TypeVar (Bound i) "_" _) = "$" <> pretty (varName i)
-  pretty (TypeVar (Bound i) name _)   = pretty name <> "$" <> pretty (varName i)
-  pretty (TypeVar (Free _) name _)   = pretty name
-  pretty Unknown        = "$_"
-  -- pretty (DualOf i)     = "^" <> pretty i
+  pretty (TypeVar name _) = pretty name
+  pretty Unknown          = "$_"
 
 instance Pretty Name where
   pretty (Name name _) = pretty name
 
 instance Pretty Chan where
-  pretty (Chan (Bound i) name _) = pretty name <> "$" <> pretty i
-  pretty (Chan (Free _) name _) = pretty name
+  pretty (Chan name _) = pretty name
 
 instance Pretty Process where
   pretty (Call name _ _) = pretty name
