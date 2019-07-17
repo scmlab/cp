@@ -76,7 +76,9 @@ data Program = Program Definitions Loc deriving (Show)
 type Session = Map Chan Type
 data SessionSyntax = SessionSyntax Session Loc deriving (Show)
 
-data Process  = Call      Name (Either (Set Text) Process)  Loc
+type FreeChans = Set Text
+
+data Process  = Call      Name (Maybe Process)    FreeChans Loc
               | Link      Chan Chan                         Loc
               | Compose   Chan (Maybe Type) Process Process Loc
               | Output    Chan Chan Process Process         Loc
@@ -94,6 +96,7 @@ data Process  = Call      Name (Either (Set Text) Process)  Loc
               | End                                         Loc
               | Mix       Process   Process                 Loc
               deriving (Eq, Ord, Show)
+
 
 data Type
     = Var TypeVar Loc
@@ -194,23 +197,31 @@ instance Ord Chan where
 -- | Make free variables bounded
 
 subsituteTypeVar :: Text -> Text -> TypeVar -> TypeVar
-subsituteTypeVar free bound (TypeVar name loc)
-  | free == name = TypeVar bound loc
-  | otherwise    = TypeVar name  loc
+subsituteTypeVar old new (TypeVar name loc)
+  | old == name = TypeVar new loc
+  | otherwise   = TypeVar old loc
 subsituteTypeVar _ _ Unknown = Unknown
 
 subsituteType :: Text -> Text -> Type -> Type
-subsituteType free bound (Var var loc) = Var (subsituteTypeVar free bound var) loc
-subsituteType _    _     others        = others
+subsituteType old new (Var var loc) = Var (subsituteTypeVar old new var) loc
+subsituteType _   _   others        = others
+
+subsituteFreeChans :: Text -> Text -> FreeChans -> FreeChans
+subsituteFreeChans old new = Set.map (subst old new)
+  where
+    subst :: Text -> Text -> Text -> Text
+    subst old new name
+      | old == name = new
+      | otherwise   = old
 
 subsituteChannel :: Text -> Text -> Chan -> Chan
-subsituteChannel free bound (Chan name loc)
-  | free == name = Chan bound loc
-  | otherwise    = Chan name  loc
+subsituteChannel old new (Chan name loc)
+  | old == name = Chan old loc
+  | otherwise   = Chan new loc
 
 subsituteProcess :: Text -> Text -> Process -> Process
-subsituteProcess free bound process = case process of
-  Call name p loc -> Call name (fmap (subsituteProcess free bound) p) loc
+subsituteProcess old new process = case process of
+  Call name p free loc -> Call name (fmap proc p) (subsituteFreeChans old new free) loc
   Link x y loc -> Link (chan x) (chan y) loc
   Compose x t a b loc -> Compose (chan x) t (proc a) (proc b) loc
   Output x y a b loc -> Output (chan x) (chan y) (proc a) (proc b) loc
@@ -228,8 +239,9 @@ subsituteProcess free bound process = case process of
   End loc -> End loc
   Mix p q loc -> Mix (proc p) (proc q) loc
   where
-    chan = subsituteChannel free bound
-    proc = subsituteProcess free bound
+    chan = subsituteChannel old new
+    proc = subsituteProcess old new
+
 
 --------------------------------------------------------------------------------
 -- | Instance of Located
@@ -251,7 +263,7 @@ instance Located Program where
   locOf (Program _ loc) = loc
 
 instance Located Process where
-  locOf (Call _ _ loc) = loc
+  locOf (Call _ _ _ loc) = loc
   locOf (Link _ _ loc) = loc
   locOf (Compose _ _ _ _ loc) = loc
   locOf (Output _ _ _ _ loc) = loc
@@ -316,23 +328,22 @@ convert (SessionSyntax xs _) = xs
 --------------------------------------------------------------------------------
 -- Free variables
 
-freeVariables :: Process -> Set Text
-freeVariables process = case process of
-  Call _ (Left s) _ -> s
-  Call _ (Right p) _ -> freeVariables p
+freeChans :: Process -> FreeChans
+freeChans process = case process of
+  Call _ _ free _ -> free
   Link x y _ -> Set.fromList [toName x, toName y]
-  Compose x _ p q _ -> Set.delete (toName x) $ Set.union (freeVariables p) (freeVariables q)
-  Output x y p q _ -> Set.insert (toName x) $ Set.delete (toName y) $ Set.union (freeVariables p) (freeVariables q)
-  Input x y p _ -> Set.insert (toName x) $ Set.delete (toName y) (freeVariables p)
-  SelectL x p _ -> Set.insert (toName x) $ freeVariables p
-  SelectR x p _ -> Set.insert (toName x) $ freeVariables p
-  Choice x p q _ -> Set.insert (toName x) $ Set.union (freeVariables p) (freeVariables q)
-  Accept x y p _ ->Set.insert (toName x) $ Set.delete (toName y) (freeVariables p)
-  Request x y p _ -> Set.insert (toName x) $ Set.delete (toName y) (freeVariables p)
-  OutputT x _ p _ -> Set.insert (toName x) (freeVariables p)
-  InputT x _ p _ -> Set.insert (toName x) (freeVariables p)
+  Compose x _ p q _ -> Set.delete (toName x) $ Set.union (freeChans p) (freeChans q)
+  Output x y p q _ -> Set.insert (toName x) $ Set.delete (toName y) $ Set.union (freeChans p) (freeChans q)
+  Input x y p _ -> Set.insert (toName x) $ Set.delete (toName y) (freeChans p)
+  SelectL x p _ -> Set.insert (toName x) $ freeChans p
+  SelectR x p _ -> Set.insert (toName x) $ freeChans p
+  Choice x p q _ -> Set.insert (toName x) $ Set.union (freeChans p) (freeChans q)
+  Accept x y p _ ->Set.insert (toName x) $ Set.delete (toName y) (freeChans p)
+  Request x y p _ -> Set.insert (toName x) $ Set.delete (toName y) (freeChans p)
+  OutputT x _ p _ -> Set.insert (toName x) (freeChans p)
+  InputT x _ p _ -> Set.insert (toName x) (freeChans p)
   EmptyOutput x _ -> Set.singleton (toName x)
-  EmptyInput x p _ -> Set.insert (toName x) (freeVariables p)
+  EmptyInput x p _ -> Set.insert (toName x) (freeChans p)
   EmptyChoice x _ -> Set.singleton (toName x)
   End _ -> Set.empty
-  Mix p q _ -> Set.union (freeVariables p) (freeVariables q)
+  Mix p q _ -> Set.union (freeChans p) (freeChans q)

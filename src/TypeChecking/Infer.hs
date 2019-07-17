@@ -46,7 +46,7 @@ check _ process expected = do
 
 infer :: Process -> TCM Session
 infer process = case process of
-  Call name _ _ -> do
+  Call name _ _ _ -> do
     definitions <- ask
     case Map.lookup name definitions of
       Nothing -> error "[panic] Definition not found, this shouldn't happen at the type checking state"
@@ -258,7 +258,7 @@ infer process = case process of
     notFreeIn :: Chan -> Process -> TCM ()
     notFreeIn channel term = do
       let Chan name _ = channel
-      when (name `Set.member` freeVariables term) $
+      when (name `Set.member` freeChans term) $
         throwError $ ChannelNotComsumed term channel
 
     -- return a fresh type variable

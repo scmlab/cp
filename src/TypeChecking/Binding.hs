@@ -138,13 +138,18 @@ instance Bind Chan B.Chan where
 instance Bind Process B.Process where
   bindM (Call name loc) = do
     defn <- askDefn name loc
-    result <- case defn of
-                  Paired _ p _ -> Right <$> bindM p
-                  TypeOnly _ s -> return $ Left $ sessionKeys s
-                  TermOnly _ p -> Right <$> bindM p
+    (process, free) <- case defn of
+          TypeOnly _ s -> return (Nothing, sessionKeys s)
+          Paired _ p _ -> do
+            p' <- bindM p
+            return (Just p', B.freeChans p')
+          TermOnly _ p -> do
+            p' <- bindM p
+            return (Just p', B.freeChans p')
     B.Call
       <$> bindM name
-      <*> pure result
+      <*> pure process
+      <*> pure free
       <*> pure loc
   bindM (Link x y loc) =
     B.Link

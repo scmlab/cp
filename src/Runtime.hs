@@ -111,8 +111,8 @@ tryReduce input = do
 
 reduce :: Process -> RuntimeM (Maybe Process)
 reduce process = case process of
-  (Call _ (Left _) _) -> stuck
-  (Call name (Right p) _) -> step (Invoke name) p
+  (Call _ Nothing _ _) -> stuck
+  (Call name (Just p) _ _) -> step (Invoke name) p
 
 -- runCompose x (Output x y p q) (Input v w r) = runCompose x p q
 -- runCompose x (Input v w r) (Output x y p q) = runCompose x (Output x y p q) (Input v w r)
@@ -468,7 +468,7 @@ data Tree
 
 toTree :: Process -> Tree
 toTree (Compose chan _ p q _) =
-  Node chan (toTree p) (freeVariables p) (toTree q) (freeVariables q)
+  Node chan (toTree p) (freeChans p) (toTree q) (freeChans q)
 toTree others =
   Leaf others
 
