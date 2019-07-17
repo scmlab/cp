@@ -45,8 +45,8 @@ check _ process expected = do
         Right _ -> return ()
 
 infer :: Process -> TCM Session
-infer process = case process of
-  Call name _ _ _ -> do
+infer process@(Process proc _ _) = case proc of
+  Call name _ -> do
     definitions <- ask
     case Map.lookup name definitions of
       Nothing -> error "[panic] Definition not found, this shouldn't happen at the type checking state"
@@ -54,7 +54,7 @@ infer process = case process of
       Just (TypeOnly _ t) -> return t
       Just (TermOnly _ p) -> infer p
 
-  Link x y _ _ -> do
+  Link x y -> do
 
     let a = fresh
 
@@ -63,7 +63,7 @@ infer process = case process of
       , (y, dual a)
       ]
 
-  Compose x _ p q _ _ -> do
+  Compose x _ p q -> do
 
     sessionP <- infer p
     let a = lookup x sessionP
@@ -83,7 +83,7 @@ infer process = case process of
       $ Map.map subst
       $ Map.union sessionP' sessionQ'
 
-  Output x y p q _ -> do
+  Output x y p q -> do
 
     x `notFreeIn` p
     sessionP <- infer p
@@ -102,7 +102,7 @@ infer process = case process of
       $ Map.insert x (Times a b NoLoc)
       $ Map.union sessionP' sessionQ'
 
-  Input x y p _ -> do
+  Input x y p -> do
 
     session <- infer p
     let b = lookup x session
@@ -114,7 +114,7 @@ infer process = case process of
       $ Map.insert x (Par a b NoLoc)
       $ session'
 
-  SelectL x p _ -> do
+  SelectL x p -> do
 
     session <- infer p
     let a = lookup x session
@@ -127,7 +127,7 @@ infer process = case process of
       $ Map.insert x (Plus a b NoLoc)
       $ session'
 
-  SelectR x p _ -> do
+  SelectR x p -> do
 
     session <- infer p
     let b = lookup x session
@@ -140,7 +140,7 @@ infer process = case process of
       $ Map.insert x (Plus a b NoLoc)
       $ session'
 
-  Choice x p q _ -> do
+  Choice x p q -> do
 
     sessionP <- infer p
     let a = lookup x sessionP
@@ -158,7 +158,7 @@ infer process = case process of
       $ Map.insert x (With a b NoLoc)
       $ sessionP'
 
-  Accept x y p _ -> do
+  Accept x y p -> do
 
     x `notFreeIn` p
     session <- infer p
@@ -172,7 +172,7 @@ infer process = case process of
       $ Map.insert x (Acc a NoLoc)
       $ session'
 
-  Request x y p _ -> do
+  Request x y p -> do
 
     x `notFreeIn` p
     session <- infer p
@@ -184,7 +184,7 @@ infer process = case process of
       $ Map.insert x (Req a NoLoc)
       $ session'
 
-  OutputT x outputType p _ -> do
+  OutputT x outputType p -> do
 
     session <- infer p
     let afterSubstitution  = lookup x session  -- B {A / X}
@@ -204,7 +204,7 @@ infer process = case process of
       $ Map.insert x t
       $ session'
 
-  InputT x var p _ -> do
+  InputT x var p -> do
 
     session <- infer p
     let b = lookup x session
@@ -214,7 +214,7 @@ infer process = case process of
       $ Map.insert x (Forall var b NoLoc)
       $ session'
 
-  EmptyInput x p _ -> do
+  EmptyInput x p -> do
 
     x `notFreeIn` p
     session <- infer p
@@ -223,17 +223,17 @@ infer process = case process of
       $ Map.insert x (Bot NoLoc)
       $ session
 
-  EmptyOutput x _ -> do
+  EmptyOutput x -> do
     return
       $ Map.singleton x (One NoLoc)
 
-  EmptyChoice x _ -> do
+  EmptyChoice x -> do
     return
       $ Map.singleton x (Top NoLoc)
 
-  End _ -> return Map.empty
+  End -> return Map.empty
 
-  Mix p q _ -> do
+  Mix p q -> do
 
     sessionP <- infer p
     sessionQ <- infer q

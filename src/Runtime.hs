@@ -360,24 +360,24 @@ printStatus process = do
 -- -- reduce _ = undefined
 --
 
-substituteType :: TypeVar -> Type -> Process -> Process
-substituteType old new process = case process of
-  Compose x t p q f l -> Compose x (fmap substT t) (subst p) (subst q) f l
-  Output x y p q l -> Output x y (subst p) (subst q) l
-  Input x y p l -> Input x y (subst p) l
-  SelectL x p l -> SelectL x (subst p) l
-  SelectR x p l -> SelectR x (subst p) l
-  Choice x p q l -> Choice x (subst p) (subst q) l
-  Accept x y p l -> Accept x y (subst p) l
-  Request x y p l -> Request x y (subst p) l
-  OutputT x t p l -> OutputT x (substT t) (subst p) l
-  InputT x t p l -> InputT x t (subst p) l
-  EmptyInput x p l -> EmptyInput x (subst p) l
-  Mix p q l -> Mix (subst p) (subst q) l
-  others -> others
-  where
-    subst = substituteType old new
-    substT = U.substitute old new
+-- substituteType :: TypeVar -> Type -> Process -> Process
+-- substituteType old new process = case process of
+--   Compose x t p q f l -> Compose x (fmap substT t) (subst p) (subst q) f l
+--   Output x y p q l -> Output x y (subst p) (subst q) l
+--   Input x y p l -> Input x y (subst p) l
+--   SelectL x p l -> SelectL x (subst p) l
+--   SelectR x p l -> SelectR x (subst p) l
+--   Choice x p q l -> Choice x (subst p) (subst q) l
+--   Accept x y p l -> Accept x y (subst p) l
+--   Request x y p l -> Request x y (subst p) l
+--   OutputT x t p l -> OutputT x (substT t) (subst p) l
+--   InputT x t p l -> InputT x t (subst p) l
+--   EmptyInput x p l -> EmptyInput x (subst p) l
+--   Mix p q l -> Mix (subst p) (subst q) l
+--   others -> others
+--   where
+--     subst = substituteType old new
+--     substT = U.substitute old new
 --
 -- substitute :: Process -> Chan -> Chan -> M Process
 -- substitute (Call name) a b = do
@@ -465,13 +465,13 @@ data Tree
   deriving (Show)
 
 toTree :: Process -> Tree
-toTree (Compose chan _ p q _ _) =
+toTree (Process (Compose chan _ p q) _ _) =
   Node chan (toTree p) (toTree q)
 toTree others =
   Leaf others
 
 fromTree :: Tree -> Process
-fromTree (Node chan p q) = Compose chan Nothing (fromTree p) (fromTree q) undefined NoLoc
+fromTree (Node chan p q) = Process (Compose chan Nothing (fromTree p) (fromTree q)) undefined NoLoc
 fromTree (Leaf p) = p
 
 instance Pretty Tree where

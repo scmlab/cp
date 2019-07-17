@@ -35,55 +35,56 @@ instance Pretty Chan where
   pretty (Chan name _) = pretty name
 
 instance Pretty Process where
-  pretty (Call name _ _ _) = pretty name
-  -- pretty (Call name Nothing _) = pretty name
-  -- pretty (Call _ (Just p) _) = pretty p
-  pretty (Link x y _ _) = pretty x <> " ↔ " <> pretty y
-  pretty (Compose x Nothing p q _ _) = "ν " <> pretty x
+  pretty (Process proc _ _) = pretty proc
+
+instance Pretty Proc where
+  pretty (Call name _) = pretty name
+  pretty (Link x y) = pretty x <> " ↔ " <> pretty y
+  pretty (Compose x Nothing p q) = "ν " <> pretty x
     <> " ( " <> pretty p
     <> " | " <> pretty q
     <> " )"
-  pretty (Compose x t p q _ _) = "ν " <> pretty x
+  pretty (Compose x t p q) = "ν " <> pretty x
     <> " : " <> pretty t
     <> " ( " <> pretty p
     <> " | " <> pretty q
     <> " )"
-  pretty (Output x y p q _) = pretty x
+  pretty (Output x y p q) = pretty x
     <> "[" <> pretty y <> "] . ( "
     <> pretty p <> " | " <> pretty q <> " )"
-  pretty (Input x y p _) = pretty x
+  pretty (Input x y p) = pretty x
     <> "(" <> pretty y <> ") . "
     <> pretty p
-  pretty (SelectL x p _) = pretty x
+  pretty (SelectL x p) = pretty x
     <> "[inl] . "
     <> pretty p
-  pretty (SelectR x p _) = pretty x
+  pretty (SelectR x p) = pretty x
     <> "[inr] . "
     <> pretty p
-  pretty (Choice x p q _) = pretty x
+  pretty (Choice x p q) = pretty x
     <> ". case( " <> pretty p <> " | " <> pretty q <> " )"
-  pretty (Accept x y p _) = "!"
+  pretty (Accept x y p) = "!"
     <> pretty x
     <> "(" <> pretty y <> ") . "
     <> pretty p
-  pretty (Request x y p _) = "?"
+  pretty (Request x y p) = "?"
     <> pretty x
     <> "[" <> pretty y <> "] . "
     <> pretty p
-  pretty (OutputT x y p _) = pretty x
+  pretty (OutputT x y p) = pretty x
     <> "[" <> pretty y <> "] . "
     <> pretty p
-  pretty (InputT x y p _) = pretty x
+  pretty (InputT x y p) = pretty x
     <> "(" <> pretty y <> ") . "
     <> pretty p
-  pretty (EmptyOutput x _) = pretty x
+  pretty (EmptyOutput x) = pretty x
     <> "[] . end"
-  pretty (EmptyInput x p _) = pretty x
+  pretty (EmptyInput x p) = pretty x
     <> "() . " <> pretty p
-  pretty (EmptyChoice x _) = pretty x
+  pretty (EmptyChoice x) = pretty x
     <> ".case()"
-  pretty (End _) = "end"
-  pretty (Mix p q _) = pretty p <> " | " <> pretty q
+  pretty End = "end"
+  pretty (Mix p q) = pretty p <> " | " <> pretty q
 
 instance Pretty Session where
   pretty pairs

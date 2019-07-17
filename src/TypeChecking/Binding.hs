@@ -28,9 +28,6 @@ import Control.Monad.Except
 --------------------------------------------------------------------------------
 -- | Converting to Concrete Binding Tree
 
-class Build a b | a -> b where
-  build :: a -> b
-
 type BindM = ExceptT ScopeError (Reader Definitions)
 
 class Bind a b | a -> b where
@@ -49,138 +46,183 @@ askDefn name loc = do
 
 --------------------------------------------------------------------------------
 
-instance Build TypeVar B.TypeVar where
-  build (TypeVar name loc) = B.TypeVar name loc
+instance Bind TypeVar B.TypeVar where
+  bindM (TypeVar name loc) = return $ B.TypeVar name loc
 
-instance Build Type B.Type where
-  build (Var i loc) = B.Var (build i) loc
-  build (Dual t loc) = B.Dual (build t) loc
-  build (Times t u loc) = B.Times (build t) (build u) loc
-  build (Par t u loc) = B.Par (build t) (build u) loc
-  build (Plus t u loc) = B.Plus (build t) (build u) loc
-  build (With t u loc) = B.With (build t) (build u) loc
-  build (Acc t loc) = B.Acc (build t) loc
-  build (Req t loc) = B.Req (build t) loc
-  build (Exists x t loc) = B.Exists (build x) (build t) Nothing loc
-  build (Forall x t loc) = B.Forall (build x) (build t) loc
-  build (One loc) = B.One loc
-  build (Bot loc) = B.Bot loc
-  build (Zero loc) = B.Zero loc
-  build (Top loc) = B.Top loc
+instance Bind Type B.Type where
+  bindM (Var i loc) =
+    B.Var
+      <$> bindM i
+      <*> pure loc
+  bindM (Dual t loc) =
+    B.Dual
+      <$> bindM t
+      <*> pure loc
+  bindM (Times t u loc) =
+    B.Times
+      <$> bindM t
+      <*> bindM u
+      <*> pure loc
+  bindM (Par t u loc) =
+    B.Par
+      <$> bindM t
+      <*> bindM u
+      <*> pure loc
+  bindM (Plus t u loc) =
+    B.Plus
+      <$> bindM t
+      <*> bindM u
+      <*> pure loc
+  bindM (With t u loc) =
+    B.With
+      <$> bindM t
+      <*> bindM u
+      <*> pure loc
+  bindM (Acc t loc) =
+    B.Acc
+      <$> bindM t
+      <*> pure loc
+  bindM (Req t loc) =
+    B.Req
+      <$> bindM t
+      <*> pure loc
+  bindM (Exists x t loc) =
+    B.Exists
+      <$> bindM x
+      <*> bindM t
+      <*> pure Nothing
+      <*> pure loc
+  bindM (Forall x t loc) =
+    B.Forall
+      <$> bindM x
+      <*> bindM t
+      <*> pure loc
+  bindM (One loc) = B.One <$> pure loc
+  bindM (Bot loc) = B.Bot <$> pure loc
+  bindM (Zero loc) = B.Zero <$> pure loc
+  bindM (Top loc) = B.Top <$> pure loc
 
 --------------------------------------------------------------------------------
 
-instance Build Name B.Name where
-  build (Name name loc) = B.Name name loc
+instance Bind Name B.Name where
+  bindM (Name name loc) = return $ B.Name name loc
 
-instance Build TypeName B.TypeName where
-  build (TypeName name loc) = B.TypeName name loc
+instance Bind TypeName B.TypeName where
+  bindM (TypeName name loc) = return $ B.TypeName name loc
 
-instance Build Chan B.Chan where
-  build (Chan name loc) = B.Chan name loc
+instance Bind Chan B.Chan where
+  bindM (Chan name loc) = return $ B.Chan name loc
 
-buildM :: Build a b => a -> BindM b
-buildM = return . build
+buildProcess :: Loc -> BindM B.Proc -> BindM B.Process
+buildProcess loc p = do
+  p' <- p
+  return $ B.Process p' (B.freeChans' p') loc
 
 instance Bind Process B.Process where
-  bindM (Call name loc) = do
+  bindM (Call name loc) = buildProcess loc $ do
     defn <- askDefn name loc
-    (process, free) <- case defn of
-          TypeOnly _ s -> return (Nothing, sessionKeys s)
-          Paired _ p _ -> do
-            p' <- bindM p
-            return (Just p', B.freeChans p')
-          TermOnly _ p -> do
-            p' <- bindM p
-            return (Just p', B.freeChans p')
-    return $ B.Call (build name) process free loc
-  bindM (Link x y loc) = return $
+    process <- case defn of
+          TypeOnly _ s -> Left  <$> pure (sessionKeys s)
+          Paired _ p _ -> Right <$> bindM p
+          TermOnly _ p -> Right <$> bindM p
+    B.Call
+      <$> bindM name
+      <*> pure process
+    -- (process, free) <- case defn of
+    --       TypeOnly _ s -> return (Nothing, sessionKeys s)
+    --       Paired _ p _ -> do
+    --         p' <- bindM p
+    --         return (Just p', B.freeChans p')
+    --       TermOnly _ p -> do
+    --         p' <- bindM p
+    --         return (Just p', B.freeChans p')
+    -- return $ B.Call (bindM name) process free loc
+  bindM (Link x y loc) = buildProcess loc $
     B.Link
-      (build x)
-      (build y)
-      (Set.fromList [chanName x, chanName y])
-      loc
-  bindM (Compose x t p q loc) = do
-    p' <- bindM p
-    q' <- bindM q
-    let free = Set.delete (chanName x) $ Set.union (B.freeChans p') (B.freeChans q')
-    return $ B.Compose
-              (build x)
-              (fmap build t)
-              p'
-              q'
-              free
-              loc
-  bindM (Output x y q p loc) = do
+      <$> bindM x
+      <*> bindM y
+  bindM (Compose x Nothing p q loc) = buildProcess loc $
+    B.Compose
+      <$> bindM x
+      <*> pure Nothing
+      <*> bindM p
+      <*> bindM q
+  bindM (Compose x (Just t) p q loc) = buildProcess loc $
+    B.Compose
+      <$> bindM x
+      <*> (Just <$> bindM t)
+      <*> bindM p
+      <*> bindM q
+    --
+    -- p' <- bindM p
+    -- q' <- bindM q
+    -- let free = Set.delete (chanName x) $ Set.union (B.freeChans p') (B.freeChans q')
+    -- return $ B.Compose
+    --           (bindM x)
+    --           (fmap bindM t)
+    --           p'
+    --           q'
+    --           free
+    --           loc
+  bindM (Output x y q p loc) = buildProcess loc $
     B.Output
-      <$> buildM x
-      <*> buildM y
+      <$> bindM x
+      <*> bindM y
       <*> bindM q
       <*> bindM p
-      <*> pure loc
-  bindM (Input x y p loc) = do
+  bindM (Input x y p loc) = buildProcess loc $
     B.Input
-      <$> buildM x
-      <*> buildM y
+      <$> bindM x
+      <*> bindM y
       <*> bindM p
-      <*> pure loc
-  bindM (SelectL x p loc) =
+  bindM (SelectL x p loc) = buildProcess loc $
     B.SelectL
-      <$> buildM x
+      <$> bindM x
       <*> bindM p
-      <*> pure loc
-  bindM (SelectR x p loc) =
+  bindM (SelectR x p loc) = buildProcess loc $
     B.SelectR
-      <$> buildM x
+      <$> bindM x
       <*> bindM p
-      <*> pure loc
-  bindM (Choice x p q loc) =
+  bindM (Choice x p q loc) = buildProcess loc $
     B.Choice
-      <$> buildM x
+      <$> bindM x
       <*> bindM p
       <*> bindM q
-      <*> pure loc
-  bindM (Accept x y p loc) = do
+  bindM (Accept x y p loc) = buildProcess loc $
     B.Accept
-      <$> buildM x
-      <*> buildM y
+      <$> bindM x
+      <*> bindM y
       <*> bindM p
-      <*> pure loc
-  bindM (Request x y p loc) = do
+  bindM (Request x y p loc) = buildProcess loc $
     B.Request
-      <$> buildM x
-      <*> buildM y
+      <$> bindM x
+      <*> bindM y
       <*> bindM p
-      <*> pure loc
-  bindM (OutputT x t p loc) =
+  bindM (OutputT x t p loc) = buildProcess loc $
     B.OutputT
-      <$> buildM x
-      <*> buildM t
+      <$> bindM x
+      <*> bindM t
       <*> bindM p
-      <*> pure loc
-  bindM (InputT x (TypeVar n l) p loc) = do
+  bindM (InputT x (TypeVar n l) p loc) = buildProcess loc $
     B.InputT
-      <$> buildM x
+      <$> bindM x
       <*> pure (B.TypeVar n l)
       <*> bindM p
-      <*> pure loc
-  bindM (EmptyOutput x loc) =
+  bindM (EmptyOutput x loc) = buildProcess loc $
     B.EmptyOutput
-      <$> buildM x
-      <*> pure loc
-  bindM (EmptyInput x p loc) =
+      <$> bindM x
+  bindM (EmptyInput x p loc) = buildProcess loc $
     B.EmptyInput
-      <$> buildM x
+      <$> bindM x
       <*> bindM p
-      <*> pure loc
-  bindM (EmptyChoice x loc) = return $
-    B.EmptyChoice (build x) loc
-  bindM (End loc) = return $ B.End loc
-  bindM (Mix p q loc) =
+  bindM (EmptyChoice x loc) = buildProcess loc $
+    B.EmptyChoice
+      <$> bindM x
+  bindM (End loc) = buildProcess loc (return B.End)
+  bindM (Mix p q loc) = buildProcess loc $
     B.Mix
       <$> bindM p
       <*> bindM q
-      <*> pure loc
 
 --------------------------------------------------------------------------------
 
@@ -191,28 +233,36 @@ instance Bind Program B.Program where
       <*> pure loc
 
 instance Bind Definition B.Definition where
-  bindM (Paired name process session) = do
-    process' <- bindM process
-    return $ B.Paired (build name) process' (build session)
-  bindM (TypeOnly name session) = do
-    return $ B.TypeOnly (build name) (build session)
-  bindM (TermOnly name process) = do
-    process' <- bindM process
-    return $ B.TermOnly (build name) process'
+  bindM (Paired name process session) =
+    B.Paired
+      <$> bindM name
+      <*> bindM process
+      <*> bindM session
+  bindM (TypeOnly name session) =
+    B.TypeOnly
+      <$> bindM name
+      <*> bindM session
+  bindM (TermOnly name process) =
+    B.TermOnly
+      <$> bindM name
+      <*> bindM process
 
 instance Bind Definitions B.Definitions where
   bindM pairs = do
     let (keys, elems) = unzip $ Map.toList pairs
-    let keys' = map build keys
+    keys' <- mapM bindM keys
     elems' <- mapM bindM elems
     return $ Map.fromList (zip keys' elems')
 
-instance Build Session B.Session where
-  build pairs = Map.fromList (zip keys' elems')
-    where
-      (keys, elems) = unzip $ Map.toList pairs
-      keys' = map build keys
-      elems' = map build elems
+instance Bind Session B.Session where
+  bindM pairs = do
+    let (keys, elems) = unzip $ Map.toList pairs
+    keys' <- mapM bindM keys
+    elems' <- mapM bindM elems
+    return $ Map.fromList (zip keys' elems')
 
-instance Build SessionSyntax B.SessionSyntax where
-  build (SessionSyntax pairs loc) = B.SessionSyntax (build pairs) loc
+instance Bind SessionSyntax B.SessionSyntax where
+  bindM (SessionSyntax pairs loc) =
+    B.SessionSyntax
+      <$> bindM pairs
+      <*> pure loc
