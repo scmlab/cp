@@ -9,6 +9,7 @@ import qualified TypeChecking.Unification as U
 
 -- import TypeChecking.Base
 import Base
+import Runtime.Motive
 
 import Data.Loc (Loc(..))
 import Data.Text (Text)
@@ -58,6 +59,40 @@ import Pretty
 --     Left a -> return a
 --     Right a -> return a
 
+-- rules of reduction
+
+data Rule = Invoke Name | Swap | TypeIOReduce | IOReduce
+
+instance Pretty Rule where
+  pretty (Invoke n) = "Invoking" <+> dquotes (pretty n)
+  pretty Swap = "Swap"
+  pretty TypeIOReduce = "Type input/output reduction"
+  pretty IOReduce = "Input/output reduction"
+
+hasReduced :: RuntimeM Bool
+hasReduced = do
+  rule <- get
+  case rule of
+    Nothing -> return False
+    Just _ -> return True
+
+
+useRule :: Rule -> RuntimeM ()
+useRule rule = do
+  p <- hasReduced
+  unless p $ put (Just rule)
+
+takeRule :: RuntimeM (Maybe Rule)
+takeRule = do
+  result <- get
+  case result of
+    Nothing -> return Nothing
+    Just rule -> do
+      put Nothing
+      return $ Just rule
+
+reset :: RuntimeM ()
+reset = takeRule >> return ()
 
 type RuntimeM = ExceptT RuntimeError (StateT (Maybe Rule) Core)
 
@@ -68,93 +103,158 @@ evaluate process = do
     Left e -> throwError $ RuntimeError e
     Right v -> return v
 
--- rules of reduction
-data Rule = Invoke Name | Swap | TypeElim | Elim
-  deriving (Show, Pretty)
-
-use :: Rule -> RuntimeM ()
-use = put . Just
-
-takeRule :: RuntimeM (Maybe Rule)
-takeRule = do
-  result <- get
-  case result of
-    Nothing ->
-      return Nothing
-    Just rule -> do
-      put Nothing
-      return $ Just rule
-
 run :: Process -> RuntimeM Process
-run process = do
-  printStatus process
+run input = do
+  printStatus input
+  liftIO $ print $ findMotive input
 
-  result <- reduce process
-  case result of
-    Nothing -> return process
-    Just reduced -> run reduced
 
-step :: Rule -> Process -> RuntimeM (Maybe Process)
-step rule process = do
-  use rule
-  return $ Just process
+  output <- reduce input
 
-stuck :: RuntimeM (Maybe Process)
-stuck = return Nothing
+  p <- hasReduced
+  if p
+    then run output  -- keep reducing
+    else return output        -- stuck
 
-tryReduce :: Process -> RuntimeM Process
-tryReduce input = do
-  result <- reduce input
-  case result of
-    Nothing -> return input
-    Just reduced -> return reduced
+reduce :: Process -> RuntimeM Process
+reduce (Process input free loc) = do
 
-reduce :: Process -> RuntimeM (Maybe Process)
-reduce process = case process of
---   (Call _ Nothing _ _) -> stuck
---   (Call name (Just p) _ _) -> step (Invoke name) p
+  let stuck = return (Process input free loc)
+  let step rule new = do
+        p <- hasReduced
+        if p
+          then stuck
+          else useRule rule >> return new
+  let wrap proc = return (Process proc free loc)
+
+  -- let go new = do
+  --       p <- hasReduced
+  --       if p
+  --         then stuck
+  --         else useRule rule >> return new
+
+  case input of
+    (Call _ (Left _)) -> stuck
+    (Call name (Right p)) -> step (Invoke name) p
+
+    (Compose chan _ (Process (Output x y p q) f l) (Process (Input v w r) g m)) -> do
+      if chan == x && chan == v && y == w
+        then step IOReduce $ Process (Compose y Nothing p (Process (Compose chan Nothing q r) free NoLoc)) free loc
+        else throwError $ Runtime_CannotMatch chan x v
+    (Compose chan _ (Process (Input v w r) g m) (Process (Output x y p q) f l)) -> do
+      step Swap $ Process (Compose chan Nothing (Process (Input v w r) g m) (Process (Output x y p q) f l)) free loc
+
+    (Compose chan _ (Process (OutputT x t p) f l) (Process (InputT y u q) g m)) -> do
+      if chan == x && chan == y
+        then step TypeIOReduce $ Process (Compose chan Nothing p (substituteType u t q)) free loc
+        else throwError $ Runtime_CannotMatch chan x y
+    (Compose chan _ (Process (InputT y u q) g m) (Process (OutputT x t p) f l)) -> do
+      step Swap $ Process (Compose chan Nothing (Process (OutputT x t p) f l) (Process (InputT y u q) g m)) free loc
+
+    (Compose chan _ p q) -> do
+      reducedP <- reduce p
+      pHasReduced <- hasReduced
+      if pHasReduced
+        then wrap $ Compose chan Nothing reducedP q
+        else do
+          reducedQ <- reduce q
+          qHasReduced <- hasReduced
+          if qHasReduced
+            then wrap $ Compose chan Nothing reducedP reducedQ
+            else stuck
+
+    others -> do
+      stuck
+
+-- reduceCompose :: RuntimeM Process -> RuntimeM Process -> Chan -> Proc -> Proc -> RuntimeM Process
+-- reduceCompose stuck wrap chan p q = do
+--   reducedP <- reduce p
+--   pHasReduced <- hasReduced
+--   if pHasReduced
+--     then wrap $ Compose chan Nothing reducedP q
+--     else do
+--       reducedQ <- reduce q
+--       qHasReduced <- hasReduced
+--       if qHasReduced
+--         then wrap $ Compose chan Nothing reducedP reducedQ
+--         else stuck
+
 --
--- -- runCompose x (Output x y p q) (Input v w r) = runCompose x p q
--- -- runCompose x (Input v w r) (Output x y p q) = runCompose x (Output x y p q) (Input v w r)
+-- step :: Rule -> Proc -> RuntimeM (Maybe Process)
+-- step rule proc = do
+--   use rule
+--   return $ Just $ Process proc (freeChans' proc) NoLoc
 --
---   (Compose chan _ (Output x y p q _) (Input v w r _) _ _) -> do
---     if chan == x && chan == v && y == w
---       then step Elim $ Compose y Nothing p (Compose chan Nothing q r NoLoc) NoLoc
---       else throwError $ Runtime_CannotMatch chan x v
---   (Compose chan _ (Input v w r _) (Output x y p q _) _) -> do
---     step Swap $ Compose chan Nothing (Output x y p q NoLoc) (Input v w r NoLoc) NoLoc
+-- step' :: Proc -> RuntimeM (Maybe Process)
+-- step' proc = do
+--   use rule
+--   return $ Just $ Process proc (freeChans' proc) NoLoc
 --
---   (Compose chan _ (OutputT x t p _) (InputT y u q _) _) -> do
---     if chan == x && chan == y
---       then step TypeElim $ Compose chan Nothing p (substituteType u t q) NoLoc
---       else throwError $ Runtime_CannotMatch chan x y
---   (Compose chan _ (InputT v w r _) (OutputT x p q _) _) -> do
---     step Swap $ Compose chan Nothing (OutputT x p q NoLoc) (InputT v w r NoLoc) NoLoc
+-- stuck :: RuntimeM (Maybe Proc)
+-- stuck = return Nothing
 --
---   (Compose chan _ p q _) -> do
---     reduceP <- reduce p
---     case reduceP of
---       Nothing -> do
---         reduceQ <- reduce q
---         case reduceQ of
---           Nothing -> stuck
---           Just q' -> return $ Just $ Compose chan Nothing p q' NoLoc
---       Just p' -> return $ Just $ Compose chan Nothing p' q NoLoc
+-- tryReduce :: Process -> RuntimeM Process
+-- tryReduce input = do
+--   result <- reduce input
+--   case result of
+--     Nothing -> return input
+--     Just reduced -> return reduced
 
-
-    -- p' <- tryReduce p
-    -- q' <- tryReduce q
-    -- step $ Compose x Nothing p' q' NoLoc
-
-  others -> stuck
+-- reduce :: Process -> RuntimeM Process
+-- reduce (Process proc free loc) = do
+--   case proc of
+--     (Call _ (Left _)) -> stuck
+--     (Call name (Right p)) -> step (Invoke name) p
+--
+--   -- -- runCompose x (Output x y p q) (Input v w r) = runCompose x p q
+--   -- -- runCompose x (Input v w r) (Output x y p q) = runCompose x (Output x y p q) (Input v w r)
+--   --
+--   --   (Compose chan _ (Output x y p q _) (Input v w r _) _ _) -> do
+--   --     if chan == x && chan == v && y == w
+--   --       then step IOReduce $ Compose y Nothing p (Compose chan Nothing q r NoLoc) NoLoc
+--   --       else throwError $ Runtime_CannotMatch chan x v
+--   --   (Compose chan _ (Input v w r _) (Output x y p q _) _) -> do
+--   --     step Swap $ Compose chan Nothing (Output x y p q NoLoc) (Input v w r NoLoc) NoLoc
+--   --
+--   --   (Compose chan _ (OutputT x t p _) (InputT y u q _) _) -> do
+--   --     if chan == x && chan == y
+--   --       then step TypeIOReduce $ Compose chan Nothing p (substituteType u t q) NoLoc
+--   --       else throwError $ Runtime_CannotMatch chan x y
+--   --   (Compose chan _ (InputT v w r _) (OutputT x p q _) _) -> do
+--   --     step Swap $ Compose chan Nothing (OutputT x p q NoLoc) (InputT v w r NoLoc) NoLoc
+--   --
+--     (Compose chan _ p q) -> do
+--       reduceP <- reduce p
+--       case reduceP of
+--         Nothing -> do
+--           reduceQ <- reduce q
+--           case reduceQ of
+--             Nothing -> stuck
+--             Just q' -> return $ Just $ Compose chan Nothing p q'
+--         Just p' -> step $  $ Compose chan Nothing p' q
+--
+--
+--       -- p' <- tryReduce p
+--       -- q' <- tryReduce q
+--       -- step $ Compose x Nothing p' q' NoLoc
+--
+--   --   others -> stuck
+--   -- return $ case result of
+--   --   Nothing -> Nothing
+--   --   Just p' -> Just $ Process p' (freeChans' p') loc
 
 printStatus :: Process -> RuntimeM ()
 printStatus process = do
   rule <- takeRule
-  liftIO $ print $ line
-    <> pretty ("=>" :: String) <+> pretty rule <> line
-    <> line
+  liftIO $ putDoc $ line
+  liftIO $ putDoc $ paint $ pretty ("=>" :: String) <+> pretty rule <> line
+  liftIO $ putDoc $ line
     <> pretty (toTree process)
+    <> line
+  where
+    paint :: Doc AnsiStyle -> Doc AnsiStyle
+    paint = annotate (colorDull Blue)
+
 
 -- runCompose :: Chan -> Process -> Process -> Eval Process
 -- runCompose x (Call _ (Just p) _) q = runCompose x p q
@@ -360,25 +460,27 @@ printStatus process = do
 -- -- reduce _ = undefined
 --
 
--- substituteType :: TypeVar -> Type -> Process -> Process
--- substituteType old new process = case process of
---   Compose x t p q f l -> Compose x (fmap substT t) (subst p) (subst q) f l
---   Output x y p q l -> Output x y (subst p) (subst q) l
---   Input x y p l -> Input x y (subst p) l
---   SelectL x p l -> SelectL x (subst p) l
---   SelectR x p l -> SelectR x (subst p) l
---   Choice x p q l -> Choice x (subst p) (subst q) l
---   Accept x y p l -> Accept x y (subst p) l
---   Request x y p l -> Request x y (subst p) l
---   OutputT x t p l -> OutputT x (substT t) (subst p) l
---   InputT x t p l -> InputT x t (subst p) l
---   EmptyInput x p l -> EmptyInput x (subst p) l
---   Mix p q l -> Mix (subst p) (subst q) l
---   others -> others
---   where
---     subst = substituteType old new
---     substT = U.substitute old new
---
+substituteType :: TypeVar -> Type -> Process -> Process
+substituteType old new (Process proc free loc) =
+  Process result free loc
+  where
+    result = case proc of
+              Compose x t p q -> Compose x (fmap substT t) (subst p) (subst q)
+              Output x y p q -> Output x y (subst p) (subst q)
+              Input x y p -> Input x y (subst p)
+              SelectL x p -> SelectL x (subst p)
+              SelectR x p -> SelectR x (subst p)
+              Choice x p q -> Choice x (subst p) (subst q)
+              Accept x y p -> Accept x y (subst p)
+              Request x y p -> Request x y (subst p)
+              OutputT x t p -> OutputT x (substT t) (subst p)
+              InputT x t p -> InputT x t (subst p)
+              EmptyInput x p -> EmptyInput x (subst p)
+              Mix p q -> Mix (subst p) (subst q)
+              others -> others
+    subst = substituteType old new
+    substT = U.substitute old new
+
 -- substitute :: Process -> Chan -> Chan -> M Process
 -- substitute (Call name) a b = do
 --   p <- lookupProcess name
@@ -470,9 +572,9 @@ toTree (Process (Compose chan _ p q) _ _) =
 toTree others =
   Leaf others
 
-fromTree :: Tree -> Process
-fromTree (Node chan p q) = Process (Compose chan Nothing (fromTree p) (fromTree q)) undefined NoLoc
-fromTree (Leaf p) = p
+-- fromTree :: Tree -> Process
+-- fromTree (Node chan p q) = Process (Compose chan Nothing (fromTree p) (fromTree q)) undefined NoLoc
+-- fromTree (Leaf p) = p
 
 instance Pretty Tree where
   pretty (Node chan p q) =

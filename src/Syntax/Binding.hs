@@ -100,6 +100,8 @@ data Proc = Call      Name (Either FreeChans Process)
           | Mix       Process   Process
           deriving (Eq, Ord, Show)
 
+toProc :: Process -> Proc
+toProc (Process p _ _) = p
 
 data Type
     = Var TypeVar Loc
