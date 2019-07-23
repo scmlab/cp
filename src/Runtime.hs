@@ -9,7 +9,7 @@ import qualified TypeChecking.Unification as U
 
 -- import TypeChecking.Base
 import Base
-import Runtime.Motive
+import Runtime.Reduction
 
 import Data.Loc (Loc(..))
 import Data.Text (Text)
@@ -106,7 +106,7 @@ evaluate process = do
 run :: Process -> RuntimeM Process
 run input = do
   printStatus input
-  liftIO $ print $ findMotive input
+  liftIO $ print $ findRedexChan input
 
 
   output <- reduce input
