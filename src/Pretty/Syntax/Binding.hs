@@ -38,7 +38,7 @@ instance Pretty Process where
   pretty (Process proc _ _) = pretty proc
 
 instance Pretty Proc where
-  pretty (Call name _) = pretty name
+  pretty (Atom name _) = pretty name
   pretty (Link x y) = pretty x <> " ↔ " <> pretty y
   pretty (Compose x Nothing p q) = "ν " <> pretty x
     <> " ( " <> pretty p

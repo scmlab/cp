@@ -119,24 +119,12 @@ buildProcess loc p = do
   return $ B.Process p' (B.freeChans' p') loc
 
 instance Bind Process B.Process where
-  bindM (Call name loc) = buildProcess loc $ do
+  bindM (Call name loc) = do
     defn <- askDefn name loc
-    process <- case defn of
-          TypeOnly _ s -> Left  <$> pure (sessionKeys s)
-          Paired _ p _ -> Right <$> bindM p
-          TermOnly _ p -> Right <$> bindM p
-    B.Call
-      <$> bindM name
-      <*> pure process
-    -- (process, free) <- case defn of
-    --       TypeOnly _ s -> return (Nothing, sessionKeys s)
-    --       Paired _ p _ -> do
-    --         p' <- bindM p
-    --         return (Just p', B.freeChans p')
-    --       TermOnly _ p -> do
-    --         p' <- bindM p
-    --         return (Just p', B.freeChans p')
-    -- return $ B.Call (bindM name) process free loc
+    case defn of
+      TypeOnly _ s -> buildProcess loc $ B.Atom <$> bindM name <*> pure (sessionKeys s)
+      Paired _ p _ -> bindM p
+      TermOnly _ p -> bindM p
   bindM (Link x y loc) = buildProcess loc $
     B.Link
       <$> bindM x

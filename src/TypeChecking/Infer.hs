@@ -46,13 +46,13 @@ check _ process expected = do
 
 infer :: Process -> TCM Session
 infer process@(Process proc _ _) = case proc of
-  Call name _ -> do
+  Atom name _ -> do
     definitions <- ask
     case Map.lookup name definitions of
       Nothing -> error "[panic] Definition not found, this shouldn't happen at the type checking state"
-      Just (Paired _ _ t) -> return t
+      Just (Paired _ _ t) -> error "[panic] TypeOnly definition shouldn't occur in an Atom"
       Just (TypeOnly _ t) -> return t
-      Just (TermOnly _ p) -> infer p
+      Just (TermOnly _ p) -> error "[panic] TypeOnly definition shouldn't occur in an Atom"
 
   Link x y -> do
 

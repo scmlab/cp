@@ -134,9 +134,7 @@ reduce (Process input free loc) = do
   --         else useRule rule >> return new
 
   case input of
-    (Call _ (Left _)) -> stuck
-    (Call name (Right p)) -> step (Invoke name) p
-
+    (Atom _ _) -> stuck
     (Compose chan _ (Process (Output x y p q) f l) (Process (Input v w r) g m)) -> do
       if chan == x && chan == v && y == w
         then step IOReduce $ Process (Compose y Nothing p (Process (Compose chan Nothing q r) free NoLoc)) free loc

@@ -81,7 +81,7 @@ type FreeChans = Set Text
 data Process = Process Proc FreeChans Loc
     deriving (Eq, Ord, Show)
 
-data Proc = Call      Name (Either FreeChans Process)
+data Proc = Atom      Name FreeChans
           | Link      Chan Chan
           | Compose   Chan (Maybe Type) Process Process
           | Output    Chan Chan Process Process
@@ -232,7 +232,7 @@ subsituteProcess old new (Process proc free loc) =
 
 subsituteProc :: Text -> Text -> Proc -> Proc
 subsituteProc old new process = case process of
-  Call name p -> Call name (fmap proc p)
+  Atom name chans -> Atom name chans
   Link x y -> Link (chan x) (chan y)
   Compose x t a b -> Compose (chan x) t (proc a) (proc b)
   Output x y a b -> Output (chan x) (chan y) (proc a) (proc b)
@@ -331,8 +331,7 @@ freeChans (Process p xs _) = xs
   --   case p of
 freeChans' :: Proc -> FreeChans
 freeChans' p = case p of
-  Call _ (Left xs) -> xs
-  Call _ (Right p) -> freeChans p
+  Atom _ xs -> xs
   Link x y -> Set.fromList [chanName x, chanName y]
   Compose x _ p q -> Set.delete (chanName x) $ Set.union (freeChans p) (freeChans q)
   Output x y p q -> Set.insert (chanName x) $ Set.delete (chanName y) $ Set.union (freeChans p) (freeChans q)
