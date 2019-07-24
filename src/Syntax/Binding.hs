@@ -2,7 +2,10 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE DeriveFunctor, FlexibleInstances #-}
 
-module Syntax.Binding where
+module Syntax.Binding
+    ( module Syntax.Binding
+    , module Syntax.Base)
+    where
 
 import Syntax.Base
 -- import qualified Syntax.Abstract as A
