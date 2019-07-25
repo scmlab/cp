@@ -175,10 +175,10 @@ instance Report RuntimeError where
     [ H1 "Source not loaded yet"
     , P $ "type " <> paint (":l FILEPATH" :: Text) <> " to load the source"
     ]
-  report (Runtime_CannotMatch comm x y) = report
+  report (Runtime_CannotMatch process groups) = report
     [ H1 "Unmatched channels"
-    , P $ pretty x <+> "doesn't match with" <+> pretty y
-    , CODE $ locOf comm
+    , P $ "These channels don't match with each other" <+> pretty groups
+    , CODE $ locOf process
     ]
   report (Runtime_Stuck process) = report
     [ H1 "Stuck"

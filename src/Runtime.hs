@@ -13,6 +13,7 @@ import Runtime.Reduction
 
 import Data.Loc (Loc(..))
 import Data.Maybe (fromJust)
+import qualified Data.List as List
 import Data.Text (Text)
 import Data.Set (Set)
 import qualified Data.Set as Set
@@ -30,6 +31,7 @@ evaluate process = run process
 run :: Process -> M Process
 run input = do
 
+  -- run !!
   (result, usedRule) <- lift $ runReaderT (runStateT (runExceptT reduce) Nothing) input
 
   case result of
@@ -38,16 +40,15 @@ run input = do
       case usedRule of
         Nothing -> return output  -- stuck
         Just rule -> do
-
-          printStatus input rule
+          printStatus output rule
           run output     -- keep reducing
 
 printStatus :: Process -> Rule -> M ()
-printStatus process rule = do
+printStatus output rule = do
   liftIO $ putDoc $ line
   liftIO $ putDoc $ paint $ pretty ("=>" :: String) <+> pretty rule <> line
   liftIO $ putDoc $ line
-    <> pretty (toTree process)
+    <> pretty (toTree output)
     <> line
   where
     paint :: Doc AnsiStyle -> Doc AnsiStyle
@@ -59,13 +60,13 @@ stuck = toProc <$> ask
 swap :: RuntimeM Proc
 swap = do
   putRule Swap
-  Process input free loc <- ask
+  input <- toProc <$> ask
   case input of
     Compose chan t p q -> return $ Compose chan (fmap dual t) q p
     others -> return others
 
-step :: Rule -> Proc -> RuntimeM Proc
-step rule input = do
+use :: Rule -> Proc -> RuntimeM Proc
+use rule input = do
   p <- hasReduced
   if p
     then stuck
@@ -76,24 +77,71 @@ step rule input = do
 reduce :: RuntimeM Process
 reduce = do
   input <- ask
-  case toProc input of
-    Compose chan _ p q -> do
-      output <- reduceProcess input chan (toProc p) (toProc q)
-      return $ Process output undefined NoLoc
-    others -> return input
+  return input
+  -- case toProc input of
+    -- Compose chan _ p q -> do
+  --
+  --     let matches = findMatches input
+  --     if Map.empty matches
+  --       then return $ Process input undefined NoLoc
+  --       else do
+  --         output <- case Map.lookup chan matches of
+  --           Nothing     -> do
+  --             reduce'
+  --           Just (0, 0) -> reduceProcess chan (toProc p) (toProc q)
+  --           Just (0, n) -> stuck
+  --           Just (m, n) -> stuck
+  --         return $ Process output undefined NoLoc
+  --   _ -> return input
+  --
+  -- where
+  --   reduce' input@(Process (Compose chan _ p q) _ _) = do
+  --     let matches = findMatches input
+  --     if Map.empty matches
+  --       then return input
+  --       else do
+  --         output <- case Map.lookup chan matches of
+  --           Nothing     -> undefined
+  --
+  --           Just (0, 0) -> reduceProcess chan (toProc p) (toProc q)
+  --           Just (0, n) -> stuck
+  --           Just (m, n) -> stuck
+  --         return $ Process output undefined NoLoc
+  --   reduce' others = return others
 
--- checkChannels :: [Chan] -> RuntimeM ()
--- checkChannels
+
+checkChannels :: [Chan] -> RuntimeM ()
+checkChannels channels = do
+  let groups = map head $ List.group channels
+  let allTheSame = length groups == 1
+  unless allTheSame $ do
+    process <- ask
+    throwError $ Runtime_CannotMatch process groups
+
+reduceProcess :: Chan -> Proc -> Proc -> RuntimeM Proc
+
+reduceProcess chan (Output x y p q) (Input v w r) = do
+  checkChannels [chan, x, v]
+  checkChannels [y, w]
+  use IOReduce $ Compose y Nothing p (Process (Compose chan Nothing q r) undefined NoLoc)
+reduceProcess _ (Input _ _ _) (Output _ _ _ _) = swap
+
+reduceProcess chan (OutputT x t p) (InputT y u q) = do
+  checkChannels [chan, x, y]
+  use TypeIOReduce $ Compose chan Nothing p (substituteType u t q)
+
+reduceProcess _ (InputT _ _ _) (OutputT _ _ _) = swap
+reduceProcess _ _ _ = do
+  -- input <- ask
+  -- liftIO $ print $ findMatches input
+
+  stuck
 
 
-reduceProcess :: Process -> Chan -> Proc -> Proc -> RuntimeM Proc
-reduceProcess input chan (OutputT x t p) (InputT y u q) = do
-  if chan == x && chan == y
-    then step TypeIOReduce $ Compose chan Nothing p (substituteType u t q)
-    else throwError $ Runtime_CannotMatch chan x y
-reduceProcess input chan (InputT x t p) (OutputT y u q) = swap
-reduceProcess input chan p q = stuck
-
+rotateLeft :: Proc -> Proc
+rotateLeft (Compose x _ p (Process (Compose y _ q r) _ _)) =
+  Compose y Nothing (Process (Compose x Nothing p q) undefined NoLoc) r
+rotateLeft others = others
 
 
 -- (Compose chan _ (Process (Output x y p q) f l) (Process (Input v w r) g m)) -> do
@@ -253,15 +301,6 @@ putRule :: Rule -> RuntimeM ()
 putRule rule = do
   p <- hasReduced
   unless p $ put $ Just rule
-
-takeRule :: RuntimeM (Maybe Rule)
-takeRule = do
-  result <- get
-  case result of
-    Nothing -> return Nothing
-    Just rule -> do
-      put Nothing
-      return $ Just rule
 
 --------------------------------------------------------------------------------
 -- | Tree representation of Process
