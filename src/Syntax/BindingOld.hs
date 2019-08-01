@@ -2,8 +2,8 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE DeriveFunctor, FlexibleInstances #-}
 
-module Syntax.Binding
-    ( module Syntax.Binding
+module Syntax.BindingOld
+    ( module Syntax.BindingOld
     , module Syntax.Base)
     where
 

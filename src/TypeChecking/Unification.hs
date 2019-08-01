@@ -1,6 +1,6 @@
 module TypeChecking.Unification where
 
-import Syntax.Binding (Type(..), TypeVar(..))
+import Syntax.Concrete (Type(..), TypeVar(..))
 -- import Syntax.Abstract (Type(..), TypeVar(..))
 import Syntax.Base
 

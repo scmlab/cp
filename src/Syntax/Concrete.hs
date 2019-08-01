@@ -14,7 +14,8 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Maybe (mapMaybe)
-import Prelude hiding (LT, EQ, GT)
+-- import Prelude
+import Data.Function (on)
 
 import Control.Monad.State
 import Control.Monad.Except
@@ -25,10 +26,12 @@ import Control.Monad.Reader
 -- | Concrete Syntax Tree
 
 -- variables and names
-data Name     = Name      Text Loc deriving (Show, Eq, Ord)
-data Chan     = Chan      Text Loc deriving (Show, Eq, Ord)
-data TypeVar  = TypeVar   Text Loc deriving (Show)
+data Name     = Name      Text Loc deriving (Show)
+data Chan     = Chan      Text Loc deriving (Show)
 data TypeName = TypeName  Text Loc deriving (Show)
+data TypeVar  = TypeVar   Text Loc
+              | Unknown
+              deriving (Show)
 
 chanName :: Chan -> Text
 chanName (Chan name _) = name
@@ -41,6 +44,7 @@ data Definition = Paired   Name Process Session
                 deriving (Show)
 
 type Definitions = Map Name Definition
+
 data Declaration = TypeSig  Name SessionSyntax Loc
                  | TermDefn Name Process Loc
                  deriving (Show)
@@ -75,7 +79,14 @@ data Type = Var     TypeVar         Loc
           | With    Type      Type  Loc
           | Acc     Type            Loc
           | Req     Type            Loc
-          | Exists  TypeVar   Type  Loc
+          | Exists
+              TypeVar   -- X: the type variable to be substituted
+              Type      -- B: the type (variable) representing the type before substitution
+              (Maybe (Type, Type)) -- extra information, useful when composing with Forall
+                 -- fst: the type to be substituted with
+                 -- snd: the resulting type after substitution
+                 -- such that   snd = B {fst / X}
+              Loc
           | Forall  TypeVar   Type  Loc
           | One                     Loc
           | Bot                     Loc
@@ -92,12 +103,65 @@ instance HasDual Type where
   dual (With a b l)     = Plus (dual a) (dual b) l
   dual (Acc a l)        = Req (dual a) l
   dual (Req a l)        = Acc (dual a) l
-  dual (Exists x a l)   = Forall x (dual a) l
-  dual (Forall x a l)   = Exists x (dual a) l
+  dual (Exists x a _ l) = Forall x (dual a) l
+  dual (Forall x a l)   = Exists x (dual a) Nothing l
   dual (One l)          = Bot l
   dual (Bot l)          = One l
   dual (Zero l)         = Top l
   dual (Top l)          = Zero l
+
+--------------------------------------------------------------------------------
+-- | Instances
+
+instance Eq Type where
+  (==) = eq `on` dual
+      where
+        eq :: Type -> Type -> Bool
+        eq (Var a _) (Var b _) = a == b
+        eq (Dual a _) (Dual b _) = eq a b
+        eq (Times a b _) (Times c d _) = eq a c && eq b d
+        eq (Par a b _) (Par c d _) = eq a c && eq b d
+        eq (Plus a b _) (Plus c d _) = eq a c && eq b d
+        eq (With a b _) (With c d _) = eq a c && eq b d
+        eq (Acc a _) (Acc b _) = eq a b
+        eq (Req a _) (Req b _) = eq a b
+        eq (Exists a b c _) (Exists d e f _) = a == d && eq b e && c == f
+        eq (Forall a b _) (Forall c d _) = a == c && eq b d
+        eq (One _) (One _) = True
+        eq (Bot _) (Bot _) = True
+        eq (Zero _) (Zero _) = True
+        eq (Top _) (Top _) = True
+        eq _ _ = False
+
+instance Ord Type where
+  compare _ _ = EQ
+
+instance Eq TypeVar where
+    -- Unknown is equivalent to anything
+    Unknown == _ = True
+    _ == Unknown = True
+    --
+    TypeVar i _ == TypeVar j _ = i == j
+    _ == _ = False
+
+instance Ord TypeVar where
+    Unknown `compare` Unknown = EQ
+    Unknown `compare` _       = LT
+    _       `compare` Unknown = GT
+    TypeVar i _ `compare` TypeVar j _ = i `compare` j
+
+
+instance Eq Name where
+  (Name a _) == (Name b _) = a == b
+
+instance Ord Name where
+  (Name a _) `compare` (Name b _) = a `compare` b
+
+instance Eq Chan where
+  (==) = (==) `on` chanName
+
+instance Ord Chan where
+  compare = compare `on` chanName
 
 --------------------------------------------------------------------------------
 -- | Helper functions
@@ -205,7 +269,7 @@ instance Located Type where
   locOf (With _ _ loc) = loc
   locOf (Acc _ loc) = loc
   locOf (Req _ loc) = loc
-  locOf (Exists _ _ loc) = loc
+  locOf (Exists _ _ _ loc) = loc
   locOf (Forall _ _ loc) = loc
   locOf (One loc) = loc
   locOf (Bot loc) = loc
@@ -287,3 +351,27 @@ detectLoop :: CallGraph -> Maybe Path
 detectLoop graph = case runReader (runExceptT (step [])) graph of
   Left loop -> Just loop
   Right _ -> Nothing
+
+--------------------------------------------------------------------------------
+-- Free variables
+
+--
+-- freeChans :: Process -> FreeChans
+-- freeChans p = case p of
+--   Call _ xs _ -> xs
+--   Link x y _ -> Set.fromList [chanName x, chanName y]
+--   Compose x _ p q _ -> Set.delete (chanName x) $ Set.union (freeChans p) (freeChans q)
+--   Output x y p q _ -> Set.insert (chanName x) $ Set.delete (chanName y) $ Set.union (freeChans p) (freeChans q)
+--   Input x y p _ -> Set.insert (chanName x) $ Set.delete (chanName y) (freeChans p)
+--   SelectL x p _ -> Set.insert (chanName x) $ freeChans p
+--   SelectR x p _ -> Set.insert (chanName x) $ freeChans p
+--   Choice x p q _ -> Set.insert (chanName x) $ Set.union (freeChans p) (freeChans q)
+--   Accept x y p _ -> Set.insert (chanName x) $ Set.delete (chanName y) (freeChans p)
+--   Request x y p _ -> Set.insert (chanName x) $ Set.delete (chanName y) (freeChans p)
+--   OutputT x _ p _ -> Set.insert (chanName x) (freeChans p)
+--   InputT x _ p _ -> Set.insert (chanName x) (freeChans p)
+--   EmptyOutput x _ -> Set.singleton (chanName x)
+--   EmptyInput x p _ -> Set.insert (chanName x) (freeChans p)
+--   EmptyChoice x _ -> Set.singleton (chanName x)
+--   End _ -> Set.empty
+--   Mix p q _ -> Set.union (freeChans p) (freeChans q)

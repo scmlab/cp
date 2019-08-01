@@ -1,7 +1,8 @@
 module TypeChecking.Base where
 
-import qualified Syntax.Concrete as C
-import Syntax.Binding
+-- import qualified Syntax.Concrete as C
+-- import Syntax.Binding
+import Syntax.Concrete
 --
 import Prelude hiding (lookup)
 
@@ -52,10 +53,10 @@ data TypeError
   deriving (Show)
 
 data ScopeError
-  = TypeSigDuplicated C.Name C.Name
-  | TermDefnDuplicated C.Name C.Name
-  | DefnNotFound C.Process C.Name
-  | RecursiveCall [C.Name]
+  = TypeSigDuplicated Name Name
+  | TermDefnDuplicated Name Name
+  | DefnNotFound Process Name
+  | RecursiveCall [Name]
   -- | ChanNotFound Process (Set Text)
   -- | ChanFound Process (Set Text)
   | Others Text

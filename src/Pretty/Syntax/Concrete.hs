@@ -3,7 +3,7 @@
 module Pretty.Syntax.Concrete where
 
 import Syntax.Concrete
-import Pretty.Syntax.Binding ()
+import Pretty.Base
 
 import qualified Data.Map as Map
 
@@ -83,7 +83,7 @@ instance Pretty Type where
   pretty (With a b _)     = pretty a <> " & " <> pretty b
   pretty (Acc a _)        = "!" <> pretty a
   pretty (Req a _)        = "?" <> pretty a
-  pretty (Exists x a _)   = "∃ " <> pretty x <> " . " <> pretty a
+  pretty (Exists x a _ _)   = "∃ " <> pretty x <> " . " <> pretty a
   pretty (Forall x a _)   = "∀ " <> pretty x <> " . " <> pretty a
   pretty (One _)          = "𝟙"
   pretty (Bot _)          = "⊥"
@@ -102,3 +102,6 @@ instance Pretty SessionSyntax where
 --
 -- instance Pretty SessionSyntax where
 --   pretty = pretty . bind
+
+instance Report Session where
+  report = pretty

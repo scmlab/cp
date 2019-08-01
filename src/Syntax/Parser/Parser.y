@@ -118,7 +118,7 @@ Sessions :: {SessionSyntax}
 
 Type :: {Type}
     : s Type1                                   { $2 }
-    | s 'exists' TypeVar '.' Type1              {% locate' $1 $ Exists $3 $5 }
+    | s 'exists' TypeVar '.' Type1              {% locate' $1 $ Exists $3 $5 Nothing }
     | s 'forall' TypeVar '.' Type1              {% locate' $1 $ Forall $3 $5 }
 
 -- right associative

@@ -7,7 +7,7 @@ module Pretty.Error where
 import Syntax.Parser.Type
 import TypeChecking.Base
 import Pretty.Base
-import Pretty.Syntax.Binding ()
+-- import Pretty.Syntax.Binding ()
 import Pretty.Syntax.Concrete ()
 import Base
 

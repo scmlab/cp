@@ -2,8 +2,8 @@
 module Main where
 
 -- import Syntax.Base
-import qualified Syntax.Concrete as C
-import Syntax.Binding
+-- import qualified Syntax.Concrete as C
+import Syntax.Concrete
 import Syntax.Parser
 import TypeChecking
 -- import TypeChecking.Binding
@@ -63,7 +63,7 @@ loadSource filePath = do
         -- store the source in the monad for later debugging use
         modify $ \ st -> st { replSource = Just (filePath, source) }
 
-parseSource :: M C.Program
+parseSource :: M Program
 parseSource = do
   (filePath, source) <- getSourceOrThrow
   case parseProgram filePath source of
@@ -72,7 +72,7 @@ parseSource = do
         modify $ \ st -> st { replProgram = Just program }
         return program
 
-parseProcessM :: ByteString -> M C.Process
+parseProcessM :: ByteString -> M Process
 parseProcessM raw = do
   case parseProcess raw of
     Left err -> throwError $ ParseError err
@@ -248,7 +248,7 @@ handleCommand (TypeOf expr) = do
     -- global environment setup
     program <- gets replProgram
     -- local expression parsing
-    process <- parseProcessM expr >>= bind program
+    process <- parseProcessM expr
     -- infer session
     session <- runTCM $ inferProcess process
     liftIO $ putDoc $ report session <> line
@@ -260,7 +260,7 @@ handleCommand (Debug expr) = do
     -- global environment setup
     program <- gets replProgram
     -- local expression parsing
-    result <- parseProcessM expr >>= bind program
+    result <- parseProcessM expr
     -- print some stuff
     liftIO $ putDoc $ pretty result <> line
     return ()
@@ -273,7 +273,7 @@ handleCommand (Eval expr) = do
     -- global environment setup
     program <- gets replProgram
     -- local expression parsing
-    process <- parseProcessM expr >>= bind program
+    process <- parseProcessM expr
     --
     _result <- evaluate process
     -- liftIO $ putDoc $ pretty result <> line

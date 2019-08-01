@@ -3,8 +3,9 @@ module Base where
 
 -- import qualified Syntax.Abstract as A
 -- import qualified Syntax.Binding as B
-import qualified Syntax.Concrete as C
-import Syntax.Binding
+-- import qualified Syntax.Concrete as C
+-- import Syntax.Binding
+import Syntax.Concrete
 import Syntax.Parser
 import TypeChecking.Base
 
@@ -23,7 +24,7 @@ data MState = MState
     -- filepath and the source  (for parsing)
   { replSource        :: Maybe (String, ByteString)
     -- parsed program           (for scope checking)
-  , replProgram       :: Maybe C.Program
+  , replProgram       :: Maybe Program
     -- scoped checked program   (for type checking)
   , replDefinitions   :: Map Name Definition
     -- inferred program         (for runtime execution)

@@ -3,7 +3,7 @@
 module TypeChecking.Infer where
 
 import Syntax.Base
-import Syntax.Binding
+import Syntax.Concrete
 import TypeChecking.Base
 import qualified TypeChecking.Unification as U
 -- import TypeChecking.Unification
@@ -19,6 +19,7 @@ import Data.Loc (Loc(..))
 -- import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Set (Set)
 
 import Prelude hiding (lookup)
 
@@ -45,16 +46,16 @@ check _ process expected = do
         Right _ -> return ()
 
 infer :: Process -> TCM Session
-infer process@(Process proc _ _) = case proc of
-  Atom name _ -> do
+infer process = case process of
+  Call name _ -> do
     definitions <- ask
     case Map.lookup name definitions of
       Nothing -> error "[panic] Definition not found, this shouldn't happen at the type checking state"
-      Just (Paired _ _ t) -> error "[panic] TypeOnly definition shouldn't occur in an Atom"
+      Just (Paired _ _ t) -> return t
       Just (TypeOnly _ t) -> return t
-      Just (TermOnly _ p) -> error "[panic] TypeOnly definition shouldn't occur in an Atom"
+      Just (TermOnly _ p) -> infer p
 
-  Link x y -> do
+  Link x y _ -> do
 
     let a = fresh
 
@@ -63,7 +64,7 @@ infer process@(Process proc _ _) = case proc of
       , (y, dual a)
       ]
 
-  Compose x _ p q -> do
+  Compose x _ p q _ -> do
 
     sessionP <- infer p
     let a = lookup x sessionP
@@ -83,7 +84,7 @@ infer process@(Process proc _ _) = case proc of
       $ Map.map subst
       $ Map.union sessionP' sessionQ'
 
-  Output x y p q -> do
+  Output x y p q _ -> do
 
     x `notFreeIn` p
     sessionP <- infer p
@@ -102,7 +103,7 @@ infer process@(Process proc _ _) = case proc of
       $ Map.insert x (Times a b NoLoc)
       $ Map.union sessionP' sessionQ'
 
-  Input x y p -> do
+  Input x y p _ -> do
 
     session <- infer p
     let b = lookup x session
@@ -114,7 +115,7 @@ infer process@(Process proc _ _) = case proc of
       $ Map.insert x (Par a b NoLoc)
       $ session'
 
-  SelectL x p -> do
+  SelectL x p _ -> do
 
     session <- infer p
     let a = lookup x session
@@ -127,7 +128,7 @@ infer process@(Process proc _ _) = case proc of
       $ Map.insert x (Plus a b NoLoc)
       $ session'
 
-  SelectR x p -> do
+  SelectR x p _ -> do
 
     session <- infer p
     let b = lookup x session
@@ -140,7 +141,7 @@ infer process@(Process proc _ _) = case proc of
       $ Map.insert x (Plus a b NoLoc)
       $ session'
 
-  Choice x p q -> do
+  Choice x p q _ -> do
 
     sessionP <- infer p
     let a = lookup x sessionP
@@ -158,7 +159,7 @@ infer process@(Process proc _ _) = case proc of
       $ Map.insert x (With a b NoLoc)
       $ sessionP'
 
-  Accept x y p -> do
+  Accept x y p _ -> do
 
     x `notFreeIn` p
     session <- infer p
@@ -172,7 +173,7 @@ infer process@(Process proc _ _) = case proc of
       $ Map.insert x (Acc a NoLoc)
       $ session'
 
-  Request x y p -> do
+  Request x y p _ -> do
 
     x `notFreeIn` p
     session <- infer p
@@ -184,7 +185,7 @@ infer process@(Process proc _ _) = case proc of
       $ Map.insert x (Req a NoLoc)
       $ session'
 
-  OutputT x outputType p -> do
+  OutputT x outputType p _ -> do
 
     session <- infer p
     let afterSubstitution  = lookup x session  -- B {A / X}
@@ -204,7 +205,7 @@ infer process@(Process proc _ _) = case proc of
       $ Map.insert x t
       $ session'
 
-  InputT x var p -> do
+  InputT x var p _ -> do
 
     session <- infer p
     let b = lookup x session
@@ -214,7 +215,7 @@ infer process@(Process proc _ _) = case proc of
       $ Map.insert x (Forall var b NoLoc)
       $ session'
 
-  EmptyInput x p -> do
+  EmptyInput x p _ -> do
 
     x `notFreeIn` p
     session <- infer p
@@ -223,17 +224,17 @@ infer process@(Process proc _ _) = case proc of
       $ Map.insert x (Bot NoLoc)
       $ session
 
-  EmptyOutput x -> do
+  EmptyOutput x _ -> do
     return
       $ Map.singleton x (One NoLoc)
 
-  EmptyChoice x -> do
+  EmptyChoice x _ -> do
     return
       $ Map.singleton x (Top NoLoc)
 
-  End -> return Map.empty
+  End _ -> return Map.empty
 
-  Mix p q -> do
+  Mix p q _ -> do
 
     sessionP <- infer p
     sessionQ <- infer q
@@ -256,10 +257,10 @@ infer process@(Process proc _ _) = case proc of
 
     -- assert that some channel shouldn't occur free in some process
     notFreeIn :: Chan -> Process -> TCM ()
-    notFreeIn channel term = do
-      let Chan name _ = channel
-      when (name `Set.member` freeChans term) $
-        throwError $ ChannelNotComsumed term channel
+    notFreeIn channel process = do
+      free <- freeChans process
+      when (channel `Set.member` free) $
+        throwError $ ChannelNotComsumed process channel
 
     -- return a fresh type variable
     fresh :: Type
@@ -311,3 +312,29 @@ infer process@(Process proc _ _) = case proc of
 
 inferProcess :: Process -> TCM Session
 inferProcess = infer
+
+freeChans :: Process -> TCM (Set Chan)
+freeChans p = case p of
+  Call name _ -> do
+    definitions <- ask
+    case Map.lookup name definitions of
+      Nothing -> return Set.empty
+      Just (Paired _ p _) -> freeChans p
+      Just (TypeOnly _ t) -> return $ Map.keysSet t
+      Just (TermOnly _ p) -> freeChans p
+  Link x y _ -> return $ Set.fromList [x, y]
+  Compose x _ p q _ -> Set.delete x <$> (Set.union <$> freeChans p <*> freeChans q)
+  Output x y p q _ -> Set.insert x <$> Set.delete y <$> (Set.union <$> freeChans p <*> freeChans q)
+  Input x y p _ -> Set.insert x <$> Set.delete y <$> freeChans p
+  SelectL x p _ -> Set.insert <$> pure x <*> freeChans p
+  SelectR x p _ -> Set.insert <$> pure x <*> freeChans p
+  Choice x p q _ -> Set.insert x <$> (Set.union <$> freeChans p <*> freeChans q)
+  Accept x y p _ -> Set.insert x <$> Set.delete y <$> freeChans p
+  Request x y p _ -> Set.insert x <$> Set.delete y <$> freeChans p
+  OutputT x _ p _ -> Set.insert <$> pure x <*> freeChans p
+  InputT x _ p _ -> Set.insert <$> pure x <*> freeChans p
+  EmptyOutput x _ -> Set.singleton <$> pure x
+  EmptyInput x p _ -> Set.insert <$> pure x <*> freeChans p
+  EmptyChoice x _ -> Set.singleton <$> pure x
+  End _ -> return Set.empty
+  Mix p q _ -> Set.union <$> freeChans p <*> freeChans q
