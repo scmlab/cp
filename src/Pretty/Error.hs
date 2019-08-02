@@ -178,11 +178,11 @@ instance Report RuntimeError where
   report (Runtime_CannotMatch process groups) = report
     [ H1 "Unmatched channels"
     , P $ "These channels don't match with each other" <+> pretty groups
-    , CODE $ locOf process
+    -- , CODE $ locOf process
     ]
   report (Runtime_Stuck process) = report
     [ H1 "Stuck"
-    , CODE $ locOf process
+    -- , CODE $ locOf process
     ]
 
 

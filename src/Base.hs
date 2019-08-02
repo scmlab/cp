@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings                  #-}
 module Base where
 
--- import qualified Syntax.Abstract as A
+import qualified Syntax.Abstract as A
 -- import qualified Syntax.Binding as B
 -- import qualified Syntax.Concrete as C
 -- import Syntax.Binding
@@ -77,8 +77,16 @@ instance (MonadException m) => MonadException (ExceptT e m) where
 data RuntimeError
   = Runtime_NotInScope Name
   | Runtime_CodeNotLoaded
-  | Runtime_CannotMatch Process [Chan]
-  | Runtime_Stuck Process
+  | Runtime_CannotMatch A.Process [A.Chan]
+  | Runtime_Stuck A.Process
 
   deriving (Show)
 -- data Rule = AxCut Chan
+
+
+abstract :: A.FromConcrete a b => Maybe Definitions -> a -> M b
+abstract definitions process = do
+  let result = A.runAbstractM (maybe Map.empty id definitions) (A.fromConcrete process)
+  case result of
+    Left err -> throwError $ ScopeError err
+    Right val -> return val

@@ -5,7 +5,7 @@
 module Syntax.Abstract where
 
 import qualified Syntax.Concrete as C
-import Base
+-- import Base
 import TypeChecking.Base
 
 import Control.Monad.Reader
@@ -114,13 +114,6 @@ subsitute old new process = case process of
 
 --------------------------------------------------------------------------------
 -- Converting from Concrete Syntax Tree
-
-abstract :: FromConcrete a b => Maybe C.Definitions -> a -> M b
-abstract definitions process = do
-  let result = runAbstractM (maybe Map.empty id definitions) (fromConcrete process)
-  case result of
-    Left err -> throwError $ ScopeError err
-    Right val -> return val
 
 type AbstractM = ExceptT ScopeError (Reader C.Definitions)
 
