@@ -82,38 +82,96 @@ use rule input = do
 reduce :: RuntimeM Process
 reduce = do
   input <- ask
-  return input
-  -- case toProcess input of
-    -- Compose chan _ p q -> do
-  --
-  --     let matches = findMatches input
-  --     if Map.empty matches
-  --       then return $ Process input undefined NoLoc
-  --       else do
-  --         output <- case Map.lookup chan matches of
-  --           Nothing     -> do
-  --             reduce'
-  --           Just (0, 0) -> reduceProcess chan (toProcess p) (toProcess q)
-  --           Just (0, n) -> stuck
-  --           Just (m, n) -> stuck
-  --         return $ Process output undefined NoLoc
-  --   _ -> return input
-  --
-  -- where
-  --   reduce' input@(Process (Compose chan _ p q) _ _) = do
-  --     let matches = findMatches input
-  --     if Map.empty matches
-  --       then return input
-  --       else do
-  --         output <- case Map.lookup chan matches of
-  --           Nothing     -> undefined
-  --
-  --           Just (0, 0) -> reduceProcess chan (toProcess p) (toProcess q)
-  --           Just (0, n) -> stuck
-  --           Just (m, n) -> stuck
-  --         return $ Process output undefined NoLoc
-  --   reduce' others = return others
+  case Map.lookupMin (findMatches input) of
+    Nothing -> stuck
+    Just match@(chan, _) -> do
+      liftIO $ print match
+      reduceAt chan (f match) input
+      where
+        f :: (Chan, (Int, Int)) -> Process -> Process -> RuntimeM Process
+        f (chan, (0, 0)) p q = reduceProcess chan p q
+        f (chan, (0, m)) p q = rotateLeft chan p q
+        f (l, r) p q = undefined
 
+        rotateLeft :: Chan -> Process -> Process -> RuntimeM Process
+        rotateLeft x p (Compose y q r) = do
+          use RotateLeft $ Compose y (Compose x p q) r
+        rotateLeft x p others = return $ Compose x p others
+
+        rotateRight :: Chan -> Process -> Process -> RuntimeM Process
+        rotateRight x (Compose y p q) r = do
+          use RotateRight $ Compose y p (Compose x q r)
+        rotateRight x others p = return $ Compose x others p
+
+reduceAt
+  :: Chan                                     -- the channel to target on Compose
+  -> (Process -> Process -> RuntimeM Process) -- on Compose
+  -> Process
+  -> RuntimeM Process
+reduceAt target f (Compose x p q) = do
+  if target == x
+    then f p q
+    else Compose
+          <$> pure x
+          <*> reduceAt target f p
+          <*> reduceAt target f q
+reduceAt target f (Output x y p q) =
+  Output
+    <$> pure x
+    <*> pure y
+    <*> reduceAt target f p
+    <*> reduceAt target f q
+reduceAt target f (Input x y p) =
+  Input
+    <$> pure x
+    <*> pure y
+    <*> reduceAt target f p
+reduceAt target f (SelectL x p) =
+  SelectL
+    <$> pure x
+    <*> reduceAt target f p
+reduceAt target f (SelectR x p) =
+  SelectR
+    <$> pure x
+    <*> reduceAt target f p
+reduceAt target f (Choice x p q) =
+  Choice
+    <$> pure x
+    <*> reduceAt target f p
+    <*> reduceAt target f q
+reduceAt target f (Accept x y p) =
+  Accept
+    <$> pure x
+    <*> pure y
+    <*> reduceAt target f p
+reduceAt target f (Request x y p) =
+  Request
+    <$> pure x
+    <*> pure y
+    <*> reduceAt target f p
+reduceAt target f (OutputT x p) =
+  OutputT
+    <$> pure x
+    <*> reduceAt target f p
+reduceAt target f (InputT x p) =
+  InputT
+    <$> pure x
+    <*> reduceAt target f p
+reduceAt _ _ (EmptyOutput x) =
+  EmptyOutput
+    <$> pure x
+reduceAt target f (EmptyInput x p) =
+  EmptyInput
+    <$> pure x
+    <*> reduceAt target f p
+reduceAt _ _ (EmptyChoice x) =
+  EmptyChoice
+    <$> pure x
+reduceAt target f (Mix p q) =
+  Mix
+    <$> reduceAt target f p
+    <*> reduceAt target f q
+reduceAt _ _ others = return others
 
 checkChannels :: [Chan] -> RuntimeM ()
 checkChannels channels = do
@@ -129,7 +187,8 @@ reduceProcess chan (Output x y p q) (Input v w r) = do
   checkChannels [chan, x, v]
   checkChannels [y, w]
   use IOReduce $ Compose y p (Compose chan q r)
-reduceProcess _ (Input _ _ _) (Output _ _ _ _) = swap
+reduceProcess chan p@(Input _ _ _) q@(Output _ _ _ _) =
+  return $ 
 
 reduceProcess chan (OutputT x p) (InputT y q) = do
   checkChannels [chan, x, y]
@@ -142,47 +201,6 @@ reduceProcess _ _ _ = do
 
   stuck
 
-
-rotateLeft :: Process -> Process
-rotateLeft (Compose x p (Compose y q r)) =
-  Compose y (Compose x p q) r
-rotateLeft others = others
-
-
--- (Compose chan _ (Process (Output x y p q) f l) (Process (Input v w r) g m)) -> do
--- if chan == x && chan == v && y == w
---   then step IOReduce $ Process (Compose y Nothing p (Process (Compose chan Nothing q r) free NoLoc)) free loc
---   else throwError $ Runtime_CannotMatch chan x v
--- (Compose chan _ (Process (Input v w r) g m) (Process (Output x y p q) f l)) -> do
--- step Swap $ Process (Compose chan Nothing (Process (Input v w r) g m) (Process (Output x y p q) f l)) free loc
---
--- (Compose chan _ (Process (OutputT x t p) f l) (Process (InputT y u q) g m)) -> do
--- if chan == x && chan == y
---   then step TypeIOReduce $ Process (Compose chan Nothing p (substituteType u t q)) free loc
---   else throwError $ Runtime_CannotMatch chan x y
--- (Compose chan _ (Process (InputT y u q) g m) (Process (OutputT x t p) f l)) -> do
--- step Swap $ Process (Compose chan Nothing (Process (OutputT x t p) f l) (Process (InputT y u q) g m)) free loc
---
--- (Compose chan _ p q) -> do
--- reducedP <- reduce p
--- pHasReduced <- hasReduced
--- if pHasReduced
---   then wrap $ Compose chan Nothing reducedP q
---   else do
---     reducedQ <- reduce q
---     qHasReduced <- hasReduced
---     if qHasReduced
---       then wrap $ Compose chan Nothing reducedP reducedQ
---       else stuck
-
-
---
--- compose :: Chan -> Process -> Process -> Proc
--- compose chan (OutputT x t p) (InputT y u q) = Compose chan Nothing p (substituteType u t q)
---
---
--- creep :: Match -> Process -> Proc
--- creep (Match chan 0 0) (Compose n _ p q) = compose n (toProcess p) (toProcess q)
 
 --------------------------------------------------------------------------------
 -- | Substition
@@ -285,20 +303,15 @@ putRule :: Rule -> RuntimeM ()
 putRule rule = do
   p <- hasReduced
   unless p $ put $ Just rule
---
--- instance Pretty Tree where
---   pretty (Node chan p q) =
---     "\\" <+> pretty chan <> line
---     <> indent 2 (vsep [pretty p, pretty q])
---   pretty (Leaf p) = pretty p
-
 
 --------------------------------------------------------------------------------
 -- | Rules
 
-data Rule = Swap | TypeIOReduce | IOReduce
+data Rule = Swap | TypeIOReduce | IOReduce | RotateLeft | RotateRight
 
 instance Pretty Rule where
   pretty Swap = "Swap"
   pretty TypeIOReduce = "Type input/output reduction"
   pretty IOReduce = "Input/output reduction"
+  pretty RotateLeft = "Rotate left"
+  pretty RotateRight = "Rotate right"
