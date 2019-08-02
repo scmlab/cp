@@ -257,10 +257,10 @@ infer process = case process of
 
     -- assert that some channel shouldn't occur free in some process
     notFreeIn :: Chan -> Process -> TCM ()
-    notFreeIn channel process = do
-      free <- freeChans process
+    notFreeIn channel process' = do
+      free <- freeChans process'
       when (channel `Set.member` free) $
-        throwError $ ChannelNotComsumed process channel
+        throwError $ ChannelNotComsumed process' channel
 
     -- return a fresh type variable
     fresh :: Type
@@ -314,7 +314,7 @@ inferProcess :: Process -> TCM Session
 inferProcess = infer
 
 freeChans :: Process -> TCM (Set Chan)
-freeChans p = case p of
+freeChans process = case process of
   Call name _ -> do
     definitions <- ask
     case Map.lookup name definitions of
