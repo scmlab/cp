@@ -276,7 +276,7 @@ handleCommand (Eval expr) = do
     process <- parseProcessM expr
     --
     _result <- evaluate process
-    -- liftIO $ putDoc $ pretty _result <> line
+    liftIO $ putDoc $ pretty _result <> line
     return ()
   return True
 handleCommand Noop = return True
