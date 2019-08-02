@@ -2,7 +2,7 @@
 {-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
 {-# LANGUAGE DeriveFunctor, FlexibleInstances #-}
 
-module TypeChecking.Binding where
+module TypeChecking.BindingOld where
   -- ( runBindM
   -- , Bind(..)
   -- ) where

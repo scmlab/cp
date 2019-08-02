@@ -6,7 +6,7 @@ import Syntax.Concrete
 -- import Syntax.Concrete hiding (Session(..), Type(..), TypeVar(..))
 -- import TypeChecking.Infer
 import TypeChecking.Infer (inferProcess, check)
-import TypeChecking.Binding
+-- import TypeChecking.Binding
 import TypeChecking.Base
 import Base
 --

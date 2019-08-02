@@ -1,13 +1,18 @@
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
+{-# LANGUAGE DeriveFunctor, FlexibleInstances #-}
+
 module Syntax.Abstract where
 
-import Syntax.Base
---
--- import Data.Loc (Loc(..), Located(..))
+import qualified Syntax.Concrete as C
+import Base
+import TypeChecking.Base
+
+import Control.Monad.Reader
+import Control.Monad.Except
 import Data.Text (Text)
--- import qualified Data.Set as Set
--- import Data.Set (Set)
 import Data.Map (Map)
--- import Data.Function (on)
+import qualified Data.Map as Map
 
 --------------------------------------------------------------------------------
 -- | Concrete Binding Tree
@@ -20,7 +25,7 @@ type TypeName = Text
 type Chan     = Text
 
 -- Program
-type Program = Map Name Process
+type Definitions = Map Name Process
 
 -- Process
 data Process
@@ -106,3 +111,131 @@ subsitute old new process = case process of
 --   EmptyChoice x -> Set.singleton (chanName x)
 --   End -> Set.empty
 --   Mix p q -> Set.union (freeChans p) (freeChans q)
+
+--------------------------------------------------------------------------------
+-- Converting from Concrete Syntax Tree
+
+abstract :: FromConcrete a b => Maybe C.Definitions -> a -> M b
+abstract definitions process = do
+  let result = runAbstractM (maybe Map.empty id definitions) (fromConcrete process)
+  case result of
+    Left err -> throwError $ ScopeError err
+    Right val -> return val
+
+type AbstractM = ExceptT ScopeError (Reader C.Definitions)
+
+runAbstractM :: C.Definitions -> AbstractM a -> Either ScopeError a
+runAbstractM defns f = runReader (runExceptT f) defns
+
+class FromConcrete a b | a -> b where
+  fromConcrete :: a -> AbstractM b
+
+instance FromConcrete C.Definition Process where
+  fromConcrete (C.Paired _ p _) = fromConcrete p
+  fromConcrete (C.TypeOnly n _) = Atom <$> fromConcrete n
+  fromConcrete (C.TermOnly _ p) = fromConcrete p
+
+instance FromConcrete C.Definitions Definitions where
+  fromConcrete definitions = do
+    let pairs = Map.toList definitions
+    pairs' <- forM pairs $ \(k, v) -> do
+      k' <- fromConcrete k
+      v' <- fromConcrete v
+      return (k', v')
+    return $ Map.fromList pairs'
+
+instance FromConcrete C.Process Process where
+  fromConcrete process = case process of
+    C.Call name _ -> do
+      definitions <- ask
+      case Map.lookup name definitions of
+        Nothing -> error "[panic] Definition not found, this shouldn't happen at the syntax tree converting state"
+        Just p -> fromConcrete p
+
+    C.Link x y _ ->
+      Link
+        <$> fromConcrete x
+        <*> fromConcrete y
+
+    C.Compose x _ p q _ ->
+      Compose
+        <$> fromConcrete x
+        <*> fromConcrete p
+        <*> fromConcrete q
+
+    C.Output x y p q _ ->
+      Output
+        <$> fromConcrete x
+        <*> fromConcrete y
+        <*> fromConcrete p
+        <*> fromConcrete q
+
+    C.Input x y p _ ->
+      Input
+        <$> fromConcrete x
+        <*> fromConcrete y
+        <*> fromConcrete p
+
+    C.SelectL x p _ ->
+      SelectL
+        <$> fromConcrete x
+        <*> fromConcrete p
+
+    C.SelectR x p _ ->
+      SelectR
+        <$> fromConcrete x
+        <*> fromConcrete p
+
+    C.Choice x p q _ ->
+      Choice
+        <$> fromConcrete x
+        <*> fromConcrete p
+        <*> fromConcrete q
+
+    C.Accept x y q _ ->
+      Accept
+        <$> fromConcrete x
+        <*> fromConcrete y
+        <*> fromConcrete q
+
+    C.Request x y q _ ->
+      Request
+        <$> fromConcrete x
+        <*> fromConcrete y
+        <*> fromConcrete q
+
+    C.OutputT x _ p _ ->
+      OutputT
+        <$> fromConcrete x
+        <*> fromConcrete p
+
+    C.InputT x _ p _ ->
+      InputT
+        <$> fromConcrete x
+        <*> fromConcrete p
+
+    C.EmptyOutput x _ ->
+      EmptyOutput
+        <$> fromConcrete x
+
+    C.EmptyInput x p _ ->
+      EmptyInput
+        <$> fromConcrete x
+        <*> fromConcrete p
+
+    C.EmptyChoice x _ ->
+      EmptyChoice
+        <$> fromConcrete x
+
+    C.End _ -> return End
+
+    C.Mix p q _ ->
+      Mix
+        <$> fromConcrete p
+        <*> fromConcrete q
+
+instance FromConcrete C.Chan Chan where
+  fromConcrete (C.Chan name _) = return name
+
+instance FromConcrete C.Name Name where
+  fromConcrete (C.Name name _) = return name

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: c8925770b443a0fc5917cb4452d572538f05ad998ffc31585df1e734d5885a31
+-- hash: 80d70b31a9011a4f9038508e2bdbda17decd43f63926c4d3b915e5e9eafe8eca
 
 name:           cp
 version:        0.1.0.0
@@ -26,6 +26,7 @@ executable cp
       Pretty
       Pretty.Base
       Pretty.Error
+      Pretty.Syntax.Abstract
       Pretty.Syntax.Binding
       Pretty.Syntax.Concrete
       Runtime
@@ -40,7 +41,7 @@ executable cp
       Syntax.Parser.Type
       TypeChecking
       TypeChecking.Base
-      TypeChecking.Binding
+      TypeChecking.BindingOld
       TypeChecking.Infer
       TypeChecking.Unification
       Paths_cp
@@ -77,6 +78,7 @@ test-suite cp-test
       Pretty
       Pretty.Base
       Pretty.Error
+      Pretty.Syntax.Abstract
       Pretty.Syntax.Binding
       Pretty.Syntax.Concrete
       Runtime
@@ -91,7 +93,7 @@ test-suite cp-test
       Syntax.Parser.Type
       TypeChecking
       TypeChecking.Base
-      TypeChecking.Binding
+      TypeChecking.BindingOld
       TypeChecking.Infer
       TypeChecking.Unification
       Paths_cp

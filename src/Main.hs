@@ -245,8 +245,8 @@ handleCommand Reload = do
 
 handleCommand (TypeOf expr) = do
   void $ handleM $ do
-    -- global environment setup
-    program <- gets replProgram
+    -- -- global environment setup
+    -- program <- gets replProgram
     -- local expression parsing
     process <- parseProcessM expr
     -- infer session
@@ -257,8 +257,8 @@ handleCommand (TypeOf expr) = do
 
 handleCommand (Debug expr) = do
   void $ handleM $ do
-    -- global environment setup
-    program <- gets replProgram
+    -- -- global environment setup
+    -- program <- gets replProgram
     -- local expression parsing
     result <- parseProcessM expr
     -- print some stuff
@@ -270,13 +270,13 @@ handleCommand Quit = return False
 handleCommand Help = liftIO displayHelp >> return True
 handleCommand (Eval expr) = do
   void $ handleM $ do
-    -- global environment setup
-    program <- gets replProgram
+    -- -- global environment setup
+    -- program <- gets replProgram
     -- local expression parsing
     process <- parseProcessM expr
     --
     _result <- evaluate process
-    -- liftIO $ putDoc $ pretty result <> line
+    -- liftIO $ putDoc $ pretty _result <> line
     return ()
   return True
 handleCommand Noop = return True

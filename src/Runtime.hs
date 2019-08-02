@@ -3,7 +3,9 @@
 module Runtime (evaluate) where
 
 
-import Syntax.Concrete
+  -- import Syntax.Concrete
+import qualified Syntax.Concrete as C
+import Syntax.Abstract
 import qualified TypeChecking.Unification as U
 -- import Pretty
 
@@ -25,8 +27,11 @@ import Control.Monad.Except
 
 import Pretty
 
-evaluate :: Process -> M Process
-evaluate process = undefined
+evaluate :: C.Process -> M Process
+evaluate process' = do
+  definitions <- gets replDefinitions
+  process <- abstract (Just definitions) process'
+  return process
     -- run process
 
 -- run :: Process -> M Process
