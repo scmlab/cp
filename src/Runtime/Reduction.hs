@@ -1,7 +1,7 @@
 module Runtime.Reduction
   ( findMatches
   , headChan
-  -- , Match(..)
+  , Match(..)
   ) where
 
     -- import Syntax.Binding
@@ -20,23 +20,21 @@ import Pretty
 
 
 data Match = Match Chan Int Int
-    deriving (Show)
+    deriving (Show, Eq, Ord)
 type Distances = Map Chan Int
 
-
--- creep (Match chan i j) (Compose n _ (Compose ) q) =
-
-findMatches :: Process -> Map Chan (Int, Int)
+findMatches :: Process -> Set Match
 findMatches = fst . find
   where
     -- increase the distance of every entry in the Map
     incr :: Distances -> Distances
     incr = fmap succ
-    -- merge two Distance Map into one Map of matched channels
-    match :: Distances -> Distances -> Map Chan (Int, Int)
-    match = Map.intersectionWith (,)
+
+    -- merge two Distance Map into one Set of Matches
+    match :: Distances -> Distances -> Set Match
+    match a b = Map.foldrWithKey (\k (m, n) -> Set.insert (Match k m n)) Set.empty $ Map.intersectionWith (,) a b
     --
-    find :: Process -> (Map Chan (Int, Int), Distances)
+    find :: Process -> (Set Match, Distances)
     find (Compose n p q) =
       let (pms, phs) = find p
           (qms, qhs) = find q
@@ -44,8 +42,8 @@ findMatches = fst . find
           hs         = Map.delete n (phs `Map.union` qhs)
       in  (ms, incr hs)
     find others = case toHead others of
-      Inert           -> (Map.empty, Map.empty)
-      Reactive _ chan -> (Map.empty, Map.singleton chan 0)
+      Inert           -> (Set.empty, Map.empty)
+      Reactive _ chan -> (Set.empty, Map.singleton chan 0)
 
 
 headChan :: Process -> Maybe Chan

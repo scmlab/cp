@@ -90,32 +90,31 @@ subsitute old new process = case process of
 --------------------------------------------------------------------------------
 -- Free variables
 
--- freeChans :: Process -> FreeChans
--- freeChans (Process p xs _) = xs
---   -- where
---   --
+freeChans :: Process -> Set Chan
+freeChans process = case process of
+  Atom _ xs -> xs
+  Link x y -> Set.fromList [x, y]
+  Compose x p q -> Set.delete x $ Set.union (freeChans p) (freeChans q)
+  Output x y p q -> Set.insert x $ Set.delete y $ Set.union (freeChans p) (freeChans q)
+  Input x y p -> Set.insert x $ Set.delete y (freeChans p)
+  SelectL x p -> Set.insert x $ freeChans p
+  SelectR x p -> Set.insert x $ freeChans p
+  Choice x p q -> Set.insert x $ Set.union (freeChans p) (freeChans q)
+  Accept x y p ->Set.insert x $ Set.delete y (freeChans p)
+  Request x y p -> Set.insert x $ Set.delete y (freeChans p)
+  OutputT x p -> Set.insert x (freeChans p)
+  InputT x p -> Set.insert x (freeChans p)
+  EmptyOutput x -> Set.singleton x
+  EmptyInput x p -> Set.insert x (freeChans p)
+  EmptyChoice x -> Set.singleton x
+  End -> Set.empty
+  Mix p q -> Set.union (freeChans p) (freeChans q)
+
+  --
 --   --
 --   --   case p of
 -- freeChans' :: Proc -> FreeChans
 -- freeChans' p = case p of
---   Atom _ xs -> xs
---   Link x y -> Set.fromList [chanName x, chanName y]
---   Compose x _ p q -> Set.delete (chanName x) $ Set.union (freeChans p) (freeChans q)
---   Output x y p q -> Set.insert (chanName x) $ Set.delete (chanName y) $ Set.union (freeChans p) (freeChans q)
---   Input x y p -> Set.insert (chanName x) $ Set.delete (chanName y) (freeChans p)
---   SelectL x p -> Set.insert (chanName x) $ freeChans p
---   SelectR x p -> Set.insert (chanName x) $ freeChans p
---   Choice x p q -> Set.insert (chanName x) $ Set.union (freeChans p) (freeChans q)
---   Accept x y p ->Set.insert (chanName x) $ Set.delete (chanName y) (freeChans p)
---   Request x y p -> Set.insert (chanName x) $ Set.delete (chanName y) (freeChans p)
---   OutputT x _ p -> Set.insert (chanName x) (freeChans p)
---   InputT x _ p -> Set.insert (chanName x) (freeChans p)
---   EmptyOutput x -> Set.singleton (chanName x)
---   EmptyInput x p -> Set.insert (chanName x) (freeChans p)
---   EmptyChoice x -> Set.singleton (chanName x)
---   End -> Set.empty
---   Mix p q -> Set.union (freeChans p) (freeChans q)
-
 --------------------------------------------------------------------------------
 -- Converting from Concrete Syntax Tree
 

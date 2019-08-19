@@ -82,37 +82,67 @@ use rule input = do
 reduce :: RuntimeM Process
 reduce = do
   input <- ask
-  case Map.lookupMin (findMatches input) of
+  case Set.lookupMax (findMatches input) of
     Nothing -> do
       liftIO $ print $ findMatches input
       stuck
-    Just match@(chan, _) -> do
+    Just match@(Match chan _ _) -> do
       liftIO $ print match
       reduceAt chan (f match) input
       where
-        f :: (Chan, (Int, Int)) -> Process -> Process -> RuntimeM Process
-        f (chan, (0, 0)) p q = reduceProcess chan p q
-        f (chan, (0, m)) p q = rotateLeft chan p q
-        f (chan, (m, 0)) p q = rotateRight chan p q
+        f :: Match  -> Process -> Process -> RuntimeM Process
+        f (Match chan 0 0) p q = reduceProcess chan p q
+        f (Match chan 0 _) p q = rotateLeft chan p q
+        f (Match chan _ 0) p q = rotateRight chan p q
 
-        rotateLeft :: Chan -> Process -> Process -> RuntimeM Process
-        -- we want `p` and `q` both have the same channel as `x`
-        rotateLeft x p (Compose y q r) =
-            -- use RotateLeft $ Compose y (Compose x p q) r
-          
-          case headChan q of
-            Just chan ->
-              if chan == x
-                then use RotateLeft $ Compose y (Compose x p q) r
-                else use Swap $ Compose x p (Compose y r q)
-            Nothing ->
-              use Swap $ Compose x p (Compose y r q)
-        rotateLeft x p others = return $ Compose x p others
+rotateLeft :: Chan -> Process -> Process -> RuntimeM Process
+-- we want `p` and `q` both have the same channel as `x`
+rotateLeft x p (Compose y q r) =
+  if Set.member x (freeChans q)
+    then use RotateLeft $ Compose y (Compose x p q) r
+    else use Swap $ Compose x p (Compose y r q)
+rotateLeft x p others = return $ Compose x p others
 
-        rotateRight :: Chan -> Process -> Process -> RuntimeM Process
-        rotateRight x (Compose y p q) r = do
-          use RotateRight $ Compose y p (Compose x q r)
-        rotateRight x others p = return $ Compose x others p
+rotateRight :: Chan -> Process -> Process -> RuntimeM Process
+rotateRight x (Compose y p q) r = do
+  use RotateRight $ Compose y p (Compose x q r)
+rotateRight x others p = return $ Compose x others p
+
+checkChannels :: [Chan] -> RuntimeM ()
+checkChannels channels = do
+  let groups = map head $ List.group channels
+  let allTheSame = length groups == 1
+  unless allTheSame $ do
+    process <- ask
+    throwError $ Runtime_CannotMatch process groups
+
+reduceProcess :: Chan -> Process -> Process -> RuntimeM Process
+reduceProcess chan (Output x y p q) (Input v w r) = do
+  checkChannels [chan, x, v]
+  checkChannels [y, w]
+  use IOReduce $ Compose y p (Compose chan q r)
+
+reduceProcess chan p@(Input _ _ _) q@(Output _ _ _ _) = swap
+
+reduceProcess chan (OutputT x p) (InputT y q) = do
+  checkChannels [chan, x, y]
+  use TypeIOReduce $ Compose chan p q
+
+reduceProcess _ (InputT _ _) (OutputT _ _) = swap
+
+
+reduceProcess chan (Accept x y p) (Request x' y' q) = do
+  checkChannels [chan, x, x']
+  checkChannels [y, y']
+  use AccReqReduce $ Compose y p q
+
+-- reduceProcess _ (InputT _ _) (OutputT _ _) = swap
+
+reduceProcess chan _ _ = do
+  -- input <- ask
+  -- liftIO $ print $ findMatches input
+
+  stuck
 
 reduceAt
   :: Chan                                     -- the channel to target on Compose
@@ -183,32 +213,6 @@ reduceAt target f (Mix p q) =
     <$> reduceAt target f p
     <*> reduceAt target f q
 reduceAt _ _ others = return others
-
-checkChannels :: [Chan] -> RuntimeM ()
-checkChannels channels = do
-  let groups = map head $ List.group channels
-  let allTheSame = length groups == 1
-  unless allTheSame $ do
-    process <- ask
-    throwError $ Runtime_CannotMatch process groups
-
-reduceProcess :: Chan -> Process -> Process -> RuntimeM Process
-reduceProcess chan (Output x y p q) (Input v w r) = do
-  checkChannels [chan, x, v]
-  checkChannels [y, w]
-  use IOReduce $ Compose y p (Compose chan q r)
-reduceProcess chan p@(Input _ _ _) q@(Output _ _ _ _) = swap
-
-reduceProcess chan (OutputT x p) (InputT y q) = do
-  checkChannels [chan, x, y]
-  use TypeIOReduce $ Compose chan p q
-
-reduceProcess _ (InputT _ _) (OutputT _ _) = swap
-reduceProcess _ _ _ = do
-  -- input <- ask
-  -- liftIO $ print $ findMatches input
-
-  stuck
 
 
 --------------------------------------------------------------------------------
@@ -316,11 +320,14 @@ putRule rule = do
 --------------------------------------------------------------------------------
 -- | Rules
 
-data Rule = Swap | TypeIOReduce | IOReduce | RotateLeft | RotateRight
+data Rule = Swap | RotateLeft | RotateRight
+  | IOReduce | TypeIOReduce
+  | AccReqReduce
 
 instance Pretty Rule where
   pretty Swap = "Swap"
-  pretty TypeIOReduce = "Type input/output reduction"
-  pretty IOReduce = "Input/output reduction"
   pretty RotateLeft = "Rotate left"
   pretty RotateRight = "Rotate right"
+  pretty IOReduce = "Input/output reduction"
+  pretty TypeIOReduce = "Type input/output reduction"
+  pretty AccReqReduce = "Accept/request reduction"
