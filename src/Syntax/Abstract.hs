@@ -15,7 +15,7 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 
 --------------------------------------------------------------------------------
--- | Concrete Binding Tree
+-- | Abstract Binding Tree
 
 -- Names
 type Name     = Text
@@ -232,3 +232,7 @@ instance FromConcrete C.Chan Chan where
 
 instance FromConcrete C.Name Name where
   fromConcrete (C.Name name _) = return name
+
+
+--------------------------------------------------------------------------------
+-- | Zipper of the Abstract Syntax Tree

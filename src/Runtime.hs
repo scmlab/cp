@@ -83,7 +83,9 @@ reduce :: RuntimeM Process
 reduce = do
   input <- ask
   case Map.lookupMin (findMatches input) of
-    Nothing -> stuck
+    Nothing -> do
+      liftIO $ print $ findMatches input
+      stuck
     Just match@(chan, _) -> do
       liftIO $ print match
       reduceAt chan (f match) input
@@ -91,11 +93,19 @@ reduce = do
         f :: (Chan, (Int, Int)) -> Process -> Process -> RuntimeM Process
         f (chan, (0, 0)) p q = reduceProcess chan p q
         f (chan, (0, m)) p q = rotateLeft chan p q
-        f (l, r) p q = undefined
+        f (chan, (m, 0)) p q = rotateRight chan p q
 
         rotateLeft :: Chan -> Process -> Process -> RuntimeM Process
-        rotateLeft x p (Compose y q r) = do
-          use RotateLeft $ Compose y (Compose x p q) r
+        -- we want `p` and `q` both have the same channel as `x`
+        rotateLeft x p (Compose y q r) =
+            use RotateLeft $ Compose y (Compose x p q) r
+          -- case headChan q of
+          --   Just chan ->
+          --     if chan == x
+          --       then use RotateLeft $ Compose y (Compose x p q) r
+          --       else use Swap $ Compose x p (Compose y r q)
+          --   Nothing ->
+          --     use Swap $ Compose x p (Compose y r q)
         rotateLeft x p others = return $ Compose x p others
 
         rotateRight :: Chan -> Process -> Process -> RuntimeM Process
@@ -182,13 +192,11 @@ checkChannels channels = do
     throwError $ Runtime_CannotMatch process groups
 
 reduceProcess :: Chan -> Process -> Process -> RuntimeM Process
-
 reduceProcess chan (Output x y p q) (Input v w r) = do
   checkChannels [chan, x, v]
   checkChannels [y, w]
   use IOReduce $ Compose y p (Compose chan q r)
-reduceProcess chan p@(Input _ _ _) q@(Output _ _ _ _) =
-  return $ 
+reduceProcess chan p@(Input _ _ _) q@(Output _ _ _ _) = swap
 
 reduceProcess chan (OutputT x p) (InputT y q) = do
   checkChannels [chan, x, y]

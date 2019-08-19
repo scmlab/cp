@@ -1,5 +1,6 @@
 module Runtime.Reduction
   ( findMatches
+  , headChan
   -- , Match(..)
   ) where
 
@@ -46,6 +47,12 @@ findMatches = fst . find
       Inert           -> (Map.empty, Map.empty)
       Reactive _ chan -> (Map.empty, Map.singleton chan 0)
 
+
+headChan :: Process -> Maybe Chan
+headChan process = case toHead process of
+   (Reactive _ n) -> Just n
+   _              -> Nothing
+
 --------------------------------------------------------------------------------
 -- | Head & Kinds
 
@@ -62,10 +69,6 @@ data Kind
   | AC | RQ   -- accept/request
   deriving (Show, Ord, Eq)
 
--- headChan :: Head -> Maybe Chan
--- headChan (Reactive _ n) = Just n
--- headChan _ = Nothing
---
 -- invert :: Kind -> Kind
 -- invert I = O
 -- invert O = I
