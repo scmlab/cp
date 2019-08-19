@@ -13,6 +13,8 @@ import Control.Monad.Except
 import Data.Text (Text)
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 --------------------------------------------------------------------------------
 -- | Abstract Binding Tree
@@ -29,7 +31,7 @@ type Definitions = Map Name Process
 
 -- Process
 data Process
-  = Atom      Name
+  = Atom      Name (Set Chan)
   | Link      Chan Chan
   | Compose   Chan Process Process
   | Output    Chan Chan Process Process
@@ -61,7 +63,9 @@ subsituteChannel old new chan = if chan == old then new else old
 
 subsitute :: Chan -> Chan -> Process -> Process
 subsitute old new process = case process of
-  Atom name -> Atom name
+  Atom name chans -> if Set.member old chans
+    then Atom name (Set.insert new (Set.delete old chans))
+    else Atom name chans
   Link x y -> Link (chan x) (chan y)
   Compose x a b -> Compose (chan x) (subst a) (subst b)
   Output x y a b -> Output (chan x) (chan y) (subst a) (subst b)
@@ -125,7 +129,10 @@ class FromConcrete a b | a -> b where
 
 instance FromConcrete C.Definition Process where
   fromConcrete (C.Paired _ p _) = fromConcrete p
-  fromConcrete (C.TypeOnly n _) = Atom <$> fromConcrete n
+  fromConcrete (C.TypeOnly n t) =
+    Atom
+      <$> fromConcrete n
+      <*> (Set.fromList <$> mapM fromConcrete (Map.keys t))
   fromConcrete (C.TermOnly _ p) = fromConcrete p
 
 instance FromConcrete C.Definitions Definitions where
@@ -235,4 +242,27 @@ instance FromConcrete C.Name Name where
 
 
 --------------------------------------------------------------------------------
--- | Zipper of the Abstract Syntax Tree
+-- | Other forms of Syntax Trees
+
+-- data Z =
+
+  -- -- Process
+  -- data Process
+  --   = Atom      Name
+  --   | Link      Chan Chan
+  --   | Compose   Chan Process Process
+  --   | Output    Chan Chan Process Process
+  --   | Input     Chan Chan Process
+  --   | SelectL   Chan Process
+  --   | SelectR   Chan Process
+  --   | Choice    Chan Process Process
+  --   | Accept    Chan Chan Process
+  --   | Request   Chan Chan Process
+  --   | OutputT   Chan Process
+  --   | InputT    Chan Process
+  --   | EmptyOutput Chan
+  --   | EmptyInput  Chan Process
+  --   | EmptyChoice Chan
+  --   | End
+  --   | Mix       Process   Process
+  --   deriving (Eq, Ord, Show)

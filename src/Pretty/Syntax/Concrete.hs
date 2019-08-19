@@ -32,7 +32,7 @@ instance Pretty Process where
     <> " ( " <> pretty p
     <> " | " <> pretty q
     <> " )"
-  pretty (Compose x t p q _) = "ν " <> pretty x
+  pretty (Compose x t p q _) = "ν" <+> pretty x
     <> " : " <> pretty t
     <> " ( " <> pretty p
     <> " | " <> pretty q

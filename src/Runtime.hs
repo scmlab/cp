@@ -98,14 +98,15 @@ reduce = do
         rotateLeft :: Chan -> Process -> Process -> RuntimeM Process
         -- we want `p` and `q` both have the same channel as `x`
         rotateLeft x p (Compose y q r) =
-            use RotateLeft $ Compose y (Compose x p q) r
-          -- case headChan q of
-          --   Just chan ->
-          --     if chan == x
-          --       then use RotateLeft $ Compose y (Compose x p q) r
-          --       else use Swap $ Compose x p (Compose y r q)
-          --   Nothing ->
-          --     use Swap $ Compose x p (Compose y r q)
+            -- use RotateLeft $ Compose y (Compose x p q) r
+          
+          case headChan q of
+            Just chan ->
+              if chan == x
+                then use RotateLeft $ Compose y (Compose x p q) r
+                else use Swap $ Compose x p (Compose y r q)
+            Nothing ->
+              use Swap $ Compose x p (Compose y r q)
         rotateLeft x p others = return $ Compose x p others
 
         rotateRight :: Chan -> Process -> Process -> RuntimeM Process

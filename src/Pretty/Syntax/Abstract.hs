@@ -7,6 +7,7 @@ import Syntax.Abstract
 import Data.Monoid ((<>))
 import Data.Text.Prettyprint.Doc
 import Data.Text (Text)
+import qualified Data.Set as Set
 
 --------------------------------------------------------------------------------
 -- |
@@ -27,9 +28,9 @@ import Data.Text (Text)
 
 
 instance Pretty Process where
-  pretty (Atom name) = pretty name
-  pretty (Link x y) = pretty x <+> "<->" <+> pretty y
-  pretty (Compose x p q) = "\\" <+> pretty x <+> line
+  pretty (Atom name chans) = pretty name <> encloseSep lbrace rbrace comma (map pretty $ Set.toList chans)
+  pretty (Link x y) = pretty x <+> "↔" <+> pretty y
+  pretty (Compose x p q) = "ν" <+> pretty x <+> line
     <> indent 2 (vsep
       [ "(" <+> pretty p
       , "|" <+> pretty q
