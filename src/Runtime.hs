@@ -37,7 +37,7 @@ run :: Process -> M Process
 run input = do
 
   -- run !!
-  (result, usedRule) <- lift $ runReaderT (runStateT (runExceptT reduce) Nothing) input
+  (result, usedRule) <- lift $ runReaderT (runStateT (runExceptT (reduce input)) Nothing) input
 
   case result of
     Left e -> throwError $ RuntimeError e
@@ -62,13 +62,13 @@ printStatus output rule = do
 stuck :: RuntimeM Process
 stuck = ask
 
-swap :: RuntimeM Process
-swap = do
-  putRule Swap
-  input <- ask
-  case input of
-    Compose chan p q -> return $ Compose chan q p
-    others -> return others
+-- swap :: RuntimeM Process
+-- swap = do
+--   putRule Swap
+--   input <- ask
+--   case input of
+--     Compose chan p q -> return $ Compose chan q p
+--     others -> return others
 
 use :: Rule -> Process -> RuntimeM Process
 use rule input = do
@@ -79,9 +79,8 @@ use rule input = do
       putRule rule
       return input
 
-reduce :: RuntimeM Process
-reduce = do
-  input <- ask
+reduce :: Process -> RuntimeM Process
+reduce input = do
   case Set.lookupMax (findMatches input) of
     Nothing -> do
       liftIO $ print $ findMatches input
@@ -122,13 +121,15 @@ reduceProcess chan (Output x y p q) (Input v w r) = do
   checkChannels [y, w]
   use IOReduce $ Compose y p (Compose chan q r)
 
-reduceProcess chan p@(Input _ _ _) q@(Output _ _ _ _) = swap
+reduceProcess chan p@(Input _ _ _) q@(Output _ _ _ _) =
+  use Swap $ Compose chan q p
 
 reduceProcess chan (OutputT x p) (InputT y q) = do
   checkChannels [chan, x, y]
   use TypeIOReduce $ Compose chan p q
 
-reduceProcess _ (InputT _ _) (OutputT _ _) = swap
+reduceProcess chan p@(InputT _ _) q@(OutputT _ _) =
+  use Swap $ Compose chan q p
 
 
 reduceProcess chan (Accept x y p) (Request x' y' q) = do
@@ -136,12 +137,7 @@ reduceProcess chan (Accept x y p) (Request x' y' q) = do
   checkChannels [y, y']
   use AccReqReduce $ Compose y p q
 
--- reduceProcess _ (InputT _ _) (OutputT _ _) = swap
-
 reduceProcess chan _ _ = do
-  -- input <- ask
-  -- liftIO $ print $ findMatches input
-
   stuck
 
 reduceAt
