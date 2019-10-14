@@ -53,10 +53,10 @@ evalM program = evalStateT (runExceptT program) initialState
 --------------------------------------------------------------------------------
 -- | The REPL Monad
 
-type REPL = InputT M
+type REPL = InputT (StateT MState IO)
 
-runREPL :: Settings M -> REPL a -> IO (Either Error a, MState)
-runREPL settings program = runStateT (runExceptT (runInputT settings program)) initialState
+runREPL :: Settings (StateT MState IO) -> REPL a -> IO (a, MState)
+runREPL settings program = runStateT (runInputT settings program) initialState
 
 -- instances of Haskeline.MonadException
 instance MonadException m => MonadException (StateT s m) where

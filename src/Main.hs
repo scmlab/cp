@@ -4,7 +4,7 @@ module Main where
 -- import Syntax.Base
 -- import qualified Syntax.Concrete as C
 import Syntax.Concrete
-import Syntax.Parser
+import qualified Syntax.Parser as Parser
 import TypeChecking
 -- import TypeChecking.Binding
 -- import TypeChecking.Infer
@@ -22,7 +22,7 @@ import Data.Text.Prettyprint.Doc.Render.Terminal
 
 import qualified Data.Map as Map
 -- import qualified Data.Set as Set
-import Data.Maybe (isNothing)
+-- import Data.Maybe (isNothing)
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd, isPrefixOf)
 import qualified Data.Text as Text
@@ -66,35 +66,17 @@ loadSource filePath = do
 parseSource :: M Program
 parseSource = do
   (filePath, source) <- getSourceOrThrow
-  case parseProgram filePath source of
+  case Parser.parseProgram filePath source of
       Left err -> throwError $ ParseError err
       Right program -> do
         modify $ \ st -> st { replProgram = Just program }
         return program
 
-parseProcessM :: ByteString -> M Process
-parseProcessM raw = do
-  case parseProcess raw of
+parseProcess :: ByteString -> M Process
+parseProcess raw = do
+  case Parser.parseProcess raw of
     Left err -> throwError $ ParseError err
     Right process -> return process
-
-printErrorIO :: MState -> Error -> IO ()
-printErrorIO state err = case replSource state of
-  Nothing -> putDoc $ report err
-  Just (_, source) -> putDoc $ reportS err (Just source)
-
-printError :: Error -> REPL ()
-printError err = do
-  state <- lift get
-  liftIO $ printErrorIO state err
-
-handleM :: M a -> REPL a
-handleM = lift
-  -- case result of
-  --   Left err -> do
-  --     printError err
-  --     return Nothing
-    -- Right value -> return (Just value)
 
 runTCM :: TCM a -> M a
 runTCM f = do
@@ -112,15 +94,15 @@ main = do
     ModeHelp -> putStrLn $ usageInfo usage options
     ModeREPL -> void $ runREPL settings loop
     ModeDev -> void $ runREPL settings $ do
-      _ <- handleCommand $ parseCommand ":l test/source/a.clp"
+      _ <- handleCommandREPL $ parseCommand ":l test/source/a.clp"
       loop
       -- void $ runInputT settings loop
   where
 
-    settings :: Settings M
+    settings :: Settings (StateT MState IO)
     settings = setComplete customComplete defaultSettings
 
-    customComplete :: CompletionFunc M
+    customComplete :: CompletionFunc (StateT MState IO)
     customComplete (left, right) = case match left of
       Complete ":load" -> completeFilename (left, right)
       Complete ":reload" -> completeFilename (left, right)
@@ -134,7 +116,7 @@ main = do
       None "" -> completeCommands
       None _ -> completeDefinitions left []
 
-    completeDefinitions :: String -> [String] -> M (String, [Completion])
+    completeDefinitions :: String -> [String] -> StateT MState IO (String, [Completion])
     completeDefinitions left partials = do
       -- get the names of all definitions
       defns <- map (Text.unpack . (\(Name name _) -> name)) <$> Map.keys <$> gets replDefinitions
@@ -146,8 +128,30 @@ main = do
       let left' = if null partials then left else dropWhile (/= ' ') left
       return (left', map simpleCompletion matched)
 
-    completeCommands :: M (String, [Completion])
+    completeCommands :: StateT MState IO (String, [Completion])
     completeCommands = return ("", map simpleCompletion commands)
+
+    handleCommandREPL :: Command -> REPL Bool
+    handleCommandREPL command = do
+      result <- lift $ runExceptT $ handleCommand command
+      case result of
+        Left err -> do
+          printError err
+          return True
+        Right keepLooping -> return keepLooping
+
+    printError :: Error -> REPL ()
+    printError err = do
+      state <- lift get
+      liftIO $ printErrorIO state err
+
+      where
+        printErrorIO :: MState -> Error -> IO ()
+        printErrorIO state _err = case replSource state of
+          Nothing -> putDoc $ report err
+          Just (_, source) -> putDoc $ reportS err (Just source)
+
+
 
     loop :: REPL ()
     loop = do
@@ -155,8 +159,82 @@ main = do
       case minput of
         Nothing -> return ()
         Just input -> do
-          keepLooping <- handleCommand $ parseCommand input
+          keepLooping <- handleCommandREPL $ parseCommand input
           when keepLooping loop
+
+-- return False to exit the REPL loop
+handleCommand :: Command -> M Bool
+handleCommand (Load filePath) = do
+  loadSource filePath
+  program <- parseSource
+  definitions <- scopeCheck program
+  inferred <- runTCM $ typeCheck definitions
+  modify $ \ st -> st
+    { replInferred = inferred
+    , replDefinitions = definitions
+    }
+    -- liftIO $ putStrLn $ "loaded: " ++ filePath
+  return True
+handleCommand Reload = do
+  result <- gets replSource
+  case result of
+    Just ((filePath, _)) -> handleCommand (Load filePath)
+    _ -> handleCommand Noop
+
+handleCommand (TypeOf expr) = do
+  -- -- global environment setup
+  -- program <- gets replProgram
+  -- local expression parsing
+  process <- parseProcess expr
+  -- infer session
+  session <- runTCM $ inferProcess process
+  liftIO $ putDoc $ report session <> line
+
+  return True
+
+handleCommand (Debug expr) = do
+  -- -- global environment setup
+  -- program <- gets replProgram
+  -- local expression parsing
+  result <- parseProcess expr
+  -- print some stuff
+  liftIO $ putDoc $ pretty result <> line
+
+  return True
+
+handleCommand Quit = return False
+handleCommand Help = liftIO displayHelp >> return True
+handleCommand (Eval expr) = do
+  -- -- global environment setup
+  -- program <- gets replProgram
+  -- local expression parsing
+  process <- parseProcess expr
+  --
+  _result <- evaluate process
+  liftIO $ putDoc $ pretty _result <> line
+  return True
+
+handleCommand Noop = return True
+
+displayHelp :: IO ()
+displayHelp = liftIO $ do
+  putStrLn "======================================================"
+  putStrLn "      _     _          _     _          _     _   "
+  putStrLn "     (c).-.(c)        (c).-.(c)        (c).-.(c)  "
+  putStrLn "      / ._. \\          / ._. \\          / ._. \\   "
+  putStrLn "    __\\( Y )/__      __\\( Y )/__      __\\( Y )/__ "
+  putStrLn "   (_.-/'-'\\-._)    (_.-/'-'\\-._)    (_.-/'-'\\-._)"
+  putStrLn "      || C ||          || L ||          || P ||   "
+  putStrLn "    _.' `-' '._      _.' `-' '._      _.' `-' '._ "
+  putStrLn "   (.-./`-'\\.-.)    (.-./`-'\\.-.)    (.-./`-'\\.-.)"
+  putStrLn "    `-'     `-'      `-'     `-'      `-'     `-' "
+  putStrLn "  :help                 for this help message   (:h)"
+  putStrLn "  :load FILEPATH        for loading files       (:l)"
+  putStrLn "  :reload               for reloading           (:r)"
+  putStrLn "  :type                 for sessions and types  (:t)"
+  putStrLn "  :quit                 bye                     (:q)"
+  putStrLn "======================================================"
+
 
 
 --------------------------------------------------------------------------------
@@ -188,6 +266,7 @@ parseOpts argv =
     (o,n,[]  ) -> return (foldl (flip id) defaultOptions o, n)
     (_,_,errs) -> ioError $ userError $ concat errs ++ usageInfo usage options
 
+
 --------------------------------------------------------------------------------
 -- | REPL
 
@@ -214,90 +293,12 @@ parseCommand key
       s       -> Eval (BS8.pack s)
         -- traceShow "!!!" (Noop)
 
-whenLoaded :: REPL () -> REPL ()
-whenLoaded program = do
-  result <- lift $ gets replSource
-  if (isNothing result)
-    then void $ handleM $ throwError $ RuntimeError $ Runtime_CodeNotLoaded
-    else program
-
-
-handleCommand :: Command -> REPL Bool
-handleCommand (Load filePath) = do
-  void $ handleM $ do
-    loadSource filePath
-    program <- parseSource
-    definitions <- scopeCheck program
-    inferred <- runTCM $ typeCheck definitions
-    modify $ \ st -> st
-      { replInferred = inferred
-      , replDefinitions = definitions
-      }
-    return ()
-    -- liftIO $ putStrLn $ "loaded: " ++ filePath
-  return True
-handleCommand Reload = do
-  result <- handleM $ gets replSource
-  case result of
-    Just ((filePath, _)) -> handleCommand (Load filePath)
-    _ -> handleCommand Noop
-
-handleCommand (TypeOf expr) = do
-  void $ handleM $ do
-    -- -- global environment setup
-    -- program <- gets replProgram
-    -- local expression parsing
-    process <- parseProcessM expr
-    -- infer session
-    session <- runTCM $ inferProcess process
-    liftIO $ putDoc $ report session <> line
-    return ()
-  return True
-
-handleCommand (Debug expr) = do
-  void $ handleM $ do
-    -- -- global environment setup
-    -- program <- gets replProgram
-    -- local expression parsing
-    result <- parseProcessM expr
-    -- print some stuff
-    liftIO $ putDoc $ pretty result <> line
-    return ()
-  return True
-
-handleCommand Quit = return False
-handleCommand Help = liftIO displayHelp >> return True
-handleCommand (Eval expr) = do
-  void $ handleM $ do
-    -- -- global environment setup
-    -- program <- gets replProgram
-    -- local expression parsing
-    process <- parseProcessM expr
-    --
-    _result <- evaluate process
-    liftIO $ putDoc $ pretty _result <> line
-    return ()
-  return True
-handleCommand Noop = return True
-
-displayHelp :: IO ()
-displayHelp = liftIO $ do
-  putStrLn "======================================================"
-  putStrLn "      _     _          _     _          _     _   "
-  putStrLn "     (c).-.(c)        (c).-.(c)        (c).-.(c)  "
-  putStrLn "      / ._. \\          / ._. \\          / ._. \\   "
-  putStrLn "    __\\( Y )/__      __\\( Y )/__      __\\( Y )/__ "
-  putStrLn "   (_.-/'-'\\-._)    (_.-/'-'\\-._)    (_.-/'-'\\-._)"
-  putStrLn "      || C ||          || L ||          || P ||   "
-  putStrLn "    _.' `-' '._      _.' `-' '._      _.' `-' '._ "
-  putStrLn "   (.-./`-'\\.-.)    (.-./`-'\\.-.)    (.-./`-'\\.-.)"
-  putStrLn "    `-'     `-'      `-'     `-'      `-'     `-' "
-  putStrLn "  :help                 for this help message   (:h)"
-  putStrLn "  :load FILEPATH        for loading files       (:l)"
-  putStrLn "  :reload               for reloading           (:r)"
-  putStrLn "  :type                 for sessions and types  (:t)"
-  putStrLn "  :quit                 bye                     (:q)"
-  putStrLn "======================================================"
+-- whenLoaded :: REPL () -> REPL ()
+-- whenLoaded program = do
+--   result <- lift $ gets replSource
+--   if (isNothing result)
+--     then lift $ throwError $ RuntimeError $ Runtime_CodeNotLoaded
+--     else program
 
 commands :: [String]
 commands = [ ":load", ":reload", ":type", ":quit", ":help" ]
