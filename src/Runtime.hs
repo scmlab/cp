@@ -37,7 +37,7 @@ run :: Process -> M Process
 run input = do
 
   -- run !!
-  (result, usedRule) <- lift $ runReaderT (runStateT (runExceptT (reduce input)) Nothing) input
+  (result, usedRule) <- runReaderT (runStateT (runExceptT (reduce input)) Nothing) input
 
   case result of
     Left e -> throwError $ RuntimeError e
@@ -299,7 +299,7 @@ reduceAt _ _ others = return others
 --   { rtRule :: Maybe Rule
 --   , rtInput :: Maybe Process
 --   }
-type RuntimeM = ExceptT RuntimeError (StateT (Maybe Rule) (ReaderT Process Core))
+type RuntimeM = ExceptT RuntimeError (StateT (Maybe Rule) (ReaderT Process M))
 
 hasReduced :: RuntimeM Bool
 hasReduced = do

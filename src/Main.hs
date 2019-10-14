@@ -88,14 +88,13 @@ printError err = do
   state <- lift get
   liftIO $ printErrorIO state err
 
-handleM :: M a -> REPL (Maybe a)
-handleM program = do
-  result <- lift $ runExceptT program
-  case result of
-    Left err -> do
-      printError err
-      return Nothing
-    Right value -> return (Just value)
+handleM :: M a -> REPL a
+handleM = lift
+  -- case result of
+  --   Left err -> do
+  --     printError err
+  --     return Nothing
+    -- Right value -> return (Just value)
 
 runTCM :: TCM a -> M a
 runTCM f = do
@@ -118,10 +117,10 @@ main = do
       -- void $ runInputT settings loop
   where
 
-    settings :: Settings Core
+    settings :: Settings M
     settings = setComplete customComplete defaultSettings
 
-    customComplete :: CompletionFunc Core
+    customComplete :: CompletionFunc M
     customComplete (left, right) = case match left of
       Complete ":load" -> completeFilename (left, right)
       Complete ":reload" -> completeFilename (left, right)
@@ -135,7 +134,7 @@ main = do
       None "" -> completeCommands
       None _ -> completeDefinitions left []
 
-    completeDefinitions :: String -> [String] -> Core (String, [Completion])
+    completeDefinitions :: String -> [String] -> M (String, [Completion])
     completeDefinitions left partials = do
       -- get the names of all definitions
       defns <- map (Text.unpack . (\(Name name _) -> name)) <$> Map.keys <$> gets replDefinitions
@@ -147,7 +146,7 @@ main = do
       let left' = if null partials then left else dropWhile (/= ' ') left
       return (left', map simpleCompletion matched)
 
-    completeCommands :: Core (String, [Completion])
+    completeCommands :: M (String, [Completion])
     completeCommands = return ("", map simpleCompletion commands)
 
     loop :: REPL ()
@@ -240,7 +239,7 @@ handleCommand (Load filePath) = do
 handleCommand Reload = do
   result <- handleM $ gets replSource
   case result of
-    Just (Just (filePath, _)) -> handleCommand (Load filePath)
+    Just ((filePath, _)) -> handleCommand (Load filePath)
     _ -> handleCommand Noop
 
 handleCommand (TypeOf expr) = do
