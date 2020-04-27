@@ -1,13 +1,13 @@
 module Syntax.Parser.Type where
 
 
-import Control.Monad.State
-import Control.Monad.Except
-import Data.Loc
-import Data.Text (Text)
-import Data.ByteString.Lazy (ByteString)
+import           Control.Monad.State
+import           Control.Monad.Except
+import           Data.Loc
+import           Data.Text                      ( Text )
+import           Data.ByteString.Lazy           ( ByteString )
 
-import Language.Lexer.Applicative
+import           Language.Lexer.Applicative
 
 --------------------------------------------------------------------------------
 -- | Tokens

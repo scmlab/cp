@@ -1,16 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-module Syntax.Parser.Lexer (lexer, scan) where
+module Syntax.Parser.Lexer
+  ( lexer
+  , scan
+  )
+where
 
-import Syntax.Parser.Type
+import           Syntax.Parser.Type
 
-import Control.Monad.State
-import Control.Monad.Except
-import Data.Char
-import Data.Loc
-import Data.Text (Text, pack)
-import Language.Lexer.Applicative
-import Text.Regex.Applicative
+import           Control.Monad.State
+import           Control.Monad.Except
+import           Data.Char
+import           Data.Loc
+import           Data.Text                      ( Text
+                                                , pack
+                                                )
+import           Language.Lexer.Applicative
+import           Text.Regex.Applicative
 
 matchWhen :: (s -> Bool) -> a -> RE s a
 matchWhen p symbol = msym (\t -> if p t then Just symbol else Nothing)
@@ -19,46 +25,82 @@ matchWhen p symbol = msym (\t -> if p t then Just symbol else Nothing)
 
 
 tokenRE :: RE Char Token
-tokenRE
-  =   TokenDefn         <$ "="
-  <|> TokenHasType      <$ ":"
+tokenRE =
+  TokenDefn
+    <$  "="
+    <|> TokenHasType
+    <$  ":"
   -- type
   -- <|> TokenVarPrefix    <$ "$"
-  <|> TokenDual         <$ "^"
-  <|> TokenTimes        <$ "*"
-  <|> TokenPar          <$ "%"
-  <|> TokenPlus         <$ "+"
-  <|> TokenWith         <$ "&"
-  <|> TokenAcc          <$ "!"
-  <|> TokenReq          <$ "?"
-  <|> TokenExists       <$ "exists"
-  <|> TokenForall       <$ "forall"
-  <|> TokenOne          <$ "1"
-  <|> TokenBot          <$ "Bot"
-  <|> TokenZero         <$ "0"
-  <|> TokenTop          <$ "Top"
-  <|> TokenSessionStart <$ "{"
-  <|> TokenSessionEnd   <$ "}"
-  <|> TokenSessionSep   <$ ";"
+    <|> TokenDual
+    <$  "^"
+    <|> TokenTimes
+    <$  "*"
+    <|> TokenPar
+    <$  "%"
+    <|> TokenPlus
+    <$  "+"
+    <|> TokenWith
+    <$  "&"
+    <|> TokenAcc
+    <$  "!"
+    <|> TokenReq
+    <$  "?"
+    <|> TokenExists
+    <$  "exists"
+    <|> TokenForall
+    <$  "forall"
+    <|> TokenOne
+    <$  "1"
+    <|> TokenBot
+    <$  "Bot"
+    <|> TokenZero
+    <$  "0"
+    <|> TokenTop
+    <$  "Top"
+    <|> TokenSessionStart
+    <$  "{"
+    <|> TokenSessionEnd
+    <$  "}"
+    <|> TokenSessionSep
+    <$  ";"
   -- term
-  <|> TokenLink         <$ "<->"
-  <|> TokenScope        <$ "\\"
-  <|> TokenSeq          <$ "."
-  <|> TokenComp         <$ "|"
-  <|> TokenParenStart   <$ "("
-  <|> TokenParenEnd     <$ ")"
-  <|> TokenBracketStart <$ "["
-  <|> TokenBracketEnd   <$ "]"
-  <|> TokenSelectL      <$ "[inl]"
-  <|> TokenSelectR      <$ "[inr]"
-  <|> TokenCase         <$ "case"
-  <|> TokenCaseSep      <$ ","
-  <|> TokenEmptyOutput  <$ "[]"
-  <|> TokenEnd          <$ "end"
-  <|> TokenEmptyInput   <$ "()"
-  <|> TokenEmptyChoice  <$ "case()"
-  <|> TokenTypeName     <$> typeName
-  <|> TokenTermName     <$> termName
+    <|> TokenLink
+    <$  "<->"
+    <|> TokenScope
+    <$  "\\"
+    <|> TokenSeq
+    <$  "."
+    <|> TokenComp
+    <$  "|"
+    <|> TokenParenStart
+    <$  "("
+    <|> TokenParenEnd
+    <$  ")"
+    <|> TokenBracketStart
+    <$  "["
+    <|> TokenBracketEnd
+    <$  "]"
+    <|> TokenSelectL
+    <$  "[inl]"
+    <|> TokenSelectR
+    <$  "[inr]"
+    <|> TokenCase
+    <$  "case"
+    <|> TokenCaseSep
+    <$  ","
+    <|> TokenEmptyOutput
+    <$  "[]"
+    <|> TokenEnd
+    <$  "end"
+    <|> TokenEmptyInput
+    <$  "()"
+    <|> TokenEmptyChoice
+    <$  "case()"
+    <|> TokenTypeName
+    <$> typeName
+    <|> TokenTermName
+    <$> termName
   -- <|> TokenInt          <$> intRE
 
 (+++) :: RE Char String -> RE Char String -> RE Char String
@@ -66,11 +108,13 @@ tokenRE
 
 -- starts with lowercase alphabets
 termName :: RE Char Text
-termName = fmap pack $ (:) <$> psym isLower <*> many (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
+termName = fmap pack $ (:) <$> psym isLower <*> many
+  (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
 
 -- starts with uppercase alphabets
 typeName :: RE Char Text
-typeName = fmap pack $ (:) <$> psym isUpper <*> many (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
+typeName = fmap pack $ (:) <$> psym isUpper <*> many
+  (psym (\c -> isAlphaNum c || c == '_' || c == '\''))
 
 -- all uppercase alphabets
 -- labelRE :: RE Char Text
@@ -101,13 +145,14 @@ commentStartRE :: RE Char String
 commentStartRE = string "--"
 
 commentEndRE :: String -> RE Char Token
-commentEndRE pref = TokenComment <$> fmap pack (pure pref +++ many anySym +++ string "\n")
+commentEndRE pref =
+  TokenComment <$> fmap pack (pure pref +++ many anySym +++ string "\n")
 
 lexer :: Lexer Token
 lexer = mconcat
-  [ token       (longest tokenRE)
-  , whitespace  (longest whitespaceRE)
-  , whitespace  (longestShortest commentStartRE commentEndRE)
+  [ token (longest tokenRE)
+  , whitespace (longest whitespaceRE)
+  , whitespace (longestShortest commentStartRE commentEndRE)
   ]
 
 --------------------------------------------------------------------------------
@@ -125,7 +170,7 @@ scanNext = do
       put $ ParserState oldLoc newLoc stream src
       return tok
     TsEof -> do
-      modify $ \st -> st { currentLoc = oldLoc , lookaheadLoc = oldLoc}
+      modify $ \st -> st { currentLoc = oldLoc, lookaheadLoc = oldLoc }
       return TokenEOF
     TsError (LexicalError pos) -> do
       throwError $ Lexical src pos

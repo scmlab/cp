@@ -1,11 +1,10 @@
-{-# LANGUAGE OverloadedStrings                  #-}
-
 module Pretty
   ( module Data.Text.Prettyprint.Doc
   , module Data.Text.Prettyprint.Doc.Render.Terminal
-  ) where
+  )
+where
 
-import Pretty.Syntax.Abstract ()
-import Pretty.Syntax.Concrete ()
-import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Render.Terminal
+import           Pretty.Syntax.Abstract         ( )
+import           Pretty.Syntax.Concrete         ( )
+import           Data.Text.Prettyprint.Doc
+import           Data.Text.Prettyprint.Doc.Render.Terminal

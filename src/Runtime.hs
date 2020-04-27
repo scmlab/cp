@@ -1,49 +1,54 @@
 {-# LANGUAGE OverloadedStrings, DeriveAnyClass                  #-}
 
-module Runtime (evaluate) where
+module Runtime
+  ( evaluate
+  )
+where
 
 
   -- import Syntax.Concrete
-import qualified Syntax.Concrete as C
-import Syntax.Abstract
-import qualified TypeChecking.Unification as U
+import qualified Syntax.Concrete               as C
+import           Syntax.Abstract
+-- import qualified TypeChecking.Unification      as U
 -- import Pretty
 
 -- import TypeChecking.Base
-import Base
-import Runtime.Reduction
+import           Base
+import           Runtime.Reduction
 
-import Data.Loc (Loc(..))
-import Data.Maybe (fromJust)
-import qualified Data.List as List
-import Data.Text (Text)
-import Data.Set (Set)
-import qualified Data.Set as Set
-import Data.Map (Map)
-import qualified Data.Map as Map
-import Control.Monad.Reader
-import Control.Monad.State hiding (state)
-import Control.Monad.Except
+-- import           Data.Loc                       ( Loc(..) )
+-- import           Data.Maybe                     ( fromJust )
+import qualified Data.List                     as List
+-- import           Data.Text                      ( Text )
+-- import           Data.Set                       ( Set )
+import qualified Data.Set                      as Set
+-- import           Data.Map                       ( Map )
+-- import qualified Data.Map                      as Map
+import           Control.Monad.Reader
+import           Control.Monad.State     hiding ( state )
+import           Control.Monad.Except
 
-import Pretty
+import           Pretty
 
 evaluate :: C.Process -> M Process
 evaluate process' = do
   definitions <- gets replDefinitions
-  process <- abstract (Just definitions) process'
+  process     <- abstract (Just definitions) process'
   run process
 
 run :: Process -> M Process
 run input = do
 
   -- run !!
-  (result, usedRule) <- runReaderT (runStateT (runExceptT (reduce input)) Nothing) input
+  (result, usedRule) <- runReaderT
+    (runStateT (runExceptT (reduce input)) Nothing)
+    input
 
   case result of
-    Left e -> throwError $ RuntimeError e
+    Left  e      -> throwError $ RuntimeError e
     Right output -> do
       case usedRule of
-        Nothing -> return output  -- stuck
+        Nothing   -> return output  -- stuck
         Just rule -> do
           printStatus output rule
           run output     -- keep reducing
@@ -52,12 +57,10 @@ printStatus :: Process -> Rule -> M ()
 printStatus output rule = do
   liftIO $ putDoc $ line
   liftIO $ putDoc $ paint $ pretty ("=>" :: String) <+> pretty rule <> line
-  liftIO $ putDoc $ line
-    <> pretty (output)
-    <> line
-  where
-    paint :: Doc AnsiStyle -> Doc AnsiStyle
-    paint = annotate (colorDull Blue)
+  liftIO $ putDoc $ line <> pretty (output) <> line
+ where
+  paint :: Doc AnsiStyle -> Doc AnsiStyle
+  paint = annotate (colorDull Blue)
 
 stuck :: RuntimeM Process
 stuck = ask
@@ -88,18 +91,17 @@ reduce input = do
     Just match@(Match chan _ _) -> do
       liftIO $ print match
       reduceAt chan (f match) input
-      where
-        f :: Match  -> Process -> Process -> RuntimeM Process
-        f (Match chan 0 0) p q = reduceProcess chan p q
-        f (Match chan 0 _) p q = rotateLeft chan p q
-        f (Match chan _ 0) p q = rotateRight chan p q
+     where
+      f :: Match -> Process -> Process -> RuntimeM Process
+      f (Match chan 0 0) p q = reduceProcess chan p q
+      f (Match chan 0 _) p q = rotateLeft chan p q
+      f (Match chan _ 0) p q = rotateRight chan p q
 
 rotateLeft :: Chan -> Process -> Process -> RuntimeM Process
 -- we want `p` and `q` both have the same channel as `x`
-rotateLeft x p (Compose y q r) =
-  if Set.member x (freeChans q)
-    then use RotateLeft $ Compose y (Compose x p q) r
-    else use Swap $ Compose x p (Compose y r q)
+rotateLeft x p (Compose y q r) = if Set.member x (freeChans q)
+  then use RotateLeft $ Compose y (Compose x p q) r
+  else use Swap $ Compose x p (Compose y r q)
 rotateLeft x p others = return $ Compose x p others
 
 rotateRight :: Chan -> Process -> Process -> RuntimeM Process
@@ -109,7 +111,7 @@ rotateRight x others p = return $ Compose x others p
 
 checkChannels :: [Chan] -> RuntimeM ()
 checkChannels channels = do
-  let groups = map head $ List.group channels
+  let groups     = map head $ List.group channels
   let allTheSame = length groups == 1
   unless allTheSame $ do
     process <- ask
@@ -128,8 +130,7 @@ reduceProcess chan (OutputT x p) (InputT y q) = do
   checkChannels [chan, x, y]
   use TypeIOReduce $ Compose chan p q
 
-reduceProcess chan p@(InputT _ _) q@(OutputT _ _) =
-  use Swap $ Compose chan q p
+reduceProcess chan p@(InputT _ _) q@(OutputT _ _) = use Swap $ Compose chan q p
 
 
 reduceProcess chan (Accept x y p) (Request x' y' q) = do
@@ -137,77 +138,36 @@ reduceProcess chan (Accept x y p) (Request x' y' q) = do
   checkChannels [y, y']
   use AccReqReduce $ Compose y p q
 
-reduceProcess chan _ _ = do
-  stuck
+reduceProcess _chan _ _ = stuck
 
 reduceAt
   :: Chan                                     -- the channel to target on Compose
   -> (Process -> Process -> RuntimeM Process) -- on Compose
   -> Process
   -> RuntimeM Process
-reduceAt target f (Compose x p q) = do
-  if target == x
-    then f p q
-    else Compose
-          <$> pure x
-          <*> reduceAt target f p
-          <*> reduceAt target f q
+reduceAt target f (Compose x p q) = if target == x
+  then f p q
+  else Compose <$> pure x <*> reduceAt target f p <*> reduceAt target f q
 reduceAt target f (Output x y p q) =
-  Output
-    <$> pure x
-    <*> pure y
-    <*> reduceAt target f p
-    <*> reduceAt target f q
+  Output <$> pure x <*> pure y <*> reduceAt target f p <*> reduceAt target f q
 reduceAt target f (Input x y p) =
-  Input
-    <$> pure x
-    <*> pure y
-    <*> reduceAt target f p
-reduceAt target f (SelectL x p) =
-  SelectL
-    <$> pure x
-    <*> reduceAt target f p
-reduceAt target f (SelectR x p) =
-  SelectR
-    <$> pure x
-    <*> reduceAt target f p
+  Input <$> pure x <*> pure y <*> reduceAt target f p
+reduceAt target f (SelectL x p) = SelectL <$> pure x <*> reduceAt target f p
+reduceAt target f (SelectR x p) = SelectR <$> pure x <*> reduceAt target f p
 reduceAt target f (Choice x p q) =
-  Choice
-    <$> pure x
-    <*> reduceAt target f p
-    <*> reduceAt target f q
+  Choice <$> pure x <*> reduceAt target f p <*> reduceAt target f q
 reduceAt target f (Accept x y p) =
-  Accept
-    <$> pure x
-    <*> pure y
-    <*> reduceAt target f p
+  Accept <$> pure x <*> pure y <*> reduceAt target f p
 reduceAt target f (Request x y p) =
-  Request
-    <$> pure x
-    <*> pure y
-    <*> reduceAt target f p
-reduceAt target f (OutputT x p) =
-  OutputT
-    <$> pure x
-    <*> reduceAt target f p
-reduceAt target f (InputT x p) =
-  InputT
-    <$> pure x
-    <*> reduceAt target f p
-reduceAt _ _ (EmptyOutput x) =
-  EmptyOutput
-    <$> pure x
+  Request <$> pure x <*> pure y <*> reduceAt target f p
+reduceAt target f (OutputT x p  ) = OutputT <$> pure x <*> reduceAt target f p
+reduceAt target f (InputT  x p  ) = InputT <$> pure x <*> reduceAt target f p
+reduceAt _      _ (EmptyOutput x) = EmptyOutput <$> pure x
 reduceAt target f (EmptyInput x p) =
-  EmptyInput
-    <$> pure x
-    <*> reduceAt target f p
-reduceAt _ _ (EmptyChoice x) =
-  EmptyChoice
-    <$> pure x
+  EmptyInput <$> pure x <*> reduceAt target f p
+reduceAt _ _ (EmptyChoice x) = EmptyChoice <$> pure x
 reduceAt target f (Mix p q) =
-  Mix
-    <$> reduceAt target f p
-    <*> reduceAt target f q
+  Mix <$> reduceAt target f p <*> reduceAt target f q
 reduceAt _ _ others = return others
 
 
@@ -306,7 +266,7 @@ hasReduced = do
   rule <- get
   case rule of
     Nothing -> return False
-    Just _ -> return True
+    Just _  -> return True
 
 putRule :: Rule -> RuntimeM ()
 putRule rule = do
@@ -321,9 +281,9 @@ data Rule = Swap | RotateLeft | RotateRight
   | AccReqReduce
 
 instance Pretty Rule where
-  pretty Swap = "Swap"
-  pretty RotateLeft = "Rotate left"
-  pretty RotateRight = "Rotate right"
-  pretty IOReduce = "Input/output reduction"
+  pretty Swap         = "Swap"
+  pretty RotateLeft   = "Rotate left"
+  pretty RotateRight  = "Rotate right"
+  pretty IOReduce     = "Input/output reduction"
   pretty TypeIOReduce = "Type input/output reduction"
   pretty AccReqReduce = "Accept/request reduction"

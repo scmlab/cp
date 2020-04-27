@@ -2,16 +2,15 @@ module TypeChecking.Base where
 
 -- import qualified Syntax.Concrete as C
 -- import Syntax.Binding
-import Syntax.Concrete
+import           Syntax.Concrete
 --
-import Prelude hiding (lookup)
+import           Prelude                 hiding ( lookup )
 
 
-import Data.Text (Text)
+import           Data.Text                      ( Text )
 
-import Control.Monad.State
-import Control.Monad.Except
-import Control.Monad.Reader
+import           Control.Monad.Except
+import           Control.Monad.Reader
 
 --------------------------------------------------------------------------------
 -- | State

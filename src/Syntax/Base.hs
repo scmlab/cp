@@ -1,11 +1,6 @@
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE MultiParamTypeClasses, FunctionalDependencies #-}
-{-# LANGUAGE DeriveFunctor, FlexibleInstances #-}
-
 module Syntax.Base where
 
-import Data.Text (Text)
-import Data.Loc (Loc(..))
+import           Data.Loc                       ( Loc(..) )
 
 instance Ord Loc where
   Loc _ _ `compare` Loc _ _ = EQ

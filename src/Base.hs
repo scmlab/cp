@@ -1,21 +1,22 @@
 {-# LANGUAGE OverloadedStrings                  #-}
 module Base where
 
-import qualified Syntax.Abstract as A
+import qualified Syntax.Abstract               as A
 -- import qualified Syntax.Binding as B
 -- import qualified Syntax.Concrete as C
 -- import Syntax.Binding
-import Syntax.Concrete
-import Syntax.Parser
-import TypeChecking.Base
+import           Syntax.Concrete
+import           Syntax.Parser
+import           TypeChecking.Base
 
-import Data.ByteString.Lazy (ByteString)
-import Data.Map (Map)
-import qualified Data.Map as Map
+import           Data.ByteString.Lazy           ( ByteString )
+import           Data.Map                       ( Map )
+import qualified Data.Map                      as Map
+import           Data.Maybe                     ( fromMaybe )
 
-import Control.Monad.State
-import Control.Monad.Except
-import System.Console.Haskeline
+import           Control.Monad.State
+import           Control.Monad.Except
+import           System.Console.Haskeline
 
 --------------------------------------------------------------------------------
 -- | The M Monad
@@ -60,15 +61,15 @@ runREPL settings program = runStateT (runInputT settings program) initialState
 
 -- instances of Haskeline.MonadException
 instance MonadException m => MonadException (StateT s m) where
-    controlIO f = StateT $ \s -> controlIO $ \(RunIO run) -> let
-                    run' = RunIO (fmap (StateT . const) . run . flip runStateT s)
-                    in fmap (flip runStateT s) $ f run'
+  controlIO f = StateT $ \s -> controlIO $ \(RunIO run) ->
+    let run' = RunIO (fmap (StateT . const) . run . flip runStateT s)
+    in  fmap (flip runStateT s) $ f run'
 
 
 instance (MonadException m) => MonadException (ExceptT e m) where
-    controlIO f = ExceptT $ controlIO $ \(RunIO run) -> let
-                    run' = RunIO (fmap ExceptT . run . runExceptT)
-                    in fmap runExceptT $ f run'
+  controlIO f = ExceptT $ controlIO $ \(RunIO run) ->
+    let run' = RunIO (fmap ExceptT . run . runExceptT)
+    in  fmap runExceptT $ f run'
 
 --------------------------------------------------------------------------------
 -- | Runtime Error
@@ -85,7 +86,8 @@ data RuntimeError
 
 abstract :: A.FromConcrete a b => Maybe Definitions -> a -> M b
 abstract definitions process = do
-  let result = A.runAbstractM (maybe Map.empty id definitions) (A.fromConcrete process)
+  let result = A.runAbstractM (fromMaybe Map.empty definitions)
+                              (A.fromConcrete process)
   case result of
-    Left err -> throwError $ ScopeError err
+    Left  err -> throwError $ ScopeError err
     Right val -> return val

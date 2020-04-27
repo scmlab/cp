@@ -1,22 +1,20 @@
 {-# LANGUAGE OverloadedStrings                  #-}
-{-# LANGUAGE TypeSynonymInstances               #-}
 {-# LANGUAGE FlexibleInstances                  #-}
 
 module Pretty.Base where
 
-import Data.ByteString.Lazy (ByteString)
-import qualified Data.ByteString.Lazy.Char8 as BS
+import           Data.ByteString.Lazy           ( ByteString )
+import qualified Data.ByteString.Lazy.Char8    as BS
 
-import Data.Text.Prettyprint.Doc
-import Data.Text.Prettyprint.Doc.Render.Terminal
-import Data.Text (Text)
+import           Data.Text.Prettyprint.Doc
+import           Data.Text.Prettyprint.Doc.Render.Terminal
+import           Data.Text                      ( Text )
 
-import qualified Data.Loc as Loc
+import qualified Data.Loc                      as Loc
 
-import Data.Loc
-import qualified Data.Set as Set
-import Data.Monoid (mempty, (<>))
-import System.IO
+import           Data.Loc
+import qualified Data.Set                      as Set
+import           System.IO
 
 
 --------------------------------------------------------------------------------
@@ -37,18 +35,20 @@ data ReportMsg
 
 instance Report ReportMsg where
   reportS (H1 s) _ = annotate (color Red) $ pretty s
-  reportS (P s) _ = s <> line
-  reportS (CODE loc) Nothing = annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
+  reportS (P  s) _ = s <> line
+  reportS (CODE loc) Nothing =
+    annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
   reportS (CODE loc) (Just src) = indent 2 $ vsep
-        [ annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
-        , reAnnotate toAnsiStyle $ prettySourceCode $ SourceCode src loc 1
-        ]
+    [ annotate (colorDull Blue) (pretty $ Loc.displayLoc loc)
+    , reAnnotate toAnsiStyle $ prettySourceCode $ SourceCode src loc 1
+    ]
 
 instance Report [ReportMsg] where
-  reportS msgs src = vsep $
-          [ softline' ]
-      ++  map (\msg -> indent 2 $ reportS msg src <> line) msgs
-      ++  [ softline' ]
+  reportS msgs src =
+    vsep
+      $  [softline']
+      ++ map (\msg -> indent 2 $ reportS msg src <> line) msgs
+      ++ [softline']
 
 
 --------------------------------------------------------------------------------
@@ -65,71 +65,81 @@ data SourceCode = SourceCode
                     Int         -- number of the neighboring lines to be rendered
 
 printSourceCode :: SourceCode -> IO ()
-printSourceCode = renderIO stdout . reAnnotateS toAnsiStyle . layoutPretty defaultLayoutOptions . prettySourceCode
+printSourceCode =
+  renderIO stdout
+    . reAnnotateS toAnsiStyle
+    . layoutPretty defaultLayoutOptions
+    . prettySourceCode
 
 toAnsiStyle :: SourceCodeAnnotation -> AnsiStyle
-toAnsiStyle Other = mempty
+toAnsiStyle Other             = mempty
 toAnsiStyle HighlightedLineNo = colorDull Blue
-toAnsiStyle HighlightedArea = color Red
+toAnsiStyle HighlightedArea   = color Red
 
 -- instance Pretty SourceCode where
 prettySourceCode :: SourceCode -> Doc SourceCodeAnnotation
 prettySourceCode (SourceCode source NoLoc _) = pretty $ BS.unpack source
 prettySourceCode (SourceCode source (Loc from to) spread) =
-  vsep $ zipWith (<+>) lineNos lines'
-      ++ [softline']
+  vsep $ zipWith (<+>) lineNos lines' ++ [softline']
 
-  where   sourceLines = lines (BS.unpack source)
+ where
+  sourceLines = lines (BS.unpack source)
 
-          start = (posLine from - spread) `max` 1
-          end   = (posLine to   + spread) `min` length sourceLines
+  start       = (posLine from - spread) `max` 1
+  end         = (posLine to + spread) `min` length sourceLines
 
-          -- max width of the greatest line number
-          lineNoColumnWidth = 2 * ceiling (fromIntegral (lineNoWidth end) / 2.0 :: Double)
+  -- max width of the greatest line number
+  lineNoColumnWidth =
+    2 * ceiling (fromIntegral (lineNoWidth end) / 2.0 :: Double)
 
-          -- measures the width of a number (decimal)
-          lineNoWidth :: Int -> Int
-          lineNoWidth = succ . (floor :: Double -> Int) . logBase 10 . fromIntegral
+  -- measures the width of a number (decimal)
+  lineNoWidth :: Int -> Int
+  lineNoWidth = succ . (floor :: Double -> Int) . logBase 10 . fromIntegral
 
-          prettyLineNo :: Int -> Doc SourceCodeAnnotation
-          prettyLineNo n =
-                pretty (replicate (lineNoColumnWidth - lineNoWidth n) ' ')
-            <>  pretty n
-            <+> pretty '|'
+  prettyLineNo :: Int -> Doc SourceCodeAnnotation
+  prettyLineNo n =
+    pretty (replicate (lineNoColumnWidth - lineNoWidth n) ' ')
+      <>  pretty n
+      <+> pretty '|'
 
-          lineNos :: [Doc SourceCodeAnnotation]
-          lineNos =
-                [                              prettyLineNo n | n <- [ start          .. posLine from - 1 ]  ]
-            ++  [ annotate HighlightedLineNo $ prettyLineNo n | n <- [ posLine from   .. posLine to       ]  ]
-            ++  [                              prettyLineNo n | n <- [ posLine to + 1 .. end                  ]  ]
+  lineNos :: [Doc SourceCodeAnnotation]
+  lineNos =
+    [ prettyLineNo n | n <- [start .. posLine from - 1] ]
+      ++ [ annotate HighlightedLineNo $ prettyLineNo n
+         | n <- [posLine from .. posLine to]
+         ]
+      ++ [ prettyLineNo n | n <- [posLine to + 1 .. end] ]
 
 
-          lines' :: [Doc SourceCodeAnnotation]
-          lines' = map prettyLine $ zip [ start .. end ]
-            $ drop (start - 1)
-            $ take end
-            $ sourceLines
+  lines' :: [Doc SourceCodeAnnotation]
+  lines' =
+    map prettyLine
+      $ zip [start .. end]
+      $ drop (start - 1)
+      $ take end
+      $ sourceLines
 
-          substring :: Int -> Maybe Int -> String -> String
-          substring startFrom Nothing       = drop (startFrom - 1)
-          substring startFrom (Just endAt)  = drop (startFrom - 1) . take endAt
+  substring :: Int -> Maybe Int -> String -> String
+  substring startFrom Nothing      = drop (startFrom - 1)
+  substring startFrom (Just endAt) = drop (startFrom - 1) . take endAt
 
-          prettyLine :: (Int, String) -> Doc SourceCodeAnnotation
-          prettyLine (n, s)
-            | n == posLine from && n == posLine to =
-                    annotate Other            (pretty $ substring 0              (Just (posCol from - 1)) s)
-                <>  annotate HighlightedArea  (pretty $ substring (posCol from)  (Just (posCol to))       s)
-                <>  annotate Other            (pretty $ substring (posCol to + 1) Nothing                 s)
-            | n == posLine from =
-                    annotate Other            (pretty $ substring 0              (Just (posCol from - 1)) s)
-                <>  annotate HighlightedArea  (pretty $ substring (posCol from)  Nothing                  s)
-            | n == posLine to =
-                    annotate HighlightedArea  (pretty $ substring 0              (Just (posCol to))       s)
-                <>  annotate Other            (pretty $ substring (posCol to)    Nothing                  s)
-            | n > posLine from && n < posLine to =
-                    annotate HighlightedArea  (pretty s)
-            | otherwise =
-                    annotate Other            (pretty s)
+  prettyLine :: (Int, String) -> Doc SourceCodeAnnotation
+  prettyLine (n, s)
+    | n == posLine from && n == posLine to
+    = annotate Other (pretty $ substring 0 (Just (posCol from - 1)) s)
+      <> annotate HighlightedArea
+                  (pretty $ substring (posCol from) (Just (posCol to)) s)
+      <> annotate Other (pretty $ substring (posCol to + 1) Nothing s)
+    | n == posLine from
+    = annotate Other (pretty $ substring 0 (Just (posCol from - 1)) s)
+      <> annotate HighlightedArea (pretty $ substring (posCol from) Nothing s)
+    | n == posLine to
+    = annotate HighlightedArea (pretty $ substring 0 (Just (posCol to)) s)
+      <> annotate Other (pretty $ substring (posCol to) Nothing s)
+    | n > posLine from && n < posLine to
+    = annotate HighlightedArea (pretty s)
+    | otherwise
+    = annotate Other (pretty s)
 
 
 --------------------------------------------------------------------------------

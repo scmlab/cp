@@ -3,41 +3,43 @@ module Main where
 
 -- import Syntax.Base
 -- import qualified Syntax.Concrete as C
-import Syntax.Concrete
-import qualified Syntax.Parser as Parser
-import TypeChecking
+import           Syntax.Concrete
+import qualified Syntax.Parser                 as Parser
+import           TypeChecking
 -- import TypeChecking.Binding
 -- import TypeChecking.Infer
-import TypeChecking.Infer (inferProcess)
-import TypeChecking.Base
-import Pretty.Error ()
-import Pretty.Base
-import Base
-import Runtime
+import           TypeChecking.Infer             ( inferProcess )
+import           TypeChecking.Base
+import           Pretty.Error                   ( )
+import           Pretty.Base
+import           Base
+import           Runtime
 
-import Data.ByteString.Lazy (ByteString)
-import qualified Data.ByteString.Lazy as BS
-import qualified Data.ByteString.Lazy.Char8 as BS8
-import Data.Text.Prettyprint.Doc.Render.Terminal
+import           Data.ByteString.Lazy           ( ByteString )
+import qualified Data.ByteString.Lazy          as BS
+import qualified Data.ByteString.Lazy.Char8    as BS8
+import           Data.Text.Prettyprint.Doc.Render.Terminal
 
-import qualified Data.Map as Map
+import qualified Data.Map                      as Map
 -- import qualified Data.Set as Set
 -- import Data.Maybe (isNothing)
-import Data.Char (isSpace)
-import Data.List (dropWhileEnd, isPrefixOf)
-import qualified Data.Text as Text
-import Data.Text.Prettyprint.Doc
+import           Data.Char                      ( isSpace )
+import           Data.List                      ( dropWhileEnd
+                                                , isPrefixOf
+                                                )
+import qualified Data.Text                     as Text
+import           Data.Text.Prettyprint.Doc
 
 -- import qualified Data.ByteString.Lazy.Char8 as BC
 
-import Control.Exception (IOException, try)
-import Control.Monad.State hiding (state)
-import Control.Monad.Except
-import Control.Monad.Reader
+import           Control.Exception              ( try )
+import           Control.Monad.State     hiding ( state )
+import           Control.Monad.Except
+import           Control.Monad.Reader
 
-import System.Console.Haskeline
-import System.Console.GetOpt
-import System.Environment
+import           System.Console.Haskeline
+import           System.Console.GetOpt
+import           System.Environment
 -- import Debug.Trace
 
 
@@ -49,7 +51,7 @@ getSourceOrThrow = do
   result <- gets replSource
   case result of
     Nothing -> throwError $ Panic "Can't read the stored source code"
-    Just v -> return v
+    Just v  -> return v
 
 --------------------------------------------------------------------------------
 -- |
@@ -58,24 +60,24 @@ loadSource :: FilePath -> M ()
 loadSource filePath = do
   readResult <- liftIO $ try (BS.readFile filePath)
   case readResult of
-      Left err -> throwError $ Panic $ show (err :: IOException)
-      Right source -> do
-        -- store the source in the monad for later debugging use
-        modify $ \ st -> st { replSource = Just (filePath, source) }
+    Left  err    -> throwError $ Panic $ show (err :: IOException)
+    Right source -> do
+      -- store the source in the monad for later debugging use
+      modify $ \st -> st { replSource = Just (filePath, source) }
 
 parseSource :: M Program
 parseSource = do
   (filePath, source) <- getSourceOrThrow
   case Parser.parseProgram filePath source of
-      Left err -> throwError $ ParseError err
-      Right program -> do
-        modify $ \ st -> st { replProgram = Just program }
-        return program
+    Left  err     -> throwError $ ParseError err
+    Right program -> do
+      modify $ \st -> st { replProgram = Just program }
+      return program
 
 parseProcess :: ByteString -> M Process
 parseProcess raw = do
   case Parser.parseProcess raw of
-    Left err -> throwError $ ParseError err
+    Left  err     -> throwError $ ParseError err
     Right process -> return process
 
 runTCM :: TCM a -> M a
@@ -83,7 +85,7 @@ runTCM f = do
   definitions <- gets replDefinitions
   let result = runReader (runExceptT f) definitions
   case result of
-    Left err -> throwError $ TypeError err
+    Left  err -> throwError $ TypeError err
     Right val -> return val
 
 
@@ -93,93 +95,95 @@ main = do
   case optMode opts of
     ModeHelp -> putStrLn $ usageInfo usage options
     ModeREPL -> void $ runREPL settings loop
-    ModeDev -> void $ runREPL settings $ do
+    ModeDev  -> void $ runREPL settings $ do
       _ <- handleCommandREPL $ parseCommand ":l test/source/a.clp"
       loop
       -- void $ runInputT settings loop
-  where
 
-    settings :: Settings (StateT MState IO)
-    settings = setComplete customComplete defaultSettings
+ where
 
-    customComplete :: CompletionFunc (StateT MState IO)
-    customComplete (left, right) = case match left of
-      Complete ":load" -> completeFilename (left, right)
-      Complete ":reload" -> completeFilename (left, right)
-      Complete ":type" -> completeDefinitions left []
-      Complete _ -> return (left, [Completion "" "" False])
-      Partial matched -> return ("", map simpleCompletion matched)
-      Over ":load" _ -> completeFilename (left, right)
-      Over ":reload" _ -> completeFilename (left, right)
-      Over ":type" xs -> completeDefinitions left xs
-      Over _ _ -> return (left, [Completion "" "" False])
-      None "" -> completeCommands
-      None _ -> completeDefinitions left []
+  settings :: Settings (StateT MState IO)
+  settings = setComplete customComplete defaultSettings
 
-    completeDefinitions :: String -> [String] -> StateT MState IO (String, [Completion])
-    completeDefinitions left partials = do
-      -- get the names of all definitions
-      defns <- map (Text.unpack . (\(Name name _) -> name)) <$> Map.keys <$> gets replDefinitions
-      -- complete only the last chuck
-      let partial = if null partials then "" else last partials
-      let matched = case filter (isPrefixOf partial) defns of
-                      [] -> defns
-                      xs -> xs
-      let left' = if null partials then left else dropWhile (/= ' ') left
-      return (left', map simpleCompletion matched)
+  customComplete :: CompletionFunc (StateT MState IO)
+  customComplete (left, right) = case match left of
+    Complete ":load"   -> completeFilename (left, right)
+    Complete ":reload" -> completeFilename (left, right)
+    Complete ":type"   -> completeDefinitions left []
+    Complete _         -> return (left, [Completion "" "" False])
+    Partial  matched   -> return ("", map simpleCompletion matched)
+    Over ":load"   _   -> completeFilename (left, right)
+    Over ":reload" _   -> completeFilename (left, right)
+    Over ":type"   xs  -> completeDefinitions left xs
+    Over _         _   -> return (left, [Completion "" "" False])
+    None ""            -> completeCommands
+    None _             -> completeDefinitions left []
 
-    completeCommands :: StateT MState IO (String, [Completion])
-    completeCommands = return ("", map simpleCompletion commands)
+  completeDefinitions
+    :: String -> [String] -> StateT MState IO (String, [Completion])
+  completeDefinitions left partials = do
+    -- get the names of all definitions
+    defns <-
+      map (Text.unpack . (\(Name name _) -> name))
+      <$> Map.keys
+      <$> gets replDefinitions
+    -- complete only the last chuck
+    let partial = if null partials then "" else last partials
+    let matched = case filter (isPrefixOf partial) defns of
+          [] -> defns
+          xs -> xs
+    let left' = if null partials then left else dropWhile (/= ' ') left
+    return (left', map simpleCompletion matched)
 
-    handleCommandREPL :: Command -> REPL Bool
-    handleCommandREPL command = do
-      result <- lift $ runExceptT $ handleCommand command
-      case result of
-        Left err -> do
-          printError err
-          return True
-        Right keepLooping -> return keepLooping
+  completeCommands :: StateT MState IO (String, [Completion])
+  completeCommands = return ("", map simpleCompletion commands)
 
-    printError :: Error -> REPL ()
-    printError err = do
-      state <- lift get
-      liftIO $ printErrorIO state err
+  handleCommandREPL :: Command -> REPL Bool
+  handleCommandREPL command = do
+    result <- lift $ runExceptT $ handleCommand command
+    case result of
+      Left err -> do
+        printError err
+        return True
+      Right keepLooping -> return keepLooping
 
-      where
-        printErrorIO :: MState -> Error -> IO ()
-        printErrorIO state _err = case replSource state of
-          Nothing -> putDoc $ report err
-          Just (_, source) -> putDoc $ reportS err (Just source)
+  printError :: Error -> REPL ()
+  printError err = do
+    state <- lift get
+    liftIO $ printErrorIO state err
+
+   where
+    printErrorIO :: MState -> Error -> IO ()
+    printErrorIO state _err = case replSource state of
+      Nothing          -> putDoc $ report err
+      Just (_, source) -> putDoc $ reportS err (Just source)
 
 
 
-    loop :: REPL ()
-    loop = do
-      minput <- getInputLine "> "
-      case minput of
-        Nothing -> return ()
-        Just input -> do
-          keepLooping <- handleCommandREPL $ parseCommand input
-          when keepLooping loop
+  loop :: REPL ()
+  loop = do
+    minput <- getInputLine "> "
+    case minput of
+      Nothing    -> return ()
+      Just input -> do
+        keepLooping <- handleCommandREPL $ parseCommand input
+        when keepLooping loop
 
 -- return False to exit the REPL loop
 handleCommand :: Command -> M Bool
 handleCommand (Load filePath) = do
   loadSource filePath
-  program <- parseSource
+  program     <- parseSource
   definitions <- scopeCheck program
-  inferred <- runTCM $ typeCheck definitions
-  modify $ \ st -> st
-    { replInferred = inferred
-    , replDefinitions = definitions
-    }
+  inferred    <- runTCM $ typeCheck definitions
+  modify $ \st -> st { replInferred = inferred, replDefinitions = definitions }
     -- liftIO $ putStrLn $ "loaded: " ++ filePath
   return True
 handleCommand Reload = do
   result <- gets replSource
   case result of
     Just ((filePath, _)) -> handleCommand (Load filePath)
-    _ -> handleCommand Noop
+    _                    -> handleCommand Noop
 
 handleCommand (TypeOf expr) = do
   -- -- global environment setup
@@ -202,8 +206,8 @@ handleCommand (Debug expr) = do
 
   return True
 
-handleCommand Quit = return False
-handleCommand Help = liftIO displayHelp >> return True
+handleCommand Quit        = return False
+handleCommand Help        = liftIO displayHelp >> return True
 handleCommand (Eval expr) = do
   -- -- global environment setup
   -- program <- gets replProgram
@@ -247,24 +251,27 @@ data Options = Options
   }
 
 defaultOptions :: Options
-defaultOptions = Options
-  { optMode = ModeREPL
-  }
+defaultOptions = Options { optMode = ModeREPL }
 
 options :: [OptDescr (Options -> Options)]
 options =
-  [ Option ['h']  ["help"]  (NoArg (\opts -> opts { optMode = ModeHelp }))  "print this help message"
-  , Option ['d']  ["dev"]  (NoArg (\opts -> opts { optMode = ModeDev }))   "for testing"
+  [ Option ['h']
+           ["help"]
+           (NoArg (\opts -> opts { optMode = ModeHelp }))
+           "print this help message"
+  , Option ['d']
+           ["dev"]
+           (NoArg (\opts -> opts { optMode = ModeDev }))
+           "for testing"
   ]
 
 usage :: String
-usage =  "Usage: clp [Options...] filepath\n"
+usage = "Usage: clp [Options...] filepath\n"
 
 parseOpts :: [String] -> IO (Options, [String])
-parseOpts argv =
-  case getOpt Permute options argv of
-    (o,n,[]  ) -> return (foldl (flip id) defaultOptions o, n)
-    (_,_,errs) -> ioError $ userError $ concat errs ++ usageInfo usage options
+parseOpts argv = case getOpt Permute options argv of
+  (o, n, []  ) -> return (foldl (flip id) defaultOptions o, n)
+  (_, _, errs) -> ioError $ userError $ concat errs ++ usageInfo usage options
 
 
 --------------------------------------------------------------------------------
@@ -279,18 +286,18 @@ trim = dropWhileEnd isSpace . dropWhile isSpace
 parseCommand :: String -> Command
 parseCommand key
   | ":load" `isPrefixOf` key = (Load . trim . drop 5) key
-  | ":l"    `isPrefixOf` key = (Load . trim . drop 2) key
+  | ":l" `isPrefixOf` key = (Load . trim . drop 2) key
   | ":reload" `isPrefixOf` key = Reload
-  | ":r"    `isPrefixOf` key = Reload
+  | ":r" `isPrefixOf` key = Reload
   | ":type" `isPrefixOf` key = (TypeOf . BS8.pack . trim . drop 5) key
-  | ":t"    `isPrefixOf` key = (TypeOf . BS8.pack . trim . drop 2) key
+  | ":t" `isPrefixOf` key = (TypeOf . BS8.pack . trim . drop 2) key
   | ":debug" `isPrefixOf` key = (Debug . BS8.pack . trim . drop 5) key
-  | ":d"    `isPrefixOf` key = (Debug . BS8.pack . trim . drop 2) key
+  | ":d" `isPrefixOf` key = (Debug . BS8.pack . trim . drop 2) key
   | otherwise = case trim key of
-      ":q"    -> Quit
-      ":quit" -> Quit
-      ""      -> Noop
-      s       -> Eval (BS8.pack s)
+    ":q"    -> Quit
+    ":quit" -> Quit
+    ""      -> Noop
+    s       -> Eval (BS8.pack s)
         -- traceShow "!!!" (Noop)
 
 -- whenLoaded :: REPL () -> REPL ()
@@ -301,18 +308,18 @@ parseCommand key
 --     else program
 
 commands :: [String]
-commands = [ ":load", ":reload", ":type", ":quit", ":help" ]
+commands = [":load", ":reload", ":type", ":quit", ":help"]
 
 data Matching = Complete String | Partial [String] | Over String [String] | None String
   deriving (Show)
 
 match :: String -> Matching
 match raw = case words (reverse raw) of
-  [] -> None ""
-  (x:xs) -> if elem x commands
-              then if null xs then Complete x else Over x xs
-              else case filter (isPrefixOf x) commands of
-                [] -> None raw
-                matched -> if length x == 2
-                  then if null xs then Complete (head matched) else Over (head matched) xs
-                  else Partial matched
+  []       -> None ""
+  (x : xs) -> if elem x commands
+    then if null xs then Complete x else Over x xs
+    else case filter (isPrefixOf x) commands of
+      []      -> None raw
+      matched -> if length x == 2
+        then if null xs then Complete (head matched) else Over (head matched) xs
+        else Partial matched
