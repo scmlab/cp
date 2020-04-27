@@ -98,8 +98,6 @@ main = do
     ModeDev  -> void $ runREPL settings $ do
       _ <- handleCommandREPL $ parseCommand ":l test/source/a.clp"
       loop
-      -- void $ runInputT settings loop
-
  where
 
   settings :: Settings (StateT MState IO)
@@ -186,10 +184,10 @@ handleCommand Reload = do
     _                    -> handleCommand Noop
 
 handleCommand (TypeOf expr) = do
-  -- -- global environment setup
-  -- program <- gets replProgram
   -- local expression parsing
   process <- parseProcess expr
+  -- scope check the process
+  scopeCheckProcess process
   -- infer session
   session <- runTCM $ inferProcess process
   liftIO $ putDoc $ report session <> line
@@ -213,6 +211,7 @@ handleCommand (Eval expr) = do
   -- program <- gets replProgram
   -- local expression parsing
   process <- parseProcess expr
+  scopeCheckProcess process
   --
   _result <- evaluate process
   liftIO $ putDoc $ pretty _result <> line

@@ -43,6 +43,38 @@ scopeCheck program = do
 
   return definitions
 
+-- see if the names in a process is in the scope
+scopeCheckProcess :: Process -> M ()
+scopeCheckProcess process = case process of
+  Call name _ -> do
+    definitions <- gets replDefinitions
+    if Map.member name definitions
+      then return ()
+      else throwError $ ScopeError $ DefnNotFound process name
+  Link _ _ _        -> return ()
+  Compose _ _ p q _ -> do
+    scopeCheckProcess p
+    scopeCheckProcess q
+  Output _ _ p q _ -> do
+    scopeCheckProcess p
+    scopeCheckProcess q
+  Input _ _ p _  -> scopeCheckProcess p
+  SelectL _ p _  -> scopeCheckProcess p
+  SelectR _ p _  -> scopeCheckProcess p
+  Choice _ p q _ -> do
+    scopeCheckProcess p
+    scopeCheckProcess q
+  Accept  _ _ p _  -> scopeCheckProcess p
+  Request _ _ p _  -> scopeCheckProcess p
+  OutputT _ _ p _  -> scopeCheckProcess p
+  InputT  _ _ p _  -> scopeCheckProcess p
+  EmptyOutput _ _  -> return ()
+  EmptyInput _ p _ -> scopeCheckProcess p
+  EmptyChoice _ _  -> return ()
+  End _            -> return ()
+  Mix p q _        -> do
+    scopeCheckProcess p
+    scopeCheckProcess q
 
 typeCheck :: Definitions -> TCM (Map Name Session)
 typeCheck = Map.traverseMaybeWithKey typeCheckOrInfer
