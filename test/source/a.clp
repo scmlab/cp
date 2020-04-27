@@ -22,8 +22,6 @@ count = x[? Top] . x[s] . (!s(f) . f(a) . incr | x[z] . (nought | x <-> y))
 a = \x . (zero | count)
 b = \x . (one | count)
 
-
-
 c = \x .
     ( \y .
       ( x[Top] . y() . end

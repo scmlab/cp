@@ -8,6 +8,7 @@ import           Prelude                 hiding ( lookup )
 
 
 import           Data.Text                      ( Text )
+import           Data.Loc                       ( Loc )
 
 import           Control.Monad.Except
 import           Control.Monad.Reader
@@ -54,7 +55,7 @@ data TypeError
 data ScopeError
   = TypeSigDuplicated Name Name
   | TermDefnDuplicated Name Name
-  | DefnNotFound Process Name
+  | DefnNotFound Name
   | RecursiveCall [Name]
   -- | ChanNotFound Process (Set Text)
   -- | ChanFound Process (Set Text)

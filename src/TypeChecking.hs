@@ -35,46 +35,52 @@ scopeCheck :: Program -> M Definitions
 scopeCheck program = do
   -- check the program for duplicated definitions
   checkDuplications program
-  -- check the program for recursive calls
-  checkRecursion program
 
   let definitions = toDefinitions program
-  modify $ \st -> st { replDefinitions = definitions }
 
+  let callGraph   = buildCallGraph definitions
+  -- see if there are recursive calls
+  checkRecursiveCalls callGraph
+  -- see if there are out-of-scope calls
+  checkOutOfScopeCalls callGraph
+
+
+  -- store and return the checked definitions
+  modify $ \st -> st { replDefinitions = definitions }
   return definitions
 
--- see if the names in a process is in the scope
-scopeCheckProcess :: Process -> M ()
-scopeCheckProcess process = case process of
-  Call name _ -> do
-    definitions <- gets replDefinitions
-    if Map.member name definitions
-      then return ()
-      else throwError $ ScopeError $ DefnNotFound process name
-  Link _ _ _        -> return ()
-  Compose _ _ p q _ -> do
-    scopeCheckProcess p
-    scopeCheckProcess q
-  Output _ _ p q _ -> do
-    scopeCheckProcess p
-    scopeCheckProcess q
-  Input _ _ p _  -> scopeCheckProcess p
-  SelectL _ p _  -> scopeCheckProcess p
-  SelectR _ p _  -> scopeCheckProcess p
-  Choice _ p q _ -> do
-    scopeCheckProcess p
-    scopeCheckProcess q
-  Accept  _ _ p _  -> scopeCheckProcess p
-  Request _ _ p _  -> scopeCheckProcess p
-  OutputT _ _ p _  -> scopeCheckProcess p
-  InputT  _ _ p _  -> scopeCheckProcess p
-  EmptyOutput _ _  -> return ()
-  EmptyInput _ p _ -> scopeCheckProcess p
-  EmptyChoice _ _  -> return ()
-  End _            -> return ()
-  Mix p q _        -> do
-    scopeCheckProcess p
-    scopeCheckProcess q
+-- -- see if the names in a process is in the scope
+-- scopeCheckProcess :: Process -> M ()
+-- scopeCheckProcess process = case process of
+--   Call name _ -> do
+--     definitions <- gets replDefinitions
+--     if Map.member name definitions
+--       then return ()
+--       else throwError $ ScopeError $ DefnNotFound name
+--   Link _ _ _        -> return ()
+--   Compose _ _ p q _ -> do
+--     scopeCheckProcess p
+--     scopeCheckProcess q
+--   Output _ _ p q _ -> do
+--     scopeCheckProcess p
+--     scopeCheckProcess q
+--   Input _ _ p _  -> scopeCheckProcess p
+--   SelectL _ p _  -> scopeCheckProcess p
+--   SelectR _ p _  -> scopeCheckProcess p
+--   Choice _ p q _ -> do
+--     scopeCheckProcess p
+--     scopeCheckProcess q
+--   Accept  _ _ p _  -> scopeCheckProcess p
+--   Request _ _ p _  -> scopeCheckProcess p
+--   OutputT _ _ p _  -> scopeCheckProcess p
+--   InputT  _ _ p _  -> scopeCheckProcess p
+--   EmptyOutput _ _  -> return ()
+--   EmptyInput _ p _ -> scopeCheckProcess p
+--   EmptyChoice _ _  -> return ()
+--   End _            -> return ()
+--   Mix p q _        -> do
+--     scopeCheckProcess p
+--     scopeCheckProcess q
 
 typeCheck :: Definitions -> TCM (Map Name Session)
 typeCheck = Map.traverseMaybeWithKey typeCheckOrInfer
@@ -109,10 +115,15 @@ checkDuplications (Program declarations _) = do
     let dup = filter ((> 1) . length) $ List.group $ List.sort names
     in  if null dup then Nothing else Just (head dup !! 0, head dup !! 1)
 
-checkRecursion :: Program -> M ()
-checkRecursion program = case detectLoop (buildCallGraph program) of
+checkRecursiveCalls :: CallGraph -> M ()
+checkRecursiveCalls callGraph = case detectLoop callGraph of
   Nothing   -> return ()
   Just loop -> throwError $ ScopeError $ RecursiveCall loop
+
+checkOutOfScopeCalls :: CallGraph -> M ()
+checkOutOfScopeCalls callGraph = case detectOutOfScope callGraph of
+  Nothing   -> return ()
+  Just name -> throwError $ ScopeError $ DefnNotFound name
 
 -- scopeCheckAll :: Program -> M ()
 -- scopeCheckAll program = do

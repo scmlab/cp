@@ -10,7 +10,9 @@ import           Data.Text                      ( Text )
 import           Data.List                      ( elemIndex )
 import           Data.Map                       ( Map )
 import qualified Data.Map                      as Map
-import           Data.Set                       ( Set )
+import           Data.Set                       ( Set
+                                                , (\\)
+                                                )
 import qualified Data.Set                      as Set
 import           Data.Maybe                     ( mapMaybe )
 -- import Prelude
@@ -19,6 +21,8 @@ import           Data.Function                  ( on )
 import           Control.Monad.State
 import           Control.Monad.Except
 import           Control.Monad.Reader
+
+import           Debug.Trace
 
 
 --------------------------------------------------------------------------------
@@ -286,9 +290,13 @@ instance Located Type where
 type CallGraph = Map Name (Set Name)
 type CallM = State CallGraph
 
-buildCallGraph :: Program -> CallGraph
-buildCallGraph program = execState (buildAll (toDefinitions program)) Map.empty
+buildCallGraph :: Definitions -> CallGraph
+buildCallGraph definitions = execState (buildAll definitions) initCallGraph
  where
+  -- top level names paired with an empty set
+  initCallGraph :: CallGraph
+  initCallGraph = Map.map (const Set.empty) definitions
+
   buildAll :: Definitions -> CallM ()
   buildAll = mapM_ (uncurry build) . Map.toList . Map.mapMaybe toProcess
 
@@ -327,24 +335,25 @@ buildCallGraph program = execState (buildAll (toDefinitions program)) Map.empty
 type Path = [Name]
 type LoopM = ExceptT Path (Reader CallGraph)
 
+-- extending the Path by one 
 step :: Path -> LoopM [Path]
 step input = do
   graph <- ask
   paths <- case input of
     -- constructing initial paths with the entries
-    []       -> return [ [p] | p <- Map.keys graph ]
-    (x : xs) -> do
+    []                    -> return [ [p] | p <- Map.keys graph ]
+    (current : traversed) -> do
       -- throw error when the newly added name is already traversed
-      case elemIndex x xs of
+      case elemIndex current traversed of
         Nothing -> return ()
-        -- `x` occurs at the nths position of `xs`, cut that cycling part down
-        Just n  -> throwError (x : take n xs)
+        -- `current` occurs at the nths position of `traversed`, cut that cycling part down and report it
+        Just n  -> throwError (current : take n traversed)
 
-      case Map.lookup x graph of
-        -- x not present in the graph, end it here
+      case Map.lookup current graph of
+        -- `current` not present in the graph, end it here
         Nothing -> return []
-        -- x leads to some more names
-        Just ns -> return [ (n : x : xs) | n <- Set.toList ns ]
+        -- `current` leads to some more names
+        Just ns -> return [ (n : traversed) | n <- Set.toList ns ]
 
   results <- mapM step paths
   return (concat results)
@@ -353,6 +362,18 @@ detectLoop :: CallGraph -> Maybe Path
 detectLoop graph = case runReader (runExceptT (step [])) graph of
   Left  loop -> Just loop
   Right _    -> Nothing
+
+detectOutOfScope :: CallGraph -> Maybe Name
+detectOutOfScope graph = Set.lookupMin badCalls
+ where
+  topLevelBindings :: Set Name
+  topLevelBindings = Map.keysSet graph
+
+  calls :: Set Name
+  calls = Set.unions (Map.elems graph)
+
+  badCalls :: Set Name
+  badCalls = calls \\ topLevelBindings
 
 --------------------------------------------------------------------------------
 -- Free variables

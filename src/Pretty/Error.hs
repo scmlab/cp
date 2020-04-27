@@ -33,14 +33,14 @@ instance Report ScopeError where
     reportS [H1 "Duplicating type signature", CODE $ locOf a, CODE $ locOf b]
   reportS (TermDefnDuplicated a b) =
     reportS [H1 "Duplicating term definition", CODE $ locOf a, CODE $ locOf b]
-  reportS (DefnNotFound term name) = reportS
+  reportS (DefnNotFound name) = reportS
     [ H1 "Definition not found"
     , P
     $  paint name
     <> " is not in scope"
     <> line
-    <> "when checking the following term"
-    , CODE $ locOf term
+    <> "when checking the following call"
+    , CODE $ locOf name
     ]
   reportS (RecursiveCall names) =
     reportS [H1 "Recursive calls detected", P $ pretty names]

@@ -40,6 +40,7 @@ import           Control.Monad.Reader
 import           System.Console.Haskeline
 import           System.Console.GetOpt
 import           System.Environment
+
 -- import Debug.Trace
 
 
@@ -186,8 +187,6 @@ handleCommand Reload = do
 handleCommand (TypeOf expr) = do
   -- local expression parsing
   process <- parseProcess expr
-  -- scope check the process
-  scopeCheckProcess process
   -- infer session
   session <- runTCM $ inferProcess process
   liftIO $ putDoc $ report session <> line
@@ -211,7 +210,7 @@ handleCommand (Eval expr) = do
   -- program <- gets replProgram
   -- local expression parsing
   process <- parseProcess expr
-  scopeCheckProcess process
+  -- scopeCheckProcess process
   --
   _result <- evaluate process
   liftIO $ putDoc $ pretty _result <> line
