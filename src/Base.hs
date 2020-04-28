@@ -39,7 +39,7 @@ data Error = ParseError ParseError
            | Panic String
            deriving (Show)
 
-type M = ExceptT Error (StateT MState IO)
+type M = ExceptT Error (StateT MState (IO))
 
 
 initialState :: MState
@@ -54,9 +54,9 @@ evalM program = evalStateT (runExceptT program) initialState
 --------------------------------------------------------------------------------
 -- | The REPL Monad
 
-type REPL = InputT (StateT MState IO)
+type REPL = InputT (StateT MState (IO))
 
-runREPL :: Settings (StateT MState IO) -> REPL a -> IO (a, MState)
+runREPL :: Settings (StateT MState (IO)) -> REPL a -> IO (a, MState)
 runREPL settings program = runStateT (runInputT settings program) initialState
 
 -- instances of Haskeline.MonadException

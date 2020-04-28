@@ -18,6 +18,8 @@ import           Prelude                 hiding ( lookup )
 import qualified Data.List                     as List
 import           Data.Map                       ( Map )
 import qualified Data.Map                      as Map
+import           Data.Set                       ( (\\) )
+import qualified Data.Set                      as Set
 import           Data.Maybe                     ( mapMaybe )
 
 import           Control.Monad.State
@@ -48,6 +50,17 @@ scopeCheck program = do
   -- store and return the checked definitions
   modify $ \st -> st { replDefinitions = definitions }
   return definitions
+
+checkOutOfScope :: Process -> M ()
+checkOutOfScope process = do
+  definitions <- gets replDefinitions
+  let callGraph        = buildCallGraph definitions
+  let topLevelBindings = Map.keysSet callGraph
+  let calls            = collectCalls process
+  let outOfScopeCalls  = calls \\ topLevelBindings
+  case Set.lookupMin outOfScopeCalls of
+    Nothing -> return ()
+    Just n  -> throwError $ ScopeError $ DefnNotFound n
 
 -- -- see if the names in a process is in the scope
 -- scopeCheckProcess :: Process -> M ()
@@ -124,17 +137,3 @@ checkOutOfScopeCalls :: CallGraph -> M ()
 checkOutOfScopeCalls callGraph = case detectOutOfScope callGraph of
   Nothing   -> return ()
   Just name -> throwError $ ScopeError $ DefnNotFound name
-
--- scopeCheckAll :: Program -> M ()
--- scopeCheckAll program = do
---   -- checking the definitions
---   checkDuplications program
---   -- store the definitions
---   putDefinitions program
-
--- bindingCheckAll :: TCM (Map Name Definition)
--- bindingCheckAll = bindDefinitions <$> gets stConcreteDefns
-   -- bind definitions
-  -- forM_ definitions (bindingCheck . toProcess)
-  -- Map.traverseWithKey (const $ bindingCheck . toProcess) definitions
---

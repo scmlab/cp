@@ -101,10 +101,10 @@ main = do
       loop
  where
 
-  settings :: Settings (StateT MState IO)
+  settings :: Settings (StateT MState (IO))
   settings = setComplete customComplete defaultSettings
 
-  customComplete :: CompletionFunc (StateT MState IO)
+  customComplete :: CompletionFunc (StateT MState (IO))
   customComplete (left, right) = case match left of
     Complete ":load"   -> completeFilename (left, right)
     Complete ":reload" -> completeFilename (left, right)
@@ -119,7 +119,7 @@ main = do
     None _             -> completeDefinitions left []
 
   completeDefinitions
-    :: String -> [String] -> StateT MState IO (String, [Completion])
+    :: String -> [String] -> StateT MState (IO) (String, [Completion])
   completeDefinitions left partials = do
     -- get the names of all definitions
     defns <-
@@ -134,7 +134,7 @@ main = do
     let left' = if null partials then left else dropWhile (/= ' ') left
     return (left', map simpleCompletion matched)
 
-  completeCommands :: StateT MState IO (String, [Completion])
+  completeCommands :: StateT MState (IO) (String, [Completion])
   completeCommands = return ("", map simpleCompletion commands)
 
   handleCommandREPL :: Command -> REPL Bool
@@ -142,22 +142,28 @@ main = do
     result <- lift $ runExceptT $ handleCommand command
     case result of
       Left err -> do
-        printError err
+        -- source code for error reporting
+        source <- case hasQuery command of
+          Just expr -> return (Just expr)
+          Nothing   -> lift $ fmap snd <$> gets replSource
+
+        liftIO $ printError source err
         return True
       Right keepLooping -> return keepLooping
-
-  printError :: Error -> REPL ()
-  printError err = do
-    state <- lift get
-    liftIO $ printErrorIO state err
-
    where
-    printErrorIO :: MState -> Error -> IO ()
-    printErrorIO state _err = case replSource state of
-      Nothing          -> putDoc $ report err
-      Just (_, source) -> putDoc $ reportS err (Just source)
+    hasQuery :: Command -> Maybe ByteString
+    hasQuery (Load _)      = Nothing
+    hasQuery Reload        = Nothing
+    hasQuery (TypeOf expr) = Just expr
+    hasQuery (Eval   expr) = Just expr
+    hasQuery (Debug  expr) = Just expr
+    hasQuery Help          = Nothing
+    hasQuery Quit          = Nothing
+    hasQuery Noop          = Nothing
 
-
+    printError :: Maybe ByteString -> Error -> IO ()
+    printError (Just source) err = putDoc $ reportS err (Just source)
+    printError Nothing       err = putDoc $ report err
 
   loop :: REPL ()
   loop = do
@@ -187,6 +193,7 @@ handleCommand Reload = do
 handleCommand (TypeOf expr) = do
   -- local expression parsing
   process <- parseProcess expr
+  checkOutOfScope process
   -- infer session
   session <- runTCM $ inferProcess process
   liftIO $ putDoc $ report session <> line
@@ -197,20 +204,19 @@ handleCommand (Debug expr) = do
   -- -- global environment setup
   -- program <- gets replProgram
   -- local expression parsing
-  result <- parseProcess expr
+  process <- parseProcess expr
+
   -- print some stuff
-  liftIO $ putDoc $ pretty result <> line
+  liftIO $ putDoc $ pretty process <> line
 
   return True
 
 handleCommand Quit        = return False
 handleCommand Help        = liftIO displayHelp >> return True
 handleCommand (Eval expr) = do
-  -- -- global environment setup
-  -- program <- gets replProgram
   -- local expression parsing
   process <- parseProcess expr
-  -- scopeCheckProcess process
+  checkOutOfScope process
   --
   _result <- evaluate process
   liftIO $ putDoc $ pretty _result <> line
