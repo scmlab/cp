@@ -2,6 +2,9 @@
 
 module Runtime
   ( evaluate
+  , printStatus
+  , step
+  , toAbstract
   )
 where
 
@@ -30,11 +33,25 @@ import           Control.Monad.Except
 
 import           Pretty
 
+toAbstract :: C.Process -> M Process
+toAbstract process = do
+  definitions <- gets replDefinitions
+  abstract (Just definitions) process
+
 evaluate :: C.Process -> M Process
 evaluate process' = do
-  definitions <- gets replDefinitions
-  process     <- abstract (Just definitions) process'
+  process <- toAbstract process'
   run process
+
+-- reduce the term by one step, and return the result and the applied rule
+step :: Process -> M (Process, Maybe Rule)
+step input = do
+  (result, appliedRule) <- runReaderT
+    (runStateT (runExceptT (reduce input)) Nothing)
+    input
+  case result of
+    Left  e      -> throwError $ RuntimeError e
+    Right output -> return (output, appliedRule)
 
 run :: Process -> M Process
 run input = do

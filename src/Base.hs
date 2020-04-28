@@ -23,13 +23,14 @@ import           System.Console.Haskeline
 
 data MState = MState
     -- filepath and the source  (for parsing)
-  { replSource        :: Maybe (String, ByteString)
+  { replSource          :: Maybe (String, ByteString)
     -- parsed program           (for scope checking)
-  , replProgram       :: Maybe Program
+  , replProgram         :: Maybe Program
     -- scoped checked program   (for type checking)
-  , replDefinitions   :: Map Name Definition
+  , replDefinitions     :: Map Name Definition
     -- inferred program         (for runtime execution)
-  , replInferred      :: Map Name Session
+  , replInferred        :: Map Name Session
+  , replStepByStepEval  :: Maybe A.Process
   } deriving (Show)
 
 data Error = ParseError ParseError
@@ -39,11 +40,11 @@ data Error = ParseError ParseError
            | Panic String
            deriving (Show)
 
-type M = ExceptT Error (StateT MState (IO))
+type M = ExceptT Error (StateT MState IO)
 
 
 initialState :: MState
-initialState = MState Nothing Nothing Map.empty Map.empty
+initialState = MState Nothing Nothing Map.empty Map.empty Nothing
 
 runM :: M a -> IO (Either Error a, MState)
 runM program = runStateT (runExceptT program) initialState
@@ -54,9 +55,9 @@ evalM program = evalStateT (runExceptT program) initialState
 --------------------------------------------------------------------------------
 -- | The REPL Monad
 
-type REPL = InputT (StateT MState (IO))
+type REPL = InputT (StateT MState IO)
 
-runREPL :: Settings (StateT MState (IO)) -> REPL a -> IO (a, MState)
+runREPL :: Settings (StateT MState IO) -> REPL a -> IO (a, MState)
 runREPL settings program = runStateT (runInputT settings program) initialState
 
 -- instances of Haskeline.MonadException
@@ -64,7 +65,6 @@ instance MonadException m => MonadException (StateT s m) where
   controlIO f = StateT $ \s -> controlIO $ \(RunIO run) ->
     let run' = RunIO (fmap (StateT . const) . run . flip runStateT s)
     in  fmap (flip runStateT s) $ f run'
-
 
 instance (MonadException m) => MonadException (ExceptT e m) where
   controlIO f = ExceptT $ controlIO $ \(RunIO run) ->

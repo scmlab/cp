@@ -62,9 +62,8 @@ loadSource filePath = do
   readResult <- liftIO $ try (BS.readFile filePath)
   case readResult of
     Left  err    -> throwError $ Panic $ show (err :: IOException)
-    Right source -> do
       -- store the source in the monad for later debugging use
-      modify $ \st -> st { replSource = Just (filePath, source) }
+    Right source -> modify $ \st -> st { replSource = Just (filePath, source) }
 
 parseSource :: M Program
 parseSource = do
@@ -76,10 +75,9 @@ parseSource = do
       return program
 
 parseProcess :: ByteString -> M Process
-parseProcess raw = do
-  case Parser.parseProcess raw of
-    Left  err     -> throwError $ ParseError err
-    Right process -> return process
+parseProcess raw = case Parser.parseProcess raw of
+  Left  err     -> throwError $ ParseError err
+  Right process -> return process
 
 runTCM :: TCM a -> M a
 runTCM f = do
@@ -101,10 +99,10 @@ main = do
       loop
  where
 
-  settings :: Settings (StateT MState (IO))
+  settings :: Settings (StateT MState IO)
   settings = setComplete customComplete defaultSettings
 
-  customComplete :: CompletionFunc (StateT MState (IO))
+  customComplete :: CompletionFunc (StateT MState IO)
   customComplete (left, right) = case match left of
     Complete ":load"   -> completeFilename (left, right)
     Complete ":reload" -> completeFilename (left, right)
@@ -119,12 +117,12 @@ main = do
     None _             -> completeDefinitions left []
 
   completeDefinitions
-    :: String -> [String] -> StateT MState (IO) (String, [Completion])
+    :: String -> [String] -> StateT MState IO (String, [Completion])
   completeDefinitions left partials = do
     -- get the names of all definitions
     defns <-
       map (Text.unpack . (\(Name name _) -> name))
-      <$> Map.keys
+      .   Map.keys
       <$> gets replDefinitions
     -- complete only the last chuck
     let partial = if null partials then "" else last partials
@@ -134,7 +132,7 @@ main = do
     let left' = if null partials then left else dropWhile (/= ' ') left
     return (left', map simpleCompletion matched)
 
-  completeCommands :: StateT MState (IO) (String, [Completion])
+  completeCommands :: StateT MState IO (String, [Completion])
   completeCommands = return ("", map simpleCompletion commands)
 
   handleCommandREPL :: Command -> REPL Bool
@@ -152,14 +150,15 @@ main = do
       Right keepLooping -> return keepLooping
    where
     hasQuery :: Command -> Maybe ByteString
-    hasQuery (Load _)      = Nothing
-    hasQuery Reload        = Nothing
-    hasQuery (TypeOf expr) = Just expr
-    hasQuery (Eval   expr) = Just expr
-    hasQuery (Debug  expr) = Just expr
-    hasQuery Help          = Nothing
-    hasQuery Quit          = Nothing
-    hasQuery Noop          = Nothing
+    hasQuery (Load _)              = Nothing
+    hasQuery Reload                = Nothing
+    hasQuery (TypeOf         expr) = Just expr
+    hasQuery (Eval           expr) = Just expr
+    hasQuery (Debug          expr) = Just expr
+    hasQuery (EvalStepByStep expr) = Just expr
+    hasQuery Help                  = Nothing
+    hasQuery Quit                  = Nothing
+    hasQuery Noop                  = Nothing
 
     printError :: Maybe ByteString -> Error -> IO ()
     printError (Just source) err = putDoc $ reportS err (Just source)
@@ -187,8 +186,8 @@ handleCommand (Load filePath) = do
 handleCommand Reload = do
   result <- gets replSource
   case result of
-    Just ((filePath, _)) -> handleCommand (Load filePath)
-    _                    -> handleCommand Noop
+    Just (filePath, _) -> handleCommand (Load filePath)
+    _                  -> handleCommand Noop
 
 handleCommand (TypeOf expr) = do
   -- local expression parsing
@@ -211,8 +210,24 @@ handleCommand (Debug expr) = do
 
   return True
 
-handleCommand Quit        = return False
-handleCommand Help        = liftIO displayHelp >> return True
+handleCommand Quit                  = return False
+handleCommand Help                  = liftIO displayHelp >> return True
+handleCommand (EvalStepByStep ""  ) = handleCommand Noop
+handleCommand (EvalStepByStep expr) = do
+
+  process <- parseProcess expr
+  checkOutOfScope process
+
+  process' <- toAbstract process
+
+  -- dump the old expression anyway, and start with this new one
+  modify (\st -> st { replStepByStepEval = Just process' })
+
+  handleCommand Noop
+
+  -- liftIO $ putStrLn "( Step-by-step evaluation, type \":r\" to quit )"
+
+  -- return True
 handleCommand (Eval expr) = do
   -- local expression parsing
   process <- parseProcess expr
@@ -222,7 +237,18 @@ handleCommand (Eval expr) = do
   liftIO $ putDoc $ pretty _result <> line
   return True
 
-handleCommand Noop = return True
+handleCommand Noop = do
+  result <- gets replStepByStepEval
+  case result of
+    Just process -> do
+      (next, appliedRule) <- step process
+      case appliedRule of
+        Nothing   -> modify (\st -> st { replStepByStepEval = Nothing })
+        Just rule -> do
+          printStatus next rule
+          modify (\st -> st { replStepByStepEval = Just next })
+    Nothing -> return ()
+  return True
 
 displayHelp :: IO ()
 displayHelp = liftIO $ do
@@ -240,6 +266,7 @@ displayHelp = liftIO $ do
   putStrLn "  :load FILEPATH        for loading files       (:l)"
   putStrLn "  :reload               for reloading           (:r)"
   putStrLn "  :type                 for sessions and types  (:t)"
+  putStrLn "  :step                 for step-by-step eval   (:s)"
   putStrLn "  :quit                 bye                     (:q)"
   putStrLn "======================================================"
 
@@ -281,7 +308,16 @@ parseOpts argv = case getOpt Permute options argv of
 --------------------------------------------------------------------------------
 -- | REPL
 
-data Command = Load FilePath | Reload | TypeOf ByteString | Eval ByteString | Debug ByteString | Quit | Help | Noop
+data Command
+  = Load FilePath
+  | Reload
+  | TypeOf  ByteString
+  | Eval ByteString
+  | EvalStepByStep ByteString
+  | Debug ByteString
+  | Quit
+  | Help
+  | Noop
   deriving (Show)
 
 trim :: String -> String
@@ -295,6 +331,8 @@ parseCommand key
   | ":r" `isPrefixOf` key = Reload
   | ":type" `isPrefixOf` key = (TypeOf . BS8.pack . trim . drop 5) key
   | ":t" `isPrefixOf` key = (TypeOf . BS8.pack . trim . drop 2) key
+  | ":step" `isPrefixOf` key = (EvalStepByStep . BS8.pack . trim . drop 5) key
+  | ":s" `isPrefixOf` key = (EvalStepByStep . BS8.pack . trim . drop 2) key
   | ":debug" `isPrefixOf` key = (Debug . BS8.pack . trim . drop 5) key
   | ":d" `isPrefixOf` key = (Debug . BS8.pack . trim . drop 2) key
   | otherwise = case trim key of
@@ -304,15 +342,9 @@ parseCommand key
     s       -> Eval (BS8.pack s)
         -- traceShow "!!!" (Noop)
 
--- whenLoaded :: REPL () -> REPL ()
--- whenLoaded program = do
---   result <- lift $ gets replSource
---   if (isNothing result)
---     then lift $ throwError $ RuntimeError $ Runtime_CodeNotLoaded
---     else program
 
 commands :: [String]
-commands = [":load", ":reload", ":type", ":quit", ":help"]
+commands = [":load", ":reload", ":type", ":quit", ":step", ":help"]
 
 data Matching = Complete String | Partial [String] | Over String [String] | None String
   deriving (Show)

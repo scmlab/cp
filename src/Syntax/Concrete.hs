@@ -328,8 +328,8 @@ type Path = [Name]
 type LoopM = ExceptT Path (Reader CallGraph)
 
 -- extending the Path by one 
-step :: Path -> LoopM [Path]
-step input = do
+extend :: Path -> LoopM [Path]
+extend input = do
   graph <- ask
   paths <- case input of
     -- constructing initial paths with the entries
@@ -347,11 +347,11 @@ step input = do
         -- `current` leads to some more names
         Just ns -> return [ (n : traversed) | n <- Set.toList ns ]
 
-  results <- mapM step paths
+  results <- mapM extend paths
   return (concat results)
 
 detectLoop :: CallGraph -> Maybe Path
-detectLoop graph = case runReader (runExceptT (step [])) graph of
+detectLoop graph = case runReader (runExceptT (extend [])) graph of
   Left  loop -> Just loop
   Right _    -> Nothing
 
