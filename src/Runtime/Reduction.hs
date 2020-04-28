@@ -1,5 +1,5 @@
 module Runtime.Reduction
-  ( findMatches
+  ( findMatchingChannels
   , headChan
   , Match(..)
   )
@@ -17,31 +17,53 @@ import qualified Data.Map                      as Map
 -- import           Debug.Trace
 -- import           Pretty
 
-
-data Match = Match Chan Int Int
+data Match = MatchingPair Chan Int Int | MatchingLink Chan Int
     deriving (Show, Eq, Ord)
+
+-- The depth of each channel in a process
 type Distances = Map Chan Int
 
-findMatches :: Process -> Set Match
-findMatches = fst . find
+findMatchingChannels :: Process -> Set Match
+findMatchingChannels = fst . find
  where
-    -- increase the distance of every entry in the Map
+  -- increase the distance of every entry in the Map
   incr :: Distances -> Distances
   incr = fmap succ
 
+  -- matchLink :: Chan -> Distances -> Set Match
+  -- matchLink chan distances = case Map.lookup chan distances of
+  --   Nothing -> Set.empty
+  --   Just n  -> Set.singleton (MatchingLink chan n)
+
   -- merge two Distance Map into one Set of Matches
-  match :: Distances -> Distances -> Set Match
-  match a b =
-    Map.foldrWithKey (\k (m, n) -> Set.insert (Match k m n)) Set.empty
+  matchPair :: Distances -> Distances -> Set Match
+  matchPair a b =
+    Map.foldrWithKey (\k (m, n) -> Set.insert (MatchingPair k m n)) Set.empty
       $ Map.intersectionWith (,) a b
   --
   find :: Process -> (Set Match, Distances)
-  find (Compose n p q) =
-    let (pms, phs) = find p
-        (qms, qhs) = find q
-        ms         = match phs qhs <> pms <> qms
-        hs         = Map.delete n (phs `Map.union` qhs)
-    in  (ms, incr hs)
+  find (Compose chan p q) =
+    let
+      (pms, phs)   = find p
+      (qms, qhs)   = find q
+
+      matchedLinks = case (p, q) of
+        (Link _ x, Link _ y) -> if chan == x || chan == y
+          then Set.singleton (MatchingLink chan 0)
+          else Set.empty
+        (Link _ x, _) ->
+          if chan == x then Set.singleton (MatchingLink chan 0) else Set.empty
+        (_, Link _ y) ->
+          if chan == y then Set.singleton (MatchingLink chan 0) else Set.empty
+        _ -> Set.empty
+      -- NOTE: if `match phs qhs` returns something, the corresponding channel will have to be `chan`
+      matchedPairs = matchPair phs qhs
+      -- merge both Distance mappings of `p` and `q`
+      -- but remove the free channel `chan` because it will be closed by Compose
+      hs           = Map.delete chan (phs `Map.union` qhs)
+        -- bump the distance in `hs` by 1
+    in
+      (matchedLinks <> matchedPairs <> pms <> qms, incr hs)
   find others = case toHead others of
     Inert           -> (Set.empty, Map.empty)
     Reactive _ chan -> (Set.empty, Map.singleton chan 0)
@@ -66,27 +88,8 @@ data Kind
   | EI | EO   -- empty input/output
   | SE | CH   -- choice/select
   | AC | RQ   -- accept/request
+  | LNK       -- link
   deriving (Show, Ord, Eq)
-
--- invert :: Kind -> Kind
--- invert I = O
--- invert O = I
--- invert SE = CH
--- invert CH = SE
--- invert AC = RQ
--- invert RQ = AC
--- invert TI = TO
--- invert TO = TI
--- invert EO = EI
--- invert EI = EO
---
--- invertHead :: Head -> Head
--- invertHead (Reactive k n) = Reactive (invert k) n
--- invertHead others = others
---
--- reducible :: Head -> Head -> Bool
--- reducible (Reactive k m) (Reactive l n) = k == invert l &&  m == n
--- reducible _ _ = False
 
 toHead :: Process -> Head
 toHead (Output n _ _ _) = Reactive O n
@@ -100,4 +103,5 @@ toHead (OutputT n _   ) = Reactive TO n
 toHead (InputT  n _   ) = Reactive TI n
 toHead (EmptyOutput n ) = Reactive EO n
 toHead (EmptyInput n _) = Reactive EI n
+toHead (Link       _ n) = Reactive LNK n
 toHead _                = Inert

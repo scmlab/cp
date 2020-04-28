@@ -1,10 +1,9 @@
 {-# LANGUAGE OverloadedStrings, DeriveAnyClass                  #-}
 
 module Runtime
-  ( evaluate
+  ( run
   , printStatus
   , step
-  , toAbstract
   )
 where
 
@@ -33,16 +32,6 @@ import           Control.Monad.Except
 
 import           Pretty
 
-toAbstract :: C.Process -> M Process
-toAbstract process = do
-  definitions <- gets replDefinitions
-  abstract (Just definitions) process
-
-evaluate :: C.Process -> M Process
-evaluate process' = do
-  process <- toAbstract process'
-  run process
-
 -- reduce the term by one step, and return the result and the applied rule
 step :: Process -> M (Process, Maybe Rule)
 step input = do
@@ -55,41 +44,28 @@ step input = do
 
 run :: Process -> M Process
 run input = do
-
-  -- run !!
-  (result, usedRule) <- runReaderT
-    (runStateT (runExceptT (reduce input)) Nothing)
-    input
-
-  case result of
-    Left  e      -> throwError $ RuntimeError e
-    Right output -> do
-      case usedRule of
-        Nothing   -> return output  -- stuck
-        Just rule -> do
-          printStatus output rule
-          run output     -- keep reducing
+  (output, appliedRule) <- step input
+  case appliedRule of
+    -- stuck
+    Nothing -> return output
+    Just _  -> run output     -- keep reducing
 
 printStatus :: Process -> Rule -> M ()
 printStatus output rule = do
   liftIO $ putDoc $ line
   liftIO $ putDoc $ paint $ pretty ("=>" :: String) <+> pretty rule <> line
-  liftIO $ putDoc $ line <> pretty (output) <> line
+  liftIO $ putDoc $ line <> pretty output <> line
  where
   paint :: Doc AnsiStyle -> Doc AnsiStyle
   paint = annotate (colorDull Blue)
 
+--------------------------------------------------------------------------------
+-- RuntimeM functions
+
 stuck :: RuntimeM Process
 stuck = ask
 
--- swap :: RuntimeM Process
--- swap = do
---   putRule Swap
---   input <- ask
---   case input of
---     Compose chan p q -> return $ Compose chan q p
---     others -> return others
-
+-- specify which Rule to use 
 use :: Rule -> Process -> RuntimeM Process
 use rule input = do
   p <- hasReduced
@@ -100,19 +76,20 @@ use rule input = do
       return input
 
 reduce :: Process -> RuntimeM Process
-reduce input = do
-  case Set.lookupMax (findMatches input) of
-    Nothing -> do
-      liftIO $ print $ findMatches input
-      stuck
-    Just match@(Match chan _ _) -> do
-      liftIO $ print match
-      reduceAt chan (f match) input
-     where
-      f :: Match -> Process -> Process -> RuntimeM Process
-      f (Match chan 0 0) p q = reduceProcess chan p q
-      f (Match chan 0 _) p q = rotateLeft chan p q
-      f (Match chan _ 0) p q = rotateRight chan p q
+reduce input = case Set.lookupMax (findMatchingChannels input) of
+  Nothing -> do
+    liftIO $ putStrLn "Cannot find any matches"
+    stuck
+  Just match -> do
+    liftIO $ print (findMatchingChannels input)
+    liftIO $ print match
+    case match of
+      MatchingPair chan 0 0 -> reduceAt chan (reduceProcess chan) input
+      MatchingPair chan 0 _ -> reduceAt chan (rotateLeft chan) input
+      MatchingPair chan _ 0 -> reduceAt chan (rotateRight chan) input
+      MatchingLink chan 0   -> reduceAt chan (reduceProcess chan) input
+      MatchingPair ____ _ _ -> error "[ panic ]"
+      MatchingLink ____ _   -> error "[ panic ]"
 
 rotateLeft :: Chan -> Process -> Process -> RuntimeM Process
 -- we want `p` and `q` both have the same channel as `x`
@@ -122,10 +99,10 @@ rotateLeft x p (Compose y q r) = if Set.member x (freeChans q)
 rotateLeft x p others = return $ Compose x p others
 
 rotateRight :: Chan -> Process -> Process -> RuntimeM Process
-rotateRight x (Compose y p q) r = do
-  use RotateRight $ Compose y p (Compose x q r)
-rotateRight x others p = return $ Compose x others p
+rotateRight x (Compose y p q) r = use RotateRight $ Compose y p (Compose x q r)
+rotateRight x others          p = return $ Compose x others p
 
+-- see if the input Channels are all the same, throw error if that's not the case
 checkChannels :: [Chan] -> RuntimeM ()
 checkChannels channels = do
   let groups     = map head $ List.group channels
@@ -134,7 +111,21 @@ checkChannels channels = do
     process <- ask
     throwError $ Runtime_CannotMatch process groups
 
+-- What to do when there's a "matching Compose"
 reduceProcess :: Chan -> Process -> Process -> RuntimeM Process
+
+reduceProcess chan p@(Link w x) q@(Link _ y) = if chan == y
+  then use Swap $ Compose chan q p
+  else if chan == x then use AxCut $ subsitute y w q else error "[ panic ]"
+
+reduceProcess chan (Link x y) q = do
+  checkChannels [chan, y]
+  use AxCut $ subsitute y x q
+
+reduceProcess chan p q@(Link _ y) = do
+  checkChannels [chan, y]
+  use Swap $ Compose chan q p
+
 reduceProcess chan (Output x y p q) (Input v w r) = do
   checkChannels [chan, x, v]
   checkChannels [y, w]
@@ -157,11 +148,12 @@ reduceProcess chan (Accept x y p) (Request x' y' q) = do
 
 reduceProcess _chan _ _ = stuck
 
+-- Dive into a Process and act on the "matching Compose" (i.e. Match _ 0 0)
 reduceAt
   :: Chan                                     -- the channel to target on Compose
-  -> (Process -> Process -> RuntimeM Process) -- on Compose
-  -> Process
-  -> RuntimeM Process
+  -> (Process -> Process -> RuntimeM Process) -- what to do when we hit the targetting Compose
+  -> Process                                  -- input
+  -> RuntimeM Process                         -- output
 reduceAt target f (Compose x p q) = if target == x
   then f p q
   else Compose <$> pure x <*> reduceAt target f p <*> reduceAt target f q
@@ -192,17 +184,11 @@ reduceAt _ _ others = return others
 -- | Substition
 
 -- substitute :: Process -> Chan -> Chan -> M Process
--- substitute (Call name) a b = do
---   p <- lookupProcess name
---   substitute p a b
--- substitute (Link x y) a b =
---   Link
---     <$> substChan x a b
---     <*> substChan y a b
--- substitute (Compose x t p q) a b =
+-- substitute (Atom n ns) a b = Link <$> substChan x a b <*> substChan y a b
+-- substitute (Link x y) a b = Link <$> substChan x a b <*> substChan y a b
+-- substitute (Compose x p q) a b =
 --   Compose
 --     <$> return x
---     <*> return t
 --     <*> (if x == a then return p else substitute p a b)
 --     <*> (if x == a then return q else substitute q a b)
 -- substitute (Output x y p q) a b =
@@ -216,56 +202,27 @@ reduceAt _ _ others = return others
 --     <$> substChan x a b
 --     <*> (if y == a then return y else substChan y a b)
 --     <*> (if y == a then return p else substitute p a b)
--- substitute (SelectL x p) a b =
---   SelectL
---     <$> substChan x a b
---     <*> substitute p a b
--- substitute (SelectR x p) a b =
---   SelectR
---     <$> substChan x a b
---     <*> substitute p a b
+-- substitute (SelectL x p) a b = SelectL <$> substChan x a b <*> substitute p a b
+-- substitute (SelectR x p) a b = SelectR <$> substChan x a b <*> substitute p a b
 -- substitute (Choice x p q) a b =
---   Choice
---     <$> substChan x a b
---     <*> substitute p a b
---     <*> substitute q a b
+--   Choice <$> substChan x a b <*> substitute p a b <*> substitute q a b
 -- substitute (Accept x y p) a b =
 --   Accept
 --     <$> substChan x a b
 --     <*> (if y == a then return y else substChan y a b)
 --     <*> (if y == a then return p else substitute p a b)
 -- substitute (Request x y p) a b =
---   Request
---     <$> substChan x a b
---     <*> substChan y a b
---     <*> substitute p a b
--- substitute (OutputT x t p) a b =
---   OutputT
---     <$> substChan x a b
---     <*> return t
---     <*> substitute p a b
--- substitute (InputT x v p) a b =
---   InputT
---     <$> substChan x a b
---     <*> return v
---     <*> substitute p a b
--- substitute (EmptyOutput x) a b =
---   EmptyOutput
---     <$> substChan x a b
+--   Request <$> substChan x a b <*> substChan y a b <*> substitute p a b
+-- substitute (OutputT x p) a b = OutputT <$> substChan x a b <*> substitute p a b
+-- substitute (InputT x p) a b = InputT <$> substChan x a b <*> substitute p a b
+-- substitute (EmptyOutput x) a b = EmptyOutput <$> substChan x a b
 -- substitute (EmptyInput x p) a b =
---   EmptyInput
---     <$> substChan x a b
---     <*> substitute p a b
--- substitute (EmptyChoice x) a b =
---   EmptyChoice
---     <$> substChan x a b
--- substitute End _ _ = return End
--- substitute (Mix p q) a b =
---   Mix
---     <$> substitute p a b
---     <*> substitute q a b
---
---
+--   EmptyInput <$> substChan x a b <*> substitute p a b
+-- substitute (EmptyChoice x) a b = EmptyChoice <$> substChan x a b
+-- substitute End             _ _ = return End
+-- substitute (Mix p q)       a b = Mix <$> substitute p a b <*> substitute q a b
+
+
 -- substChan :: Chan -> Chan -> Chan -> M Chan
 -- substChan a x y = return $ if a == x then y else a
 
@@ -296,6 +253,7 @@ putRule rule = do
 data Rule = Swap | RotateLeft | RotateRight
   | IOReduce | TypeIOReduce
   | AccReqReduce
+  | AxCut
 
 instance Pretty Rule where
   pretty Swap         = "Swap"
@@ -304,3 +262,4 @@ instance Pretty Rule where
   pretty IOReduce     = "Input/output reduction"
   pretty TypeIOReduce = "Type input/output reduction"
   pretty AccReqReduce = "Accept/request reduction"
+  pretty AxCut        = "Link reduction (AxCut)"

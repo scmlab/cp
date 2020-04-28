@@ -2,7 +2,7 @@
 module Main where
 
 -- import Syntax.Base
--- import qualified Syntax.Concrete as C
+import qualified Syntax.Abstract               as A
 import           Syntax.Concrete
 import qualified Syntax.Parser                 as Parser
 import           TypeChecking
@@ -87,6 +87,10 @@ runTCM f = do
     Left  err -> throwError $ TypeError err
     Right val -> return val
 
+toAbstract :: Process -> M A.Process
+toAbstract process = do
+  definitions <- gets replDefinitions
+  abstract (Just definitions) process
 
 main :: IO ()
 main = do
@@ -223,17 +227,17 @@ handleCommand (EvalStepByStep expr) = do
   -- dump the old expression anyway, and start with this new one
   modify (\st -> st { replStepByStepEval = Just process' })
 
-  handleCommand Noop
+  liftIO $ putDoc $ line <> pretty process' <> line
 
   -- liftIO $ putStrLn "( Step-by-step evaluation, type \":r\" to quit )"
 
-  -- return True
+  return True
 handleCommand (Eval expr) = do
   -- local expression parsing
   process <- parseProcess expr
   checkOutOfScope process
   --
-  _result <- evaluate process
+  _result <- toAbstract process >>= run
   liftIO $ putDoc $ pretty _result <> line
   return True
 

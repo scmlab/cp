@@ -150,7 +150,7 @@ instance FromConcrete C.Process Process where
       case Map.lookup name definitions of
         Nothing ->
           error
-            "[panic] Definition not found, this shouldn't happen at the syntax tree converting state"
+            "[panic] Definition not found, this shouldn't happen at the syntax tree converting stage"
         Just p -> fromConcrete p
 
     C.Link x y _ -> Link <$> fromConcrete x <*> fromConcrete y

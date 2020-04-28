@@ -28,8 +28,8 @@ import qualified Data.Set                      as Set
 instance Pretty Process where
   pretty (Atom name chans) = pretty name
     <> encloseSep lbrace rbrace comma (map pretty $ Set.toList chans)
-  pretty (Link x y     ) = pretty x <+> "↔" <+> pretty y
-  pretty (Compose x p q) = "ν" <+> pretty x <+> line <> indent
+  pretty (Link x y     ) = pretty x <+> "<->" <+> pretty y
+  pretty (Compose x p q) = "\\" <+> pretty x <+> line <> indent
     2
     (vsep ["(" <+> pretty p, "|" <+> pretty q, ")"])
   pretty (Output x y p q) =
