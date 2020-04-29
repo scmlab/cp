@@ -17,8 +17,20 @@ import qualified Data.Map                      as Map
 -- import           Debug.Trace
 -- import           Pretty
 
-data Match = MatchingPair Chan Int Int | MatchingLink Chan Int
-    deriving (Show, Eq, Ord)
+data Match
+    = MatchingPair Chan Int Int
+    | MatchingLinkLeft Chan Int
+    | MatchingLinkRight Chan Int
+    deriving (Show, Eq)
+
+instance Ord Match where
+  compare (MatchingPair _ m n) (MatchingPair _ o p) = compare (m + n) (o + p)
+  compare (MatchingPair _ _ _)    _                       = LT
+  compare _                       (MatchingPair _ _ _  )  = GT
+  compare (MatchingLinkLeft  _ m) (MatchingLinkLeft _ n)  = compare m n
+  compare (MatchingLinkLeft  _ _) _                       = LT
+  compare (MatchingLinkRight _ m) (MatchingLinkRight _ n) = compare m n
+  compare (MatchingLinkRight _ _) _                       = GT
 
 -- The depth of each channel in a process
 type Distances = Map Chan Int
@@ -36,72 +48,74 @@ findMatchingChannels = fst . find
   --   Just n  -> Set.singleton (MatchingLink chan n)
 
   -- merge two Distance Map into one Set of Matches
-  matchPair :: Distances -> Distances -> Set Match
-  matchPair a b =
-    Map.foldrWithKey (\k (m, n) -> Set.insert (MatchingPair k m n)) Set.empty
-      $ Map.intersectionWith (,) a b
+  -- matchPair :: Distances -> Distances -> Set Match
+  -- matchPair a b =
+  --   Map.foldrWithKey (\k (m, n) -> Set.insert (MatchingPair k m n)) Set.empty
+  --     $ Map.intersectionWith (,) a b
   --
-  find :: Process -> (Set Match, Distances)
+  find :: Process -> (Set Match, (Distances, Distances))
   find (Compose chan p q) =
-    let
-      (pms, phs)   = find p
-      (qms, qhs)   = find q
+    let (pms, (p1, p2)) = find p
+        (qms, (q1, q2)) = find q
 
-      matchedLinks = case (p, q) of
-        (Link _ x, Link _ y) -> if chan == x || chan == y
-          then Set.singleton (MatchingLink chan 0)
-          else Set.empty
-        (Link _ x, _) ->
-          if chan == x then Set.singleton (MatchingLink chan 0) else Set.empty
-        (_, Link _ y) ->
-          if chan == y then Set.singleton (MatchingLink chan 0) else Set.empty
-        _ -> Set.empty
-      -- NOTE: if `match phs qhs` returns something, the corresponding channel will have to be `chan`
-      matchedPairs = matchPair phs qhs
-      -- merge both Distance mappings of `p` and `q`
-      -- but remove the free channel `chan` because it will be closed by Compose
-      hs           = Map.delete chan (phs `Map.union` qhs)
-        -- bump the distance in `hs` by 1
-    in
-      (matchedLinks <> matchedPairs <> pms <> qms, incr hs)
-  find others = case toHead others of
-    Inert           -> (Set.empty, Map.empty)
-    Reactive _ chan -> (Set.empty, Map.singleton chan 0)
+        -- see if are 2 univalent terms ready to be bound together
+        matchedPairs    = case (Map.lookup chan p1, Map.lookup chan q1) of
+          (Just m, Just n) -> Set.singleton (MatchingPair chan m n)
+          _                -> Set.empty
 
+        matchedPLinks = case Map.lookup chan p2 of
+          Just m  -> Set.singleton (MatchingLinkLeft chan m)
+          Nothing -> Set.empty
+        matchedQLinks = case Map.lookup chan q2 of
+          Just n  -> Set.singleton (MatchingLinkRight chan n)
+          Nothing -> Set.empty
+
+        matched = matchedPairs <> matchedPLinks <> matchedQLinks
+
+        -- merge both Distance mappings of `p` and `q`
+        -- but remove the free channel `chan` because it will be closed by Compose
+        pq1     = Map.delete chan (p1 <> q1)
+        pq2     = p2 <> q2
+        -- bump the distances by 1
+    in  (matched <> pms <> qms, (incr pq1, incr pq2))
+  find others = case toValence others of
+    Nonvalent        -> (Set.empty, (Map.empty, Map.empty))
+    Univalent _ chan -> (Set.empty, (Map.singleton chan 0, Map.empty))
+    Bivalent  x y    -> (Set.empty, (Map.empty, Map.fromList [(x, 0), (y, 0)]))
 
 headChan :: Process -> Maybe Chan
-headChan process = case toHead process of
-  (Reactive _ n) -> Just n
-  _              -> Nothing
+headChan process = case toValence process of
+  (Univalent _ n) -> Just n
+  _               -> Nothing
 
 --------------------------------------------------------------------------------
 -- | Head & Kinds
 
-data Head
-  = Reactive Kind Chan
-  | Inert
+data Valence
+  = Nonvalent
+  | Univalent Kind Chan
+  | Bivalent Chan Chan
   deriving (Show, Ord, Eq)
 
 data Kind
-  = I  | O    -- input/output
-  | TI | TO   -- type input/output
-  | EI | EO   -- empty input/output
-  | SE | CH   -- choice/select
-  | AC | RQ   -- accept/request
-  | LNK       -- link
+  = I  | O          -- input/output
+  | TI | TO         -- type input/output
+  | EI | EO         -- empty input/output
+  | SE | CH         -- choice/select
+  | AC | RQ         -- accept/request
   deriving (Show, Ord, Eq)
 
-toHead :: Process -> Head
-toHead (Output n _ _ _) = Reactive O n
-toHead (Input n _ _   ) = Reactive I n
-toHead (SelectL n _   ) = Reactive SE n
-toHead (SelectR n _   ) = Reactive SE n
-toHead (Choice  n _ _ ) = Reactive CH n
-toHead (Accept  n _ _ ) = Reactive AC n
-toHead (Request n _ _ ) = Reactive RQ n
-toHead (OutputT n _   ) = Reactive TO n
-toHead (InputT  n _   ) = Reactive TI n
-toHead (EmptyOutput n ) = Reactive EO n
-toHead (EmptyInput n _) = Reactive EI n
-toHead (Link       _ n) = Reactive LNK n
-toHead _                = Inert
+toValence :: Process -> Valence
+toValence (Output n _ _ _) = Univalent O n
+toValence (Input n _ _   ) = Univalent I n
+toValence (SelectL n _   ) = Univalent SE n
+toValence (SelectR n _   ) = Univalent SE n
+toValence (Choice  n _ _ ) = Univalent CH n
+toValence (Accept  n _ _ ) = Univalent AC n
+toValence (Request n _ _ ) = Univalent RQ n
+toValence (OutputT n _   ) = Univalent TO n
+toValence (InputT  n _   ) = Univalent TI n
+toValence (EmptyOutput n ) = Univalent EO n
+toValence (EmptyInput n _) = Univalent EI n
+toValence (Link       m n) = Bivalent m n
+toValence _                = Nonvalent

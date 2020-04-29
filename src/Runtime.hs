@@ -9,7 +9,6 @@ where
 
 
   -- import Syntax.Concrete
-import qualified Syntax.Concrete               as C
 import           Syntax.Abstract
 -- import qualified TypeChecking.Unification      as U
 -- import Pretty
@@ -31,6 +30,7 @@ import           Control.Monad.State     hiding ( state )
 import           Control.Monad.Except
 
 import           Pretty
+
 
 -- reduce the term by one step, and return the result and the applied rule
 step :: Process -> M (Process, Maybe Rule)
@@ -76,7 +76,7 @@ use rule input = do
       return input
 
 reduce :: Process -> RuntimeM Process
-reduce input = case Set.lookupMax (findMatchingChannels input) of
+reduce input = case Set.lookupMin (findMatchingChannels input) of
   Nothing -> do
     liftIO $ putStrLn "Cannot find any matches"
     stuck
@@ -84,13 +84,19 @@ reduce input = case Set.lookupMax (findMatchingChannels input) of
     liftIO $ print (findMatchingChannels input)
     liftIO $ print match
     case match of
-      MatchingPair chan 0 0 -> reduceAt chan (reduceProcess chan) input
-      MatchingPair chan 0 _ -> reduceAt chan (rotateLeft chan) input
-      MatchingPair chan _ 0 -> reduceAt chan (rotateRight chan) input
-      MatchingLink chan 0   -> reduceAt chan (reduceProcess chan) input
-      MatchingPair ____ _ _ -> error "[ panic ]"
-      MatchingLink ____ _   -> error "[ panic ]"
+      MatchingPair chan 0 0    -> reduceAt chan (reduceProcess chan) input
+      MatchingPair chan 0 _    -> reduceAt chan (rotateLeft chan) input
+      MatchingPair chan _ _    -> reduceAt chan (rotateRight chan) input
 
+      MatchingLinkLeft  chan 0 -> reduceAt chan (axCut chan) input
+      MatchingLinkRight chan 0 -> reduceAt chan (swap chan) input
+      MatchingLinkLeft  ____ _ -> error "[ MatchingLinkLeft ]"
+      MatchingLinkRight ____ _ -> error "[ MatchingLinkRight ]"
+
+swap :: Chan -> Process -> Process -> RuntimeM Process
+swap chan p q = use Swap $ Compose chan q p
+
+-- TODO, make `rotateLeft` and `rotateRight` the symmetrical
 rotateLeft :: Chan -> Process -> Process -> RuntimeM Process
 -- we want `p` and `q` both have the same channel as `x`
 rotateLeft x p (Compose y q r) = if Set.member x (freeChans q)
@@ -111,20 +117,26 @@ checkChannels channels = do
     process <- ask
     throwError $ Runtime_CannotMatch process groups
 
+axCut :: Chan -> Process -> Process -> RuntimeM Process
+axCut chan (Link x y) q = if chan == x
+  then use AxCutLeft $ subsitute x y q
+  else use AxCutRight $ subsitute y x q
+axCut _ p _ = error $ show p
+
 -- What to do when there's a "matching Compose"
 reduceProcess :: Chan -> Process -> Process -> RuntimeM Process
 
-reduceProcess chan p@(Link w x) q@(Link _ y) = if chan == y
-  then use Swap $ Compose chan q p
-  else if chan == x then use AxCut $ subsitute y w q else error "[ panic ]"
+-- reduceProcess chan p@(Link w x) q@(Link _ y) = if chan == y
+--   then use Swap $ Compose chan q p
+--   else if chan == x then use AxCut $ subsitute y w q else error "[ panic ]"
 
-reduceProcess chan (Link x y) q = do
-  checkChannels [chan, y]
-  use AxCut $ subsitute y x q
+-- reduceProcess chan (Link x y) q = do
+--   checkChannels [chan, y]
+--   use AxCut $ subsitute y x q
 
-reduceProcess chan p q@(Link _ y) = do
-  checkChannels [chan, y]
-  use Swap $ Compose chan q p
+-- reduceProcess chan p q@(Link _ y) = do
+--   checkChannels [chan, y]
+--   use Swap $ Compose chan q p
 
 reduceProcess chan (Output x y p q) (Input v w r) = do
   checkChannels [chan, x, v]
@@ -253,7 +265,8 @@ putRule rule = do
 data Rule = Swap | RotateLeft | RotateRight
   | IOReduce | TypeIOReduce
   | AccReqReduce
-  | AxCut
+  | AxCutLeft -- NOTE: dubious cut rule
+  | AxCutRight
 
 instance Pretty Rule where
   pretty Swap         = "Swap"
@@ -262,4 +275,6 @@ instance Pretty Rule where
   pretty IOReduce     = "Input/output reduction"
   pretty TypeIOReduce = "Type input/output reduction"
   pretty AccReqReduce = "Accept/request reduction"
-  pretty AxCut        = "Link reduction (AxCut)"
+  pretty AxCutLeft =
+    "Link reduction (AxCut2, this cut rule is not present in the paper)"
+  pretty AxCutRight = "Link reduction (AxCut)"

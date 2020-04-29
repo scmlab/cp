@@ -58,7 +58,7 @@ data Process
 -- | Make free variables bounded
 
 subsituteChannel :: Chan -> Chan -> Chan -> Chan
-subsituteChannel old new chan = if chan == old then new else old
+subsituteChannel old new chan = if chan == old then new else chan
 
 subsitute :: Chan -> Chan -> Process -> Process
 subsitute old new process = case process of
