@@ -25,12 +25,14 @@ data Match
 
 instance Ord Match where
   compare (MatchingPair _ m n) (MatchingPair _ o p) = compare (m + n) (o + p)
-  compare (MatchingPair _ _ _)    _                       = LT
-  compare _                       (MatchingPair _ _ _  )  = GT
-  compare (MatchingLinkLeft  _ m) (MatchingLinkLeft _ n)  = compare m n
-  compare (MatchingLinkLeft  _ _) _                       = LT
+  compare (MatchingPair _ m n   ) (MatchingLinkLeft  _ o) = compare (m + n) o
+  compare (MatchingPair _ m n   ) (MatchingLinkRight _ o) = compare (m + n) o
+  compare (MatchingLinkLeft  _ o) (MatchingPair _ m n   ) = compare o (m + n)
+  compare (MatchingLinkRight _ o) (MatchingPair _ m n   ) = compare o (m + n)
+  compare (MatchingLinkLeft  _ m) (MatchingLinkLeft  _ n) = compare m n
+  compare (MatchingLinkLeft  _ _) (MatchingLinkRight _ _) = LT
   compare (MatchingLinkRight _ m) (MatchingLinkRight _ n) = compare m n
-  compare (MatchingLinkRight _ _) _                       = GT
+  compare (MatchingLinkRight _ _) (MatchingLinkLeft  _ _) = GT
 
 -- The depth of each channel in a process
 type Distances = Map Chan Int
