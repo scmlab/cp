@@ -41,7 +41,7 @@ import           System.Console.Haskeline
 import           System.Console.GetOpt
 import           System.Environment
 
--- import Debug.Trace
+-- import           Debug.Trace
 
 
 -- putSource :: Maybe ByteString -> M ()
@@ -245,15 +245,13 @@ handleCommand Noop = do
   result <- gets replStepByStepEval
   case result of
     Just process -> do
-      (next, appliedRule) <- step process
-      case appliedRule of
-        Nothing   -> modify (\st -> st { replStepByStepEval = Nothing })
-        Just rule -> do
-          printStatus next rule
-
-          liftIO $ print (findMatchingChannels next)
-
-          modify (\st -> st { replStepByStepEval = Just next })
+      (final, history) <- step process
+      forM_ (reverse history) $ \(rule, next) -> printStatus next rule
+      modify
+        (\st -> st
+          { replStepByStepEval = if null history then Nothing else Just final
+          }
+        )
     Nothing -> return ()
   return True
 

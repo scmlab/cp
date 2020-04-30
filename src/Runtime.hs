@@ -34,28 +34,30 @@ import           Pretty
 
 
 -- reduce the term by one step, and return the result and the applied rule
-step :: Process -> M (Process, Maybe Rule)
+step :: Process -> M (Process, [(Rule, Process)])
 step input = do
-  (result, appliedRule) <- runReaderT
-    (runStateT (runExceptT (reduce input)) Nothing)
-    input
+  (result, history) <- runReaderT (runStateT (runExceptT (reduce input)) [])
+                                  input
   case result of
     Left  e      -> throwError $ RuntimeError e
-    Right output -> return (output, appliedRule)
+    Right output -> return (output, history)
 
 run :: Process -> M Process
 run input = do
-  (output, appliedRule) <- step input
-  case appliedRule of
-    -- stuck
-    Nothing -> return output
-    Just _  -> run output     -- keep reducing
+  (output, history) <- step input
+  if null history then return output else run output     -- keep reducing
 
 printStatus :: Process -> Rule -> M ()
 printStatus output rule = do
   liftIO $ putDoc $ line
   liftIO $ putDoc $ paint $ pretty ("=>" :: String) <+> pretty rule <> line
   liftIO $ putDoc $ line <> pretty output <> line
+  liftIO
+    $  putDoc
+    $  paint
+    $  line
+    <> pretty (show $ Set.toList $ findMatchingChannels output)
+    <> line
  where
   paint :: Doc AnsiStyle -> Doc AnsiStyle
   paint = annotate (colorDull Blue)
@@ -69,12 +71,8 @@ stuck = ask
 -- specify which Rule to use 
 use :: Rule -> Process -> RuntimeM Process
 use rule input = do
-  p <- hasReduced
-  if p
-    then stuck
-    else do
-      putRule rule
-      return input
+  modify ((:) (rule, input))
+  return input
 
 reduce :: Process -> RuntimeM Process
 reduce input = case Set.lookupMin (findMatchingChannels input) of
@@ -246,19 +244,9 @@ reduceAt _ _ others = return others
 --   { rtRule :: Maybe Rule
 --   , rtInput :: Maybe Process
 --   }
-type RuntimeM = ExceptT RuntimeError (StateT (Maybe Rule) (ReaderT Process M))
+type RuntimeM
+  = ExceptT RuntimeError (StateT [(Rule, Process)] (ReaderT Process M))
 
-hasReduced :: RuntimeM Bool
-hasReduced = do
-  rule <- get
-  case rule of
-    Nothing -> return False
-    Just _  -> return True
-
-putRule :: Rule -> RuntimeM ()
-putRule rule = do
-  p <- hasReduced
-  unless p $ put $ Just rule
 
 --------------------------------------------------------------------------------
 -- | Rules
