@@ -20,6 +20,7 @@ import           Data.Loc                       ( Loc(..) )
 import qualified Data.Map                      as Map
 import qualified Data.Set                      as Set
 import           Data.Set                       ( Set )
+import           Data.Text                      ( pack )
 
 import           Prelude                 hiding ( lookup )
 
@@ -60,17 +61,17 @@ infer process = case process of
 
   Link x y _ -> do
 
-    let a = fresh
+    a <- fresh
 
     return $ Map.fromList [(x, a), (y, dual a)]
 
   Compose x _ p q _ -> do
 
     sessionP <- infer p
-    let a = lookup x sessionP
+    a        <- lookup x sessionP
 
     sessionQ <- infer q
-    let a'        = lookup x sessionQ
+    a'       <- lookup x sessionQ
 
     let sessionP' = Map.delete x sessionP
     let sessionQ' = Map.delete x sessionQ
@@ -86,11 +87,11 @@ infer process = case process of
 
     x `notFreeIn` p
     sessionP <- infer p
-    let a = lookup y sessionP
+    a        <- lookup y sessionP
 
     y `notFreeIn` q
     sessionQ <- infer q
-    let b         = lookup x sessionQ
+    b        <- lookup x sessionQ
 
     let sessionP' = Map.delete y sessionP
     let sessionQ' = Map.delete x sessionQ
@@ -102,8 +103,8 @@ infer process = case process of
   Input x y p _ -> do
 
     session <- infer p
-    let b        = lookup x session
-    let a        = lookup y session
+    b       <- lookup x session
+    a       <- lookup y session
 
     let session' = Map.delete x $ Map.delete y session
 
@@ -112,32 +113,32 @@ infer process = case process of
   SelectL x p _ -> do
 
     session <- infer p
-    let a        = lookup x session
+    a       <- lookup x session
 
     let session' = Map.delete x session
 
-    let b        = fresh
+    b <- fresh
 
     return $ Map.insert x (Plus a b NoLoc) $ session'
 
   SelectR x p _ -> do
 
     session <- infer p
-    let b        = lookup x session
+    b       <- lookup x session
 
     let session' = Map.delete x session
 
-    let a        = fresh
+    a <- fresh
 
     return $ Map.insert x (Plus a b NoLoc) $ session'
 
   Choice x p q _ -> do
 
     sessionP <- infer p
-    let a = lookup x sessionP
+    a        <- lookup x sessionP
 
     sessionQ <- infer q
-    let b         = lookup x sessionQ
+    b        <- lookup x sessionQ
 
 
     let sessionP' = Map.delete x sessionP
@@ -151,7 +152,7 @@ infer process = case process of
 
     x `notFreeIn` p
     session <- infer p
-    let a        = lookup y session
+    a       <- lookup y session
 
     let session' = Map.delete y session
 
@@ -163,14 +164,14 @@ infer process = case process of
 
     session <- infer p
 
-    let a = lookup y session
+    a       <- lookup y session
 
     -- it's okay for `x` to be free in `p`
     -- assume that if `x : B` and `y : A`
     -- then `B ~ ?A`
-    let b = lookup x session
+    b       <- lookup x session
 
-    subst <- unify (Req a NoLoc) b
+    subst   <- unify (Req a NoLoc) b
 
     let session' = Map.delete y session
 
@@ -178,9 +179,9 @@ infer process = case process of
 
   OutputT x outputType p _ -> do
 
-    session <- infer p
-    let afterSubstitution  = lookup x session  -- B {A / X}
-    let beforeSubstitution = fresh   -- B
+    session            <- infer p
+    afterSubstitution  <- lookup x session  -- B {A / X}
+    beforeSubstitution <- fresh   -- B
 
     let t =
           (Exists
@@ -200,7 +201,7 @@ infer process = case process of
   InputT x var p _ -> do
 
     session <- infer p
-    let b        = lookup x session
+    b       <- lookup x session
     let session' = Map.delete x session
 
     return $ Map.insert x (Forall var b NoLoc) $ session'
@@ -212,15 +213,13 @@ infer process = case process of
 
     return $ Map.insert x (Bot NoLoc) $ session
 
-  EmptyOutput x _ -> do
-    return $ Map.singleton x (One NoLoc)
+  EmptyOutput x _ -> return $ Map.singleton x (One NoLoc)
 
-  EmptyChoice x _ -> do
-    return $ Map.singleton x (Top NoLoc)
+  EmptyChoice x _ -> return $ Map.singleton x (Top NoLoc)
 
-  End _     -> return Map.empty
+  End _           -> return Map.empty
 
-  Mix p q _ -> do
+  Mix p q _       -> do
 
     sessionP <- infer p
     sessionQ <- infer q
@@ -235,10 +234,12 @@ infer process = case process of
     --  type from the inferred session
     -- However, if we are asking for something that doesn't exist
     --  we can still apply the Weakening rule and return something wrapped in "?"
-  lookup :: Chan -> Session -> Type
+  lookup :: Chan -> Session -> TCM Type
   lookup chan session = case Map.lookup chan session of
-    Nothing -> Req fresh NoLoc -- Weakening!!
-    Just t  -> t
+    Nothing -> do
+      t <- fresh
+      return $ Req t NoLoc -- Weakening!!
+    Just t -> return t
 
   -- assert that some channel shouldn't occur free in some process
   notFreeIn :: Chan -> Process -> TCM ()
@@ -249,8 +250,12 @@ infer process = case process of
       channel
 
   -- return a fresh type variable
-  fresh :: Type
-  fresh = Var (TypeVar "_" NoLoc) NoLoc
+  fresh :: TCM Type
+  fresh = do
+    i <- get
+    put (succ i)
+    let name = "#" <> pack (show i)
+    return $ Var (TypeVar name NoLoc) NoLoc
 
   -- unify the two given types, and return a substitution function
   -- for better error message, make the former type be the expecting type

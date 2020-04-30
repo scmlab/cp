@@ -82,7 +82,7 @@ parseProcess raw = case Parser.parseProcess raw of
 runTCM :: TCM a -> M a
 runTCM f = do
   definitions <- gets replDefinitions
-  let result = runReader (runExceptT f) definitions
+  let result = runReader (evalStateT (runExceptT f) 0) definitions
   case result of
     Left  err -> throwError $ TypeError err
     Right val -> return val

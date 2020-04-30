@@ -12,6 +12,7 @@ import           Data.Loc                       ( Loc )
 
 import           Control.Monad.Except
 import           Control.Monad.Reader
+import           Control.Monad.State.Lazy
 
 --------------------------------------------------------------------------------
 -- | State
@@ -65,7 +66,7 @@ data ScopeError
 --------------------------------------------------------------------------------
 -- | TCM
 
-type TCM = ExceptT TypeError (Reader Definitions)
+type TCM = ExceptT TypeError (StateT Int (Reader Definitions))
 
 --
 -- --------------------------------------------------------------------------------
