@@ -23,8 +23,8 @@ import           Data.Set                       ( Set )
 
 import           Prelude                 hiding ( lookup )
 
--- import Debug.Trace
--- import Pretty
+import           Debug.Trace
+import           Pretty
 
 check :: Name -> Process -> Session -> TCM ()
 check _ process expected = do
@@ -161,13 +161,20 @@ infer process = case process of
 
   Request x y p _ -> do
 
-    x `notFreeIn` p
     session <- infer p
-    let a        = lookup y session
+
+    let a = lookup y session
+
+    -- it's okay for `x` to be free in `p`
+    -- assume that if `x : B` and `y : A`
+    -- then `B ~ ?A`
+    let b = lookup x session
+
+    subst <- unify (Req a NoLoc) b
 
     let session' = Map.delete y session
 
-    return $ Map.insert x (Req a NoLoc) $ session'
+    return $ Map.map subst session'
 
   OutputT x outputType p _ -> do
 
