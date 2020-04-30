@@ -4,6 +4,7 @@ module Runtime
   ( run
   , printStatus
   , step
+  , findMatchingChannels
   )
 where
 
@@ -81,7 +82,6 @@ reduce input = case Set.lookupMin (findMatchingChannels input) of
     liftIO $ putStrLn "Cannot find any matches"
     stuck
   Just match -> do
-    liftIO $ print (findMatchingChannels input)
     liftIO $ print match
     case match of
       MatchingPair chan 0 0    -> reduceAt chan (reduceProcess chan) input

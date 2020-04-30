@@ -250,6 +250,9 @@ handleCommand Noop = do
         Nothing   -> modify (\st -> st { replStepByStepEval = Nothing })
         Just rule -> do
           printStatus next rule
+
+          liftIO $ print (findMatchingChannels next)
+
           modify (\st -> st { replStepByStepEval = Just next })
     Nothing -> return ()
   return True
