@@ -152,11 +152,12 @@ reduceProcess chan (OutputT x p) (InputT y q) = do
 
 reduceProcess chan p@(InputT _ _) q@(OutputT _ _) = use Swap $ Compose chan q p
 
-
 reduceProcess chan (Accept x y p) (Request x' y' q) = do
   checkChannels [chan, x, x']
   checkChannels [y, y']
   use AccReqReduce $ Compose y p q
+  -- p' <- use AccReqReduce $ Compose y p q
+  -- use AccContract $ Accept x y p'
 
 reduceProcess _chan _ _ = stuck
 
@@ -265,6 +266,7 @@ putRule rule = do
 data Rule = Swap | RotateLeft | RotateRight
   | IOReduce | TypeIOReduce
   | AccReqReduce
+  | AccContract
   | AxCutLeft -- NOTE: dubious cut rule
   | AxCutRight
 
@@ -275,6 +277,7 @@ instance Pretty Rule where
   pretty IOReduce     = "Input/output reduction"
   pretty TypeIOReduce = "Type input/output reduction"
   pretty AccReqReduce = "Accept/request reduction"
+  pretty AccContract  = "Accept contraction"
   pretty AxCutLeft =
     "Link reduction (AxCut2, this cut rule is not present in the paper)"
   pretty AxCutRight = "Link reduction (AxCut)"

@@ -55,35 +55,60 @@ findMatchingChannels = fst . find
   --   Map.foldrWithKey (\k (m, n) -> Set.insert (MatchingPair k m n)) Set.empty
   --     $ Map.intersectionWith (,) a b
   --
-  find :: Process -> (Set Match, (Distances, Distances))
+  find :: Process -> (Set Match, (Distances, Distances, Distances, Distances))
   find (Compose chan p q) =
-    let (pms, (p1, p2)) = find p
-        (qms, (q1, q2)) = find q
+    let
+      (pms, (p1, p2, pAC, pRQ)) = find p
+      (qms, (q1, q2, qAC, qRQ)) = find q
 
-        -- see if are 2 univalent terms ready to be bound together
-        matchedPairs    = case (Map.lookup chan p1, Map.lookup chan q1) of
-          (Just m, Just n) -> Set.singleton (MatchingPair chan m n)
-          _                -> Set.empty
+      -- see if are 2 univalent terms ready to be bound together
+      matchedPairs = case (Map.lookup chan p1, Map.lookup chan q1) of
+        (Just m, Just n) -> Set.singleton (MatchingPair chan m n)
+        _                -> Set.empty
 
-        matchedPLinks = case Map.lookup chan p2 of
-          Just m  -> Set.singleton (MatchingLinkLeft chan m)
-          Nothing -> Set.empty
-        matchedQLinks = case Map.lookup chan q2 of
-          Just n  -> Set.singleton (MatchingLinkRight chan n)
-          Nothing -> Set.empty
+      matchedPLinks = case Map.lookup chan p2 of
+        Just m  -> Set.singleton (MatchingLinkLeft chan m)
+        Nothing -> Set.empty
+      matchedQLinks = case Map.lookup chan q2 of
+        Just n  -> Set.singleton (MatchingLinkRight chan n)
+        Nothing -> Set.empty
 
-        matched = matchedPairs <> matchedPLinks <> matchedQLinks
+      matchedPACRQ = case (Map.lookup chan pAC, Map.lookup chan qRQ) of
+        (Just m, Just n) -> Set.singleton (MatchingPair chan m n)
+        _                -> Set.empty
 
-        -- merge both Distance mappings of `p` and `q`
-        -- but remove the free channel `chan` because it will be closed by Compose
-        pq1     = Map.delete chan (p1 <> q1)
-        pq2     = p2 <> q2
+      matchedQACRQ = case (Map.lookup chan qAC, Map.lookup chan pRQ) of
+        (Just m, Just n) -> Set.singleton (MatchingPair chan n m)
+        _                -> Set.empty
+
+      matched =
+        matchedPairs
+          <> matchedPLinks
+          <> matchedQLinks
+          <> matchedPACRQ
+          <> matchedQACRQ
+
+      -- merge both Distance mappings of `p` and `q`
+      -- but remove the free channel `chan` because it will be closed by Compose
+      pq1  = Map.delete chan (p1 <> q1)
+      pq2  = p2 <> q2
+      pqAC = pAC <> qAC
+      pqRQ = pRQ <> qRQ
         -- bump the distances by 1
-    in  (matched <> pms <> qms, (incr pq1, incr pq2))
+    in
+      (matched <> pms <> qms, (incr pq1, incr pq2, incr pqAC, incr pqRQ))
   find others = case toValence others of
-    Nonvalent        -> (Set.empty, (Map.empty, Map.empty))
-    Univalent _ chan -> (Set.empty, (Map.singleton chan 0, Map.empty))
-    Bivalent  x y    -> (Set.empty, (Map.empty, Map.fromList [(x, 0), (y, 0)]))
+    Nonvalent -> (Set.empty, (Map.empty, Map.empty, Map.empty, Map.empty))
+    Univalent AC chan ->
+      (Set.empty, (Map.empty, Map.empty, Map.singleton chan 0, Map.empty))
+    Univalent RQ chan ->
+      (Set.empty, (Map.empty, Map.empty, Map.empty, Map.singleton chan 0))
+    Univalent _ chan ->
+      (Set.empty, (Map.singleton chan 0, Map.empty, Map.empty, Map.empty))
+    Bivalent x y ->
+      ( Set.empty
+      , (Map.empty, Map.fromList [(x, 0), (y, 0)], Map.empty, Map.empty)
+      )
 
 headChan :: Process -> Maybe Chan
 headChan process = case toValence process of
