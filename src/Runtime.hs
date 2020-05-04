@@ -1,4 +1,4 @@
-{-# LANGUAGE OverloadedStrings, DeriveAnyClass                  #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Runtime
   ( run
@@ -24,6 +24,7 @@ import qualified Data.List                     as List
 -- import           Data.Text                      ( Text )
 -- import           Data.Set                       ( Set )
 import qualified Data.Set                      as Set
+import           Data.Maybe                     ( mapMaybe )
 -- import           Data.Map                       ( Map )
 -- import qualified Data.Map                      as Map
 import           Control.Monad.Reader
@@ -38,9 +39,14 @@ step :: Process -> M (Process, [(Rule, Process)])
 step input = do
   (result, history) <- runReaderT (runStateT (runExceptT (reduce input)) [])
                                   input
+
+  let isComplete (Just rule, Just process) = Just (rule, process)
+      isComplete _                         = Nothing
+      filteredHistory = mapMaybe isComplete history
+        -- mapMaybe filter (\(x, y) -> isJust x && isJust y) history
   case result of
     Left  e      -> throwError $ RuntimeError e
-    Right output -> return (output, history)
+    Right output -> return (output, filteredHistory)
 
 run :: Process -> M Process
 run input = do
@@ -69,10 +75,22 @@ stuck :: RuntimeM Process
 stuck = ask
 
 -- specify which Rule to use 
-use :: Rule -> Process -> RuntimeM Process
-use rule input = do
-  modify ((:) (rule, input))
-  return input
+useRule :: Rule -> RuntimeM ()
+useRule rule = do
+  history <- get
+  case history of
+    []                  -> put $ (Just rule, Nothing) : []
+    ((Nothing, p) : xs) -> put $ (Just rule, p) : xs
+    ((Just r , p) : xs) -> put $ (Just rule, Nothing) : (Just r, p) : xs
+
+recordResult :: Process -> RuntimeM Process
+recordResult process = do
+  history <- get
+  case history of
+    []                  -> put $ (Nothing, Just process) : []
+    ((r, Nothing) : xs) -> put $ (r, Just process) : xs
+    ((r, Just p') : xs) -> put $ (Nothing, Just process) : (r, Just p') : xs
+  return process
 
 reduce :: Process -> RuntimeM Process
 reduce input = case Set.lookupMin (findMatchingChannels input) of
@@ -82,29 +100,42 @@ reduce input = case Set.lookupMin (findMatchingChannels input) of
   Just match -> do
     liftIO $ print match
     case match of
-      MatchingPair chan 0 0    -> reduceAt chan (reduceProcess chan) input
-      MatchingPair chan 0 _    -> reduceAt chan (rotateLeft chan) input
-      MatchingPair chan _ _    -> reduceAt chan (rotateRight chan) input
+      MatchingPair chan 0 0 ->
+        reduceAt chan (reduceProcess chan) input >>= recordResult
+      MatchingPair chan 0 _ ->
+        reduceAt chan (rotateLeft chan) input >>= recordResult
+      MatchingPair chan _ _ ->
+        reduceAt chan (rotateRight chan) input >>= recordResult
 
-      MatchingLinkLeft  chan 0 -> reduceAt chan (axCut chan) input
-      MatchingLinkRight chan 0 -> reduceAt chan (swap chan) input
+      MatchingLinkLeft chan 0 ->
+        reduceAt chan (axCut chan) input >>= recordResult
+      MatchingLinkRight chan 0 ->
+        reduceAt chan (swap chan) input >>= recordResult
       MatchingLinkLeft  ____ _ -> error "[ MatchingLinkLeft ]"
       MatchingLinkRight ____ _ -> error "[ MatchingLinkRight ]"
 
 swap :: Chan -> Process -> Process -> RuntimeM Process
-swap chan p q = use Swap $ Compose chan q p
+swap chan p q = do
+  useRule Swap
+  return $ Compose chan q p
 
 -- TODO, make `rotateLeft` and `rotateRight` the symmetrical
 rotateLeft :: Chan -> Process -> Process -> RuntimeM Process
 -- we want `p` and `q` both have the same channel as `x`
 rotateLeft x p (Compose y q r) = if Set.member x (freeChans q)
-  then use RotateLeft $ Compose y (Compose x p q) r
-  else use Swap $ Compose x p (Compose y r q)
+  then do
+    useRule RotateLeft
+    return $ Compose y (Compose x p q) r
+  else do
+    useRule Swap
+    return $ Compose x p (Compose y r q)
 rotateLeft x p others = return $ Compose x p others
 
 rotateRight :: Chan -> Process -> Process -> RuntimeM Process
-rotateRight x (Compose y p q) r = use RotateRight $ Compose y p (Compose x q r)
-rotateRight x others          p = return $ Compose x others p
+rotateRight x (Compose y p q) r = do
+  useRule RotateRight
+  return $ Compose y p (Compose x q r)
+rotateRight x others p = return $ Compose x others p
 
 -- see if the input Channels are all the same, throw error if that's not the case
 checkChannels :: [Chan] -> RuntimeM ()
@@ -117,8 +148,12 @@ checkChannels channels = do
 
 axCut :: Chan -> Process -> Process -> RuntimeM Process
 axCut chan (Link x y) q = if chan == x
-  then use AxCutLeft $ subsitute x y q
-  else use AxCutRight $ subsitute y x q
+  then do
+    useRule AxCutLeft
+    return $ subsitute x y q
+  else do
+    useRule AxCutRight
+    return $ subsitute y x q
 axCut _ p _ = error $ show p
 
 -- What to do when there's a "matching Compose"
@@ -139,21 +174,27 @@ reduceProcess :: Chan -> Process -> Process -> RuntimeM Process
 reduceProcess chan (Output x y p q) (Input v w r) = do
   checkChannels [chan, x, v]
   checkChannels [y, w]
-  use IOReduce $ Compose y p (Compose chan q r)
+  useRule IOReduce
+  return $ Compose y p (Compose chan q r)
 
-reduceProcess chan p@(Input _ _ _) q@(Output _ _ _ _) =
-  use Swap $ Compose chan q p
+reduceProcess chan p@(Input _ _ _) q@(Output _ _ _ _) = do
+  useRule Swap
+  return $ Compose chan q p
 
 reduceProcess chan (OutputT x p) (InputT y q) = do
   checkChannels [chan, x, y]
-  use TypeIOReduce $ Compose chan p q
+  useRule TypeIOReduce
+  return $ Compose chan p q
 
-reduceProcess chan p@(InputT _ _) q@(OutputT _ _) = use Swap $ Compose chan q p
+reduceProcess chan p@(InputT _ _) q@(OutputT _ _) = do
+  useRule Swap
+  return $ Compose chan q p
 
 reduceProcess chan (Accept x y p) (Request x' y' q) = do
   checkChannels [chan, x, x']
   checkChannels [y, y']
-  use AccReqReduce $ Compose y p q
+  useRule AccReqReduce
+  return $ Compose y p q
   -- p' <- use AccReqReduce $ Compose y p q
   -- use AccContract $ Accept x y p'
 
@@ -245,7 +286,9 @@ reduceAt _ _ others = return others
 --   , rtInput :: Maybe Process
 --   }
 type RuntimeM
-  = ExceptT RuntimeError (StateT [(Rule, Process)] (ReaderT Process M))
+  = ExceptT
+      RuntimeError
+      (StateT [(Maybe Rule, Maybe Process)] (ReaderT Process M))
 
 
 --------------------------------------------------------------------------------
