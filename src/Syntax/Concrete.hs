@@ -22,7 +22,7 @@ import           Control.Monad.State
 import           Control.Monad.Except
 import           Control.Monad.Reader
 
-import           Debug.Trace
+-- import           Debug.Trace
 
 
 --------------------------------------------------------------------------------
@@ -145,7 +145,6 @@ instance Eq TypeVar where
   _           == Unknown     = True
   --
   TypeVar i _ == TypeVar j _ = i == j
-  _           == _           = False
 
 instance Ord TypeVar where
   Unknown     `compare` Unknown     = EQ
@@ -193,10 +192,10 @@ insertSessionSyntax x t (SessionSyntax pairs m) =
   SessionSyntax (Map.insert x t pairs) m
 
 emptySessionSyntax :: Loc -> SessionSyntax
-emptySessionSyntax l = SessionSyntax Map.empty l
+emptySessionSyntax = SessionSyntax Map.empty
 
 singletonSessionSyntax :: Chan -> Type -> Loc -> SessionSyntax
-singletonSessionSyntax x t l = SessionSyntax (Map.insert x t Map.empty) l
+singletonSessionSyntax x t = SessionSyntax (Map.insert x t Map.empty)
 
 toDefinitions :: Program -> Definitions
 toDefinitions (Program declarations _) = definitions
@@ -218,12 +217,10 @@ toDefinitions (Program declarations _) = definitions
     $ Map.intersectionWith (,) termDefns typeSigs
 
   termsOnly :: Definitions
-  termsOnly =
-    Map.mapWithKey (\n t -> TermOnly n t) $ Map.difference termDefns typeSigs
+  termsOnly = Map.mapWithKey TermOnly $ Map.difference termDefns typeSigs
 
   typesOnly :: Definitions
-  typesOnly =
-    Map.mapWithKey (\n s -> TypeOnly n s) $ Map.difference typeSigs termDefns
+  typesOnly = Map.mapWithKey TypeOnly $ Map.difference typeSigs termDefns
 
   definitions :: Definitions
   definitions = Map.union paired $ Map.union termsOnly typesOnly

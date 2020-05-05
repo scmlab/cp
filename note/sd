@@ -65,7 +65,7 @@ count = x[? Top] . x[s] . (!s(f) . f(a) . incr | x[z] . (nought | x <-> y))
 
 ==================================================
 
---- contraction ???????
+--- contraction ???????   a => b,   f => g
 
 \z .    ( \s .  (   !s(f) . f(a) . incr  {a, f}
                 |   \s' .   (   !s'[g] . g(b) . incr {b, g}

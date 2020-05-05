@@ -172,5 +172,4 @@ scanNext = do
     TsEof -> do
       modify $ \st -> st { currentLoc = oldLoc, lookaheadLoc = oldLoc }
       return TokenEOF
-    TsError (LexicalError pos) -> do
-      throwError $ Lexical src pos
+    TsError (LexicalError pos) -> throwError $ Lexical src pos

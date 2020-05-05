@@ -18,6 +18,7 @@ instance Pretty TypeName where
 
 instance Pretty TypeVar where
   pretty (TypeVar name _) = pretty name
+  pretty Unknown          = "Unknown"
 
 instance Pretty Name where
   pretty (Name name _) = pretty name

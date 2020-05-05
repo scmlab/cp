@@ -24,8 +24,8 @@ import           Data.Text                      ( pack )
 
 import           Prelude                 hiding ( lookup )
 
-import           Debug.Trace
-import           Pretty
+-- import           Debug.Trace
+-- import           Pretty
 
 check :: Name -> Process -> Session -> TCM ()
 check _ process expected = do
@@ -315,16 +315,14 @@ freeChans process = case process of
   Compose x _ p q _ ->
     Set.delete x <$> (Set.union <$> freeChans p <*> freeChans q)
   Output x y p q _ ->
-    Set.insert x
-      <$> Set.delete y
-      <$> (Set.union <$> freeChans p <*> freeChans q)
-  Input x y p _ -> Set.insert x <$> Set.delete y <$> freeChans p
+    Set.insert x . Set.delete y <$> (Set.union <$> freeChans p <*> freeChans q)
+  Input x y p _ -> Set.insert x . Set.delete y <$> freeChans p
   SelectL x p _ -> Set.insert <$> pure x <*> freeChans p
   SelectR x p _ -> Set.insert <$> pure x <*> freeChans p
   Choice x p q _ ->
     Set.insert x <$> (Set.union <$> freeChans p <*> freeChans q)
-  Accept  x y p _  -> Set.insert x <$> Set.delete y <$> freeChans p
-  Request x y p _  -> Set.insert x <$> Set.delete y <$> freeChans p
+  Accept  x y p _  -> Set.insert x . Set.delete y <$> freeChans p
+  Request x y p _  -> Set.insert x . Set.delete y <$> freeChans p
   OutputT x _ p _  -> Set.insert <$> pure x <*> freeChans p
   InputT  x _ p _  -> Set.insert <$> pure x <*> freeChans p
   EmptyOutput x _  -> Set.singleton <$> pure x

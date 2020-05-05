@@ -19,18 +19,18 @@ import           Data.ByteString.Lazy           ( ByteString )
 import qualified Data.ByteString.Lazy          as BS
 import qualified Data.ByteString.Lazy.Char8    as BS8
 import           Data.Text.Prettyprint.Doc.Render.Terminal
+                                                ( putDoc )
+import           Data.Text.Prettyprint.Doc      ( pretty
+                                                , line
+                                                )
 
 import qualified Data.Map                      as Map
--- import qualified Data.Set as Set
--- import Data.Maybe (isNothing)
 import           Data.Char                      ( isSpace )
 import           Data.List                      ( dropWhileEnd
                                                 , isPrefixOf
                                                 )
 import qualified Data.Text                     as Text
-import           Data.Text.Prettyprint.Doc
 
--- import qualified Data.ByteString.Lazy.Char8 as BC
 
 import           Control.Exception              ( try )
 import           Control.Monad.State     hiding ( state )

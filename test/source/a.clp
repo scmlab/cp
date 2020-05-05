@@ -7,6 +7,7 @@ one = x(X).x(s).x(z).?s[f].f[a].(a<->z|f<->x)
 two : { x : forall X . ? (X * ^X) % (^X % X) }
 two = x(X).x(s).x(z).?s[f].f[a].(a<->z|?s[g].g[b].(f<->b|g<->x))
 
+
 incr :
   { a : 0
   ; f : ? Top

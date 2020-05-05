@@ -32,7 +32,7 @@ import           Control.Monad.State     hiding ( state )
 import           Control.Monad.Except
 
 import           Pretty
-import           Debug.Trace
+-- import           Debug.Trace
 
 
 -- reduce the term by one step, and return the result and the applied rule

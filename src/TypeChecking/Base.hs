@@ -8,7 +8,6 @@ import           Prelude                 hiding ( lookup )
 
 
 import           Data.Text                      ( Text )
-import           Data.Loc                       ( Loc )
 
 import           Control.Monad.Except
 import           Control.Monad.Reader
