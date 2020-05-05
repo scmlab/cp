@@ -1,0 +1,233 @@
+two = x(X).x(s).x(z).?s[f].f[a].(a<->z|?s[g].g[b].(f<->b|g<->x))
+count = x[? Top] . x[s] . (!s(f) . f(a) . incr | x[z] . (nought | x <-> y))
+
+\x . (two | count)
+
+---
+
+\x .    ( x(X).x(s).x(z).?s[f].f[a].(a<->z|?s[g].g[b].(f<->b|g<->x))
+        | x[? Top] . x[s] . (!s(f) . f(a) . incr | x[z] . (nought | x <-> y))
+        )
+
+--- swap 
+
+\x .    ( x[? Top] . x[s] . (!s(f) . f(a) . incr | x[z] . (nought | x <-> y))
+        | x(X).x(s).x(z).?s[f].f[a].(a<->z|?s[g].g[b].(f<->b|g<->x))
+        )
+
+--- type i/o [x]
+
+\x .    ( x[s] . (!s(f) . f(a) . incr | x[z] . (nought | x <-> y))
+        | x(s).x(z).?s[f].f[a].(a<->z|?s[g].g[b].(f<->b|g<->x))
+        )
+
+--- i/o [x]
+
+\s .    ( !s(f) . f(a) . incr 
+        | \x .  ( x[z] . (nought | x <-> y)
+                | x(z).?s[f].f[a].(a<->z|?s[g].g[b].(f<->b|g<->x))
+                )
+        )
+
+--- i/o [x]
+
+\s .    ( !s(f) . f(a) . incr 
+        | \z .  (   nought{z}
+                |   \x .    (   x <-> y
+                            |   ?s[f].f[a].(a<->z|?s[g].g[b].(f<->b|g<->x))
+                            )
+                )
+        )
+
+--- link [x]
+
+\s .    ( !s(f) . f(a) . incr {a, f}
+        | \z .  (   nought{z}
+                |   ?s[f].f[a].(a<->z|?s[g].g[b].(f<->b|g<->y))
+                )
+        )
+
+--- swap  [z]
+
+\s .    ( !s(f) . f(a) . incr {a, f}
+        | \z .  (   ?s[f].f[a].(a<->z|?s[g].g[b].(f<->b|g<->y))
+                |   nought{z} 
+                )
+        )
+
+--- rotate left [s <=> z] 
+
+\z .    ( \s .  (   !s(f) . f(a) . incr {a, f}
+                |   ?s[f].f[a].(a<->z|?s[g].g[b].(f<->b|g<->y))
+                )
+        | nought {z}
+        )
+
+==================================================
+
+--- contraction ???????
+
+\z .    ( \s .  (   !s(f) . f(a) . incr  {a, f}
+                |   \s' .   (   !s'[g] . g(b) . incr {b, g}
+                            |   ?s[f].f[a].(a<->z|?s'[g].g[b].(f<->b|g<->y))
+                            )
+                )
+        | nought {z}
+        )
+
+--- swap
+
+\z .    ( \s' . (  !s(f) . f(a) . incr {a, f}
+                |   \s .    (   ?s[f].f[a].(a<->z|?s'[g].g[b].(f<->b|g<->y))
+                            |   !s'[g] . g(b) . incr {b, g}
+                            )
+                )
+        | nought {z}
+        )
+
+--- rotate left
+
+\z .    ( \s' . (   \s .    (   !s(f) . f(a) . incr {a, f}
+                            |   ?s[f].f[a].(a<->z|?s'[g].g[b].(f<->b|g<->y))
+                            )  
+                |   !s'[g] . g(b) . incr  {b, g}
+                )
+        | nought {z}
+        )
+
+--- !? [s]
+
+\z .    ( \s' . (   \f .    (   f(a) . incr {a, f}
+                            |   f[a].(a<->z|?s'[g].g[b].(f<->b|g<->y))
+                            )  
+                |   !s'[g] . g(b) . incr {b, g}
+                )
+        | nought 
+        )
+
+--- swap
+
+\z .    ( \s' . (   \f .    (   f[a].(a<->z|?s'[g].g[b].(f<->b|g<->y))
+                            |   f(a) . incr {a, f}
+                            )  
+                |   !s'[g] . g(b) . incr {b, g}
+                )
+        | nought 
+        )
+
+
+--- i/o [f]
+
+\z .    ( \s' . (   \a .    (   a<->z
+                            |   \f .    (   ?s'[g].g[b].(f<->b|g<->y)
+                                        |   incr {a, f}
+                                        )
+                            )  
+                |   !s'[g] . g(b) . incr {b, g}
+                )
+        | nought {z}
+        )
+
+--- link [a]
+
+\z .    ( \s' . (\f .   (   ?s'[g].g[b].(f<->b|g<->y)
+                        |   incr {z, f}
+                        )
+                |   !s'[g] . g(b) . incr {b, g}
+                )
+        | nought {z}
+        )
+
+--- swap
+
+\z .    ( \s' . (\f .   (   incr {z, f}
+                        |   ?s'[g].g[b].(f<->b|g<->y)
+                        )
+                |   !s'[g] . g(b) . incr {b, g}
+                )
+        | nought {z}
+        )
+
+--- rotate right [s' <=> f]
+
+\z .    ( \f .  (   incr {z, f} 
+                |   \s'.(   ?s'[g].g[b].(f<->b|g<->y)
+                        |   !s'[g] . g(b) . incr {b, g}
+                        )
+                )
+        | nought {z}
+        )
+
+--- swap
+
+\z .    ( \f .  (   incr {z, f} 
+                |   \s'.(   !s'[g] . g(b) . incr {b, g}
+                        |   ?s'[g].g[b].(f<->b|g<->y)
+                        )
+                )
+        | nought {z}
+        )
+
+--- acc/req
+
+\z .    ( \f .  (   incr {z, f} 
+                |   \g. (   g(b) . incr {b, g}
+                        |   g[b].(f<->b|g<->y)
+                        )
+                )
+        | nought {z}
+        )
+
+--- swap [g]
+
+\z .    ( \f .  (   incr {z, f} 
+                |   \g. (   g[b].(f<->b|g<->y)
+                        |   g(b) . incr {b, g}
+                        )
+                )
+        | nought {z}
+        )
+
+--- i/o [g]
+
+\z .    ( \f .  (   incr {z, f} 
+                |   \b. (   f<->b
+                        |   \g. (g<->y | incr {b, g})
+                        )
+                )
+        | nought {z}
+        )
+
+--- link [g]
+
+\z .    ( \f .  (   incr {z, f} 
+                |   \b. (   f<->b
+                        |   incr {b, y}
+                        )
+                )
+        | nought {z}
+        )
+
+--- link [b]
+
+\z .    ( \f .  (   incr {z, f} 
+                |   incr {f, y}
+                )
+        | nought {z}
+        )
+
+--- swap [f]
+
+\z .    ( \f .  (   incr {f, y}
+                |   incr {z, f} 
+                )
+        | nought {z}
+        )
+
+--- rotate 
+
+\f .    ( incr {f, y}
+        | \z .  (   incr {z, f} 
+                |   nought {z}
+                )
+        )

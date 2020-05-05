@@ -32,6 +32,7 @@ import           Control.Monad.State     hiding ( state )
 import           Control.Monad.Except
 
 import           Pretty
+import           Debug.Trace
 
 
 -- reduce the term by one step, and return the result and the applied rule
@@ -132,9 +133,14 @@ rotateLeft x p (Compose y q r) = if Set.member x (freeChans q)
 rotateLeft x p others = return $ Compose x p others
 
 rotateRight :: Chan -> Process -> Process -> RuntimeM Process
-rotateRight x (Compose y p q) r = do
-  useRule RotateRight
-  return $ Compose y p (Compose x q r)
+-- we want `q` and `r` both have the same channel as `x`
+rotateRight x (Compose y p q) r = if Set.member x (freeChans q)
+  then do
+    useRule RotateRight
+    return $ Compose y p (Compose x q r)
+  else do
+    useRule Swap
+    return $ Compose x (Compose y q p) r
 rotateRight x others p = return $ Compose x others p
 
 -- see if the input Channels are all the same, throw error if that's not the case
@@ -190,13 +196,25 @@ reduceProcess chan p@(InputT _ _) q@(OutputT _ _) = do
   useRule Swap
   return $ Compose chan q p
 
-reduceProcess chan (Accept x y p) (Request x' y' q) = do
-  checkChannels [chan, x, x']
-  checkChannels [y, y']
-  useRule AccReqReduce
-  return $ Compose y p q
-  -- p' <- use AccReqReduce $ Compose y p q
-  -- use AccContract $ Accept x y p'
+reduceProcess chan p@(Request _ _ _) q@(Accept _ _ _) = do
+  useRule Swap
+  return $ Compose chan q p
+reduceProcess chan (Accept x y p) (Request x' y' q) = case isRequesting x' q of
+  Just y'' -> do
+    checkChannels [chan, x, x']
+    useRule Contract
+    let freshChan = x <> "'"
+    let p'        = subsitute y y'' p
+    let q'        = subsitute x' freshChan q
+    return $ Compose chan (Accept x y p) $ Compose freshChan
+                                                   (Accept freshChan y'' p')
+                                                   (Request x' y' q')
+  Nothing -> do
+
+    checkChannels [chan, x, x']
+    checkChannels [y, y']
+    useRule AccReqReduce
+    return $ Compose y p q
 
 reduceProcess _chan _ _ = stuck
 
@@ -235,49 +253,6 @@ reduceAt _ _ others = return others
 --------------------------------------------------------------------------------
 -- | Substition
 
--- substitute :: Process -> Chan -> Chan -> M Process
--- substitute (Atom n ns) a b = Link <$> substChan x a b <*> substChan y a b
--- substitute (Link x y) a b = Link <$> substChan x a b <*> substChan y a b
--- substitute (Compose x p q) a b =
---   Compose
---     <$> return x
---     <*> (if x == a then return p else substitute p a b)
---     <*> (if x == a then return q else substitute q a b)
--- substitute (Output x y p q) a b =
---   Output
---     <$> substChan x a b
---     <*> substChan y a b
---     <*> substitute p a b
---     <*> substitute q a b
--- substitute (Input x y p) a b =
---   Input
---     <$> substChan x a b
---     <*> (if y == a then return y else substChan y a b)
---     <*> (if y == a then return p else substitute p a b)
--- substitute (SelectL x p) a b = SelectL <$> substChan x a b <*> substitute p a b
--- substitute (SelectR x p) a b = SelectR <$> substChan x a b <*> substitute p a b
--- substitute (Choice x p q) a b =
---   Choice <$> substChan x a b <*> substitute p a b <*> substitute q a b
--- substitute (Accept x y p) a b =
---   Accept
---     <$> substChan x a b
---     <*> (if y == a then return y else substChan y a b)
---     <*> (if y == a then return p else substitute p a b)
--- substitute (Request x y p) a b =
---   Request <$> substChan x a b <*> substChan y a b <*> substitute p a b
--- substitute (OutputT x p) a b = OutputT <$> substChan x a b <*> substitute p a b
--- substitute (InputT x p) a b = InputT <$> substChan x a b <*> substitute p a b
--- substitute (EmptyOutput x) a b = EmptyOutput <$> substChan x a b
--- substitute (EmptyInput x p) a b =
---   EmptyInput <$> substChan x a b <*> substitute p a b
--- substitute (EmptyChoice x) a b = EmptyChoice <$> substChan x a b
--- substitute End             _ _ = return End
--- substitute (Mix p q)       a b = Mix <$> substitute p a b <*> substitute q a b
-
-
--- substChan :: Chan -> Chan -> Chan -> M Chan
--- substChan a x y = return $ if a == x then y else a
-
 --------------------------------------------------------------------------------
 -- | RuntimeM
 
@@ -298,11 +273,13 @@ data Rule = Swap | RotateLeft | RotateRight
   | IOReduce | TypeIOReduce
   | AccReqReduce
   | AccContract
+  | Contract
   | AxCutLeft -- NOTE: dubious cut rule
   | AxCutRight
 
 instance Pretty Rule where
   pretty Swap         = "Swap"
+  pretty Contract     = "Contract"
   pretty RotateLeft   = "Rotate left"
   pretty RotateRight  = "Rotate right"
   pretty IOReduce     = "Input/output reduction"

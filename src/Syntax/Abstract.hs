@@ -110,6 +110,28 @@ freeChans process = case process of
   End            -> Set.empty
   Mix p q        -> Set.union (freeChans p) (freeChans q)
 
+isRequesting :: Chan -> Process -> Maybe Chan
+isRequesting chan process = case process of
+  Atom _ _       -> Nothing
+  Link _ _       -> Nothing
+  Compose _ p q  -> isRequesting chan p <> isRequesting chan q
+  Output _ _ p q -> isRequesting chan p <> isRequesting chan q
+  Input _ _ p    -> isRequesting chan p
+  SelectL _ p    -> isRequesting chan p
+  SelectR _ p    -> isRequesting chan p
+  Choice  _ p q  -> isRequesting chan p <> isRequesting chan q
+  Accept  _ _ p  -> isRequesting chan p
+  Request x y p  -> if chan == x then Just y else isRequesting chan p
+  OutputT _ p    -> isRequesting chan p
+  InputT  _ p    -> isRequesting chan p
+  EmptyOutput _  -> Nothing
+  EmptyInput _ p -> isRequesting chan p
+  EmptyChoice _  -> Nothing
+  End            -> Nothing
+  Mix p q        -> isRequesting chan p <> isRequesting chan q
+
+
+
   --
 --   --
 --   --   case p of
